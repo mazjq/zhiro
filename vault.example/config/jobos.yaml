@@ -1,0 +1,19 @@
+# Zhiro 配置示例。真实配置在你的数据文件夹的 config/jobos.yaml（首次启动自动生成）。
+http:
+  host: 127.0.0.1
+  port: 8787
+llm:
+  # 任一 pi-ai 支持的 provider/model。登录：zhiro auth openai-codex（ChatGPT 订阅 OAuth）
+  # 或 login anthropic api_key；API key 也可从环境变量读（ANTHROPIC_API_KEY / OPENAI_API_KEY / DEEPSEEK_API_KEY ...）
+  provider: openai-codex
+  model: gpt-6-astra
+feishu:
+  # 方式一：群自定义机器人 webhook（最省事，只能发到群）
+  # webhookUrl: https://open.feishu.cn/open-apis/bot/v2/hook/xxxx
+  # 方式二：自建应用机器人（可私聊、M3 长连接交互）
+  # appId: cli_xxx
+  # appSecret: xxx
+  # receiveId: ou_xxx
+  # receiveIdType: open_id
+reminders:
+  daysBefore: [7, 3, 1]

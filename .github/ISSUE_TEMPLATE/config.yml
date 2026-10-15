@@ -1,0 +1,8 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Questions & help / 提问与求助
+    url: https://github.com/mazjq/zhiro/discussions
+    about: How do I…? / 怎么用…？
+  - name: Security / 安全问题
+    url: https://github.com/mazjq/zhiro/security/advisories/new
+    about: Report privately, please / 请私下报告

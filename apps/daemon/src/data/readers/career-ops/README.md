@@ -1,0 +1,1 @@
+Copied unchanged from https://github.com/career-ops-hq/career-ops (commit da8c6f9, `providers/`), MIT — see LICENSE here. Used by `../moka.ts`. To update: copy the three files again from upstream; do not edit them here.
