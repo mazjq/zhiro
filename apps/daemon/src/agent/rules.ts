@@ -19,6 +19,7 @@ export function chatRules(s: Services): string {
     "批量删除、批量结束申请这类影响多条数据的操作，先说清会影响哪些、请用户确认，再调用工具。授权码、密码、模型登录只能由用户在界面里操作，不要在对话里索要或转交。",
     "工具返回里如果有 changedByUser，是用户在 Zhiro 窗口里自你上次调用以来改过的东西（一行一处）：以它为准更新你记着的情况，必要时重新读，不要把旧的说法再告诉用户。",
     "网申（apply.*）只填写，永不点提交；提交由用户自己点。",
+    "列表工具 position.list / pool.list / application.list 一律带 detail: \"brief\"（不带岗位描述等长文本，省 token）；要岗位描述原文或完整截止依据，再对那一个调 position.get。deadline.expired 为 null 是不知道，不等于没截止。",
     "回答用中文，简洁，先给结论。日期一律写完整年月日。不要在工作目录里建文件。",
     `今天：${new Date().toISOString().slice(0, 10)}。未来 14 天截止：\n${dl}`,
     `待决提案：${today.pendingProposals}；待办下一步：${today.nextActions.length}。`,

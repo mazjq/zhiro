@@ -117,7 +117,7 @@ export function cliBackend(s: Services, auth: Auth, spec: CliSpec, relay: () => 
       const rules = chatRules(s);
       writeFileSync(rulesFile, rules, "utf8");
       spec.prepare?.(dir(), rules);
-      const mcp = { ...relay(), env: { JOBOS_VAULT: s.config.vault, JOBOS_URL: `http://127.0.0.1:${s.config.http.port}`, JOBOS_ACTOR: spec.name, JOBOS_AGENT_TOKEN: token } };
+      const mcp = { ...relay(), env: { JOBOS_VAULT: s.config.vault, JOBOS_URL: `http://127.0.0.1:${s.config.http.port}`, JOBOS_ACTOR: spec.name, JOBOS_AGENT_TOKEN: token, ...(spec.name === "codex" ? { ZHIRO_RESULT_MODE: "text" } : {}) } }; // Codex: one copy of each result (D-23)
       const { args, stdin } = spec.argv({ dir: dir(), sessionId: sid, rulesFile, mcp, prompt: prefix + text, budgetUsd: l.budgetUsd, maxTurns: l.maxTurns });
       const parse = spec.parser();
       let answer = "", costUsd: number | undefined, isError = false, error = "", toolCalls = 0, sessionMissing = false, stopped = "", bytes = 0, events = 0, newSid: string | null = sid;

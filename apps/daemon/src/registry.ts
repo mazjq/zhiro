@@ -1,3 +1,4 @@
+import { positionBrief, applicationBrief, poolCompanyBrief } from "./service/brief.js";
 import { tools, type ToolName, type ToolInput, type ToolOutput, type ToolContract } from "@zhiro/contracts";
 import { Value } from "@sinclair/typebox/value";
 import type { Domain } from "./service/domain.js";
@@ -161,7 +162,16 @@ const handlers: { [N in ToolName]: Handler<N> } = {
   "campaign.list": (i, _a, s) => s.domain.listCampaigns(i),
   "campaign.get": (i, _a, s) => s.domain.getCampaign(i.id),
   // every post a tool returns says what it goes by (ADR-041): closesAt is the post's resolved last day, not the batch's earliest
-  "position.list": (i, _a, s) => { const r = s.domain.listPositions(i), d = resolveFor(s.domain.db, r.items.map((p) => p.id)); return { items: r.items.map((p) => ({ ...p, closesAt: d.get(p.id)?.date ?? null, deadline: d.get(p.id) })) }; },
+  "position.list": (i, _a, s) => {
+    // without detail / offset this is the call it always was (D-22: new parameters only)
+    if (!i.detail && !i.offset) { const r = s.domain.listPositions(i), d = resolveFor(s.domain.db, r.items.map((p) => p.id)); return { items: r.items.map((p) => ({ ...p, closesAt: d.get(p.id)?.date ?? null, deadline: d.get(p.id) })) }; }
+    const limit = i.limit ?? 100, offset = Math.max(0, i.offset ?? 0);
+    const r = s.domain.listPositions({ ...i, limit: offset + limit + 1 }); // one more than the page: is there a next one
+    const page = r.items.slice(offset, offset + limit), d = resolveFor(s.domain.db, page.map((p) => p.id));
+    const items = page.map((p) => ({ ...p, closesAt: d.get(p.id)?.date ?? null, deadline: d.get(p.id) }));
+    const hasMore = r.items.length > offset + limit;
+    return i.detail === "brief" ? { detail: "brief", hasMore, items: items.map(positionBrief) } : { items, hasMore };
+  },
   "position.get": (i, _a, s) => {
     const r = s.domain.db.prepare(`select p.*, c.company_id, co.name company_name, c.closes_at c_closes, c.major_req c_major, c.apply_url, c.notice_url, c.source_kind, c.source_grade, a.json assessment
       from position p join campaign c on c.id = p.campaign_id join company co on co.id = c.company_id left join position_assessment a on a.position_id = p.id where p.id = ?`).get(i.id) as any;
@@ -335,7 +345,12 @@ const handlers: { [N in ToolName]: Handler<N> } = {
   },
   "fact.trash": (_i, _a, s) => listTrash(s.domain.db),
   "fact.restore": (i, _a, s) => { const r = restoreFact(s.domain.db, i.id); s.onDataChanged?.(); return r; },
-  "pool.list": (i, _a, s) => listPool(s.domain.db, i),
+  "pool.list": (i, _a, s) => {
+    if (i.detail !== "brief") return listPool(s.domain.db, i);
+    const limit = i.limit ?? 20, offset = i.offset ?? 0; // the short form pages by 20 companies unless told otherwise
+    const r = listPool(s.domain.db, { ...i, limit, offset });
+    return { detail: "brief", total: r.total, hasMore: offset + r.items.length < r.total, items: r.items.map(poolCompanyBrief), tagCounts: r.tagCounts }; // the counts first: a long result may be cut in the middle by the client;
+  },
   "company.merge": (i, _a, s) => s.domain.mergeCompany(i.fromId, i.intoId),
   // another name a company goes by (the person says so): rows and reports that use it mean this company from now on
   "company.alias": (i, _a, s) => {
@@ -419,7 +434,15 @@ const handlers: { [N in ToolName]: Handler<N> } = {
   "inbox.peek": (i, _a, s) => peekSkipped(s.config.vault, imapFetcher, i.account, i.messageId),
   "inbox.rescue": (i, _a, s) => rescueSkipped(inboxDeps(s), imapFetcher, i.account, i.messageId),
   "inbox.link": (i, _a, s) => linkMessage(inboxDeps(s), i.id, i.applicationId),
-  "application.list": (i, _a, s) => { const r = s.domain.listApplications(i.state), d = resolveFor(s.domain.db, r.items.map((x) => x.application.positionId)); return { items: r.items.map((x) => ({ ...x, closesAt: d.get(x.application.positionId)?.date ?? null, deadline: d.get(x.application.positionId) })) }; },
+  "application.list": (i, _a, s) => {
+    const r = s.domain.listApplications(i.state);
+    const paged = i.limit != null || !!i.offset;
+    const offset = Math.max(0, i.offset ?? 0), all = r.items, page = paged ? all.slice(offset, i.limit != null ? offset + i.limit : undefined) : all;
+    const d = resolveFor(s.domain.db, page.map((x) => x.application.positionId));
+    const items = page.map((x) => ({ ...x, closesAt: d.get(x.application.positionId)?.date ?? null, deadline: d.get(x.application.positionId) }));
+    if (i.detail === "brief") return { detail: "brief", total: all.length, hasMore: offset + page.length < all.length, items: items.map(applicationBrief) };
+    return paged ? { items, total: all.length, hasMore: offset + page.length < all.length } : { items }; // no new parameter: as it always was
+  },
   "company.find": (i, _a, s) => startFindCompany(s, i.name),
   "company.official": (i, _a, s) => ({ links: officialLinks(s, i.companyId) }),
   "company.syncOfficial": (i, _a, s) => syncOfficial(s, i.companyId),

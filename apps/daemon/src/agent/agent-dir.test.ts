@@ -16,7 +16,7 @@ describe("the agent directory: one skill, three places, MCP for each harness, no
     expect(existsSync(mcp.mcpServers.zhiro.args[0])).toBe(true);
     expect(mcp.mcpServers.zhiro.env).toEqual({ JOBOS_VAULT: vault, JOBOS_URL: "http://127.0.0.1:8798", JOBOS_ACTOR: "claude" });
     const codex = readFileSync(join(dir, ".codex/config.toml"), "utf8");
-    expect(codex).toMatch(/^\[mcp_servers\.zhiro\]\ncommand = ".+node(\.exe)?"\nargs = \[".*jobos-mcp\.cjs"\]\n\n\[mcp_servers\.zhiro\.env\]\nJOBOS_VAULT = ".*"\nJOBOS_URL = "http:\/\/127\.0\.0\.1:8798"\nJOBOS_ACTOR = "codex"\n$/);
+    expect(codex).toMatch(/^\[mcp_servers\.zhiro\]\ncommand = ".+node(\.exe)?"\nargs = \[".*jobos-mcp\.cjs"\]\n\n\[mcp_servers\.zhiro\.env\]\nJOBOS_VAULT = ".*"\nJOBOS_URL = "http:\/\/127\.0\.0\.1:8798"\nJOBOS_ACTOR = "codex"\nZHIRO_RESULT_MODE = "text"\n$/);
     // WorkBuddy: HTTP only, with the agent key as a header (the one file in here that carries it)
     mkdirSync(join(vault, "config"), { recursive: true }); writeFileSync(join(vault, "config", ".agent-token"), "a".repeat(48), "utf8");
     writeAgentDir(vault, "http://127.0.0.1:8798");

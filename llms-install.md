@@ -72,7 +72,7 @@ Prints `检查通过` ("check passed") on a fresh install.
 Zhiro's MCP server is the command `zhiro mcp` (stdio). It finds the running daemon and its key by itself.
 
 - **Claude Code**: `claude mcp add zhiro -- zhiro mcp` (Windows: `claude mcp add zhiro -- cmd /c zhiro mcp`)
-- **Codex**: `codex mcp add zhiro -- zhiro mcp` (Windows: `codex mcp add zhiro -- cmd /c zhiro mcp`)
+- **Codex**: `codex mcp add zhiro --env ZHIRO_RESULT_MODE=text -- zhiro mcp` (Windows: `... -- cmd /c zhiro mcp`). The env var makes each result arrive once instead of twice.
 - **WorkBuddy**: follow https://raw.githubusercontent.com/mazjq/zhiro/main/docs/harness/workbuddy.md
 - **Anything else with MCP**: https://raw.githubusercontent.com/mazjq/zhiro/main/docs/harness/others.md
 - Alternative needing no setup: open the agent inside Zhiro's agent folder, `<data folder>/agent` — the MCP config and

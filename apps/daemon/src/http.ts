@@ -206,7 +206,7 @@ export function createApp(s: Services, auth: Auth, chat: ChatHub) {
     if (c.req.method !== "POST") return c.json({ jsonrpc: "2.0", error: { code: -32000, message: "Method not allowed" }, id: null }, 405);
     const actor = actorOf(c);
     const transport = new StreamableHTTPServerTransport({ sessionIdGenerator: undefined, enableJsonResponse: true } as any);
-    const server = createMcpServer(s, actor);
+    const server = createMcpServer(s, actor, c.req.header("x-zhiro-result-mode") === "text" ? "text" : "dual");
     await server.connect(transport);
     const { incoming, outgoing } = (c.env as any);
     const body = await c.req.json().catch(() => undefined);

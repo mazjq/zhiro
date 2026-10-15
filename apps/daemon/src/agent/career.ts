@@ -96,6 +96,8 @@ const NOT_FOR_CHAT = new Set(["import.csv", "backup.run", "config.get", "workflo
 
 /** Listings whose default page (200 companies) is too big for a chat context; the agent gets 20 unless it asks. */
 const SMALL_PAGES = new Set(["pool.list", "position.list", "campaign.list", "company.search"]);
+/** List tools with a short form (D-22): the assistant gets it unless it asks for detail: "full". */
+const BRIEF = new Set(["pool.list", "position.list", "application.list"]);
 
 /** What one user message produced: the reply, the writes done at once (undoable), the confirm cards (proposals). */
 export interface Turn { answer: string; actions: AgentActionT[]; proposals: any[] }
@@ -141,6 +143,7 @@ export class CareerAgent {
         // the whole context is re-sent on every model call, so a 200-row listing costs its tokens again on each later step
         const inp: any = { ...(params as any) };
         if (SMALL_PAGES.has(c.name) && inp.limit == null) inp.limit = 20;
+        if (BRIEF.has(c.name) && inp.detail == null) inp.detail = "brief"; // D-22: the short form unless it asks for the long one
         if (c.name === "page.read" && inp.maxChars == null) inp.maxChars = PAGE_RESULT_CHARS; // the full page stays in the vault; the transcript gets what fits
         // the run controller: a refused call never runs; a run-scoped refusal also ends the tool phase (the finalizer answers)
         const gate = this.run?.beforeCall(c.name.replace(/\./g, "_"), inp) ?? { allow: true as const };

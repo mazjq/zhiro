@@ -61,3 +61,21 @@ entries condense what still holds.
   own files are.
 - **D-21 · The rename to Zhiro changed names people see**, not names in the data (`jobos.db`, `config/jobos.yaml`,
   key files, `x-jobos-*` headers) — renaming those would risk data for nothing.
+
+## Agent token use
+
+- **D-22 · 2026-10-15 · List tools have a short form, asked for explicitly.** `position.list`, `application.list` and
+  `pool.list` take `detail: "brief"`: no job descriptions or other long texts; a deadline keeps what a decision needs
+  (`closesAt`, `deadlineKind`, `expired` — `null` when unknown, never `false` — `status`, `say`); `pool.list` gives each
+  company `positionPreviews` (3) with totals and `positionsHasMore`, 20 companies a page. Leaving `detail` out returns
+  exactly what it always did — agents in the wild depend on it; Zhiro's own skill, chat-drawer rules and built-in
+  assistant ask for the short form. *Why:* measured on a real database, one `pool.list` was about a million tokens
+  (every company carried all its posts); short forms: `pool.list` ≈ 8,000, `position.list` (20) 10,900 → 3,900,
+  `application.list` (50) 26,700 → 11,600. New fields have new names: an old name never changes meaning.
+- **D-23 · 2026-10-15 · One copy of each result, for a connection that asks.** By default a tool result carries the
+  JSON both as text and as `structuredContent` (what MCP asks for). Claude Code gives its model the structured copy
+  only; Codex gives it both (measured with differing markers), which roughly doubles every result. A connection with
+  header `x-zhiro-result-mode: text` — set by the stdio relay from `ZHIRO_RESULT_MODE=text`, which Zhiro writes into
+  its Codex configs — gets the text copy only. Not the structured copy only: given `content: []`, Codex's model took
+  the result for empty in three runs of four, while text-only was read right every time. Never inferred from a
+  client's name or the audit label.
