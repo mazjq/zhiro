@@ -113,7 +113,7 @@ describe("ADR-045: the write budget of a caller without a turn", () => {
     // the embedded turn has its own budget (per turn), the external window does not touch it
     const e: any = await callTool("position.watch", { positionId: positions[11].id, priority: 1 }, EMBEDDED, s);
     expect(e.action).toBeTruthy();
-  }, 30_000); // eleven writes, each re-matching the pool: seconds on a slow CI machine
+  });
   it("an embedded turn: ten direct writes, then cards — counted by its turn id, not by the clock", async () => {
     const { s, positions } = setup();
     const results: any[] = [];
