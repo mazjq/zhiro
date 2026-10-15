@@ -1,3 +1,4 @@
+import { VERSION } from "../version.js";
 import { Server } from "@modelcontextprotocol/sdk/server/index.js";
 import { CallToolRequestSchema, ListToolsRequestSchema } from "@modelcontextprotocol/sdk/types.js";
 import { callTool, callableBy, ToolError, type Actor, type Services } from "../registry.js";
@@ -5,7 +6,7 @@ import { emitToolDone } from "../events.js";
 
 /** Low-level MCP server so TypeBox JSON Schema is passed through untouched. */
 export function createMcpServer(s: Services, actor: Actor): Server {
-  const server = new Server({ name: "jobos", version: "0.0.1" }, { capabilities: { tools: {} } });
+  const server = new Server({ name: "zhiro", version: VERSION }, { capabilities: { tools: {} } });
   server.setRequestHandler(ListToolsRequestSchema, async () => ({
     tools: callableBy(actor, s).map((c) => ({
       name: c.name,
