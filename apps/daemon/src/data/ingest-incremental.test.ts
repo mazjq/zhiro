@@ -161,6 +161,9 @@ describe("snapshots: a new one only when the pull differs from the last", () => 
     const r2 = ingest({ db }, dir, "feishu-base", "cfg", SEED_SHEET, { closeUnseen: true });
     expect(r2.snapshotPath).toBe(r1.snapshotPath);
     expect(readdirSync(join(dir, "snapshots", "feishu-base"))).toHaveLength(1);
+    // "not seen this time" is last_seen_at < this pull's start: two pulls in one millisecond (a fast CI machine) look
+    // like one. Real pulls of a subscription are minutes apart.
+    const t = Date.now(); while (Date.now() === t) { /* next millisecond */ }
     const r3 = ingest({ db }, dir, "feishu-base", "cfg", SEED_SHEET.slice(1), { closeUnseen: true });
     expect(r3.snapshotPath).not.toBe(r1.snapshotPath);
     expect(r3.positionsClosed).toBe(1);
