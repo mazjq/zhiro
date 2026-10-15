@@ -16,7 +16,7 @@
 import { createHash, randomBytes } from "node:crypto";
 import { execFile, execFileSync } from "node:child_process";
 import { DatabaseSync } from "node:sqlite";
-import { closeSync, copyFileSync, existsSync, lstatSync, utimesSync, mkdirSync, openSync, readFileSync, readSync, readdirSync, realpathSync, renameSync, rmSync, rmdirSync, statSync, statfsSync, symlinkSync, writeFileSync } from "node:fs";
+import { closeSync, copyFileSync, existsSync, lstatSync, utimesSync, mkdirSync, openSync, readFileSync, readSync, readdirSync, realpathSync, renameSync, rmSync, rmdirSync, statSync, statfsSync, symlinkSync, unlinkSync, writeFileSync } from "node:fs";
 import { readdir, stat } from "node:fs/promises";
 import { basename, dirname, isAbsolute, join, relative, resolve } from "node:path";
 import { lockVault, VaultBusy } from "./lock.js";
@@ -39,6 +39,8 @@ const norm = (p: string) => (process.platform === "win32" ? resolve(p).toLowerCa
 const same = (a: string, b: string) => norm(a) === norm(b);
 const within = (dir: string, p: string) => { const r = relative(norm(dir), norm(p)); return r === "" || (!r.startsWith("..") && !isAbsolute(r)); };
 const isLink = (p: string) => { try { return lstatSync(p).isSymbolicLink(); } catch { return false; } };
+/** Remove a link, never what it points to: a junction on Windows (rmSync), a symlink elsewhere (unlinkSync; rmSync follows it to the folder and refuses). */
+const dropLink = (p: string) => (process.platform === "win32" ? rmSync(p) : unlinkSync(p));
 const real = (p: string) => { try { return realpathSync(p); } catch { return resolve(p); } };
 const gb = (n: number) => `${(n / 1e9).toFixed(1)} GB`;
 const codeOf = (e: any) => String(e?.code ?? e?.message ?? e).split("\n")[0].slice(0, 120);
@@ -280,7 +282,7 @@ async function runMove(entry: string, start: MoveLog, say: (m: string) => void, 
     const old = linked ? log.from : `${resolve(entry)}.old-${log.id}`;
     log = writeLog(entry, { ...log, phase: "switched", old });
     try {
-      if (linked) rmSync(entry); else renameSync(entry, old);
+      if (linked) dropLink(entry); else renameSync(entry, old);
       symlinkSync(log.to, entry, "junction");
     } catch (e) {
       try { if (!existsSync(entry) && !isLink(entry)) { if (linked) symlinkSync(log.from, entry, "junction"); else renameSync(old, entry); } }

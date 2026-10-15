@@ -39,7 +39,8 @@ function digest(db: Db, t: string, cols: string[]): string {
   const h = createHash("sha256");
   const list = cols.map((c) => `"${c}"`).join(", ");
   // ordered by every column: VACUUM may renumber rowids, so rowid order is not the same on both sides
-  for (const r of db.prepare(`select ${list} from "${t}" where ${KEPT[t]} order by ${list}`).iterate() as Iterable<Record<string, unknown>>) h.update(JSON.stringify(cols.map((c) => r[c])));
+  // .all(), not .iterate(): on Node 22.13 a statement nobody holds can be finalized mid-iteration. These tables are small.
+  for (const r of db.prepare(`select ${list} from "${t}" where ${KEPT[t]} order by ${list}`).all() as Record<string, unknown>[]) h.update(JSON.stringify(cols.map((c) => r[c])));
   return h.digest("hex");
 }
 
