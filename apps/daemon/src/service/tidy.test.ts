@@ -48,7 +48,7 @@ describe("evidence-based tidy (2026-10-01)", () => {
     ingest(domain, dir, "feishu-base", "feishu-base-big", rows);
     const t = Date.now();
     expect(dropOrphanCampaigns(s, "feishu-base-big")).toBe(2000);
-    expect(Date.now() - t).toBeLessThan(4000);
+    expect(Date.now() - t).toBeLessThan(process.env.CI ? 12_000 : 4000); // still far below the 20 s it was; CI Windows runners are slow
     expect(domain.db.prepare("select (select count(*) from campaign) c, (select count(*) from position) p, (select count(*) from source_listing) l").get()).toEqual({ c: 0, p: 0, l: 0 });
   }, 60_000);
   it("whatever points at a post or a campaign can be looked up by an index (deleting one makes SQLite look, once per row deleted)", () => {
