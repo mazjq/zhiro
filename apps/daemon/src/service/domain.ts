@@ -214,7 +214,7 @@ export class Domain {
       items: rows.map((r) => ({
         application: applicationRow(r), companyName: r.company_name as string, title: r.title as string, closesAt: (r.closes_at ?? null) as string | null, applyUrl: r.apply_url as string, noticeUrl: (r.notice_url ?? "") as string, cities: json.parse(r.cities, [] as string[]), jdText: (r.jd_text ?? "") as string,
         stages: (this.db.prepare("select * from stage where application_id = ? order by scheduled_at is null, scheduled_at").all(r.id) as any[]).map(stageRow),
-        lastEvent: (this.db.prepare("select at, kind, detail, source from application_event where application_id = ? order by at desc limit 1").get(r.id) ?? null) as { at: string; kind: string; detail: string; source: string } | null,
+        lastEvent: (this.db.prepare("select at, kind, detail, source from application_event where application_id = ? order by at desc, rowid desc limit 1").get(r.id) ?? null) as { at: string; kind: string; detail: string; source: string } | null,
       })),
     };
   }
@@ -248,7 +248,7 @@ export class Domain {
   timeline(id: string) {
     const application = this.getApplication(id);
     const stages = (this.db.prepare("select * from stage where application_id = ? order by scheduled_at").all(id) as any[]).map(stageRow);
-    const events = (this.db.prepare("select at, kind, detail, source from application_event where application_id = ? order by at").all(id) as any[]);
+    const events = (this.db.prepare("select at, kind, detail, source from application_event where application_id = ? order by at, rowid").all(id) as any[]);
     return { application, stages, events };
   }
 
