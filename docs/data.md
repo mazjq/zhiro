@@ -52,7 +52,7 @@ zhiro vault verify --quick  # 快速检查
 
 ## 升级
 
-升级程序（`npm i -g zhiro@latest`，或再跑一次安装脚本）后第一次启动，如果新版本要改数据库的结构，Zhiro 会：
+升级程序（`npm i -g @mazjq/zhiro@latest`，或再跑一次安装脚本）后第一次启动，如果新版本要改数据库的结构，Zhiro 会：
 
 1. **不碰原来的库**，先复制一份；
 2. 在复制品上升级；

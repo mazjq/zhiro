@@ -79,7 +79,7 @@ jobs:
         shell: powershell
         run: |
           $env:ZHIRO_HOME = "$env:RUNNER_TEMP\zhiro"
-          $env:ZHIRO_PACKAGE = (Get-ChildItem "$env:RUNNER_TEMP\zhiro-*.tgz").FullName
+          $env:ZHIRO_PACKAGE = (Get-ChildItem "$env:RUNNER_TEMP\*zhiro-*.tgz").FullName
           $env:ZHIRO_NO_PATH = "1"
           ./scripts/install.ps1
           & "$env:RUNNER_TEMP\zhiro\bin\zhiro.cmd" --version
@@ -88,6 +88,6 @@ jobs:
         if: runner.os != 'Windows'
         run: |
           export ZHIRO_HOME="$RUNNER_TEMP/zhiro" ZHIRO_NO_PATH=1
-          export ZHIRO_PACKAGE="$(ls "$RUNNER_TEMP"/zhiro-*.tgz)"
+          export ZHIRO_PACKAGE="$(ls "$RUNNER_TEMP"/*zhiro-*.tgz)"
           sh scripts/install.sh
           "$RUNNER_TEMP/zhiro/bin/zhiro" --version

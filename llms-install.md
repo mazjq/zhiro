@@ -26,7 +26,7 @@ Detect the OS yourself.
 
 Check Node: `node --version`.
 
-- **v22.13.0 or newer** → `npm install -g zhiro`
+- **v22.13.0 or newer** → `npm install -g @mazjq/zhiro` (the command it installs is `zhiro`)
 - **older, or no Node** → do not upgrade their Node; use the installer, which brings its own:
   - Windows (PowerShell): `irm https://github.com/mazjq/zhiro/releases/latest/download/install.ps1 | iex`
   - macOS / Linux: `curl -fsSL https://github.com/mazjq/zhiro/releases/latest/download/install.sh | sh`

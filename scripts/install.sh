@@ -40,14 +40,14 @@ case "$PKG" in http*) curl -fsSL "$PKG" -o "$tmp/zhiro.tgz"; PKG="$tmp/zhiro.tgz
 printf '{}\n' > "$target/app/package.json"
 ( cd "$target/app" && PATH="$target/node/bin:$PATH" "$node" "$target/node/lib/node_modules/npm/bin/npm-cli.js" install --no-audit --no-fund --loglevel=error "$PKG" ) \
   || { rm -rf "$target"; die "npm install failed; nothing was changed"; }
-"$node" "$target/app/node_modules/zhiro/bin/zhiro.cjs" --version >/dev/null || { rm -rf "$target"; die "the new version does not start; nothing was changed"; }
+"$node" "$target/app/node_modules/@mazjq/zhiro/bin/zhiro.cjs" --version >/dev/null || { rm -rf "$target"; die "the new version does not start; nothing was changed"; }
 
 # switch only now: everything above is in place and starts
 ln -sfn "$target" "$ROOT/current"
 mkdir -p "$ROOT/bin"
 cat > "$ROOT/bin/zhiro" <<EOF
 #!/bin/sh
-exec "$ROOT/current/node/bin/node" "$ROOT/current/app/node_modules/zhiro/bin/zhiro.cjs" "\$@"
+exec "$ROOT/current/node/bin/node" "$ROOT/current/app/node_modules/@mazjq/zhiro/bin/zhiro.cjs" "\$@"
 EOF
 chmod +x "$ROOT/bin/zhiro"
 # keep the new version and the one before it

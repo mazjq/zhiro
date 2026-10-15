@@ -51,7 +51,7 @@ if (cmd === "export") {
       if (!arg) console.log(`升级前的备份：${preUpgradeBackups(vault).join("、") || "（没有）"}；用最新的那份`);
       const r = rollbackVault(vault, lock, arg);
       console.log(`已换回 ${r.restored}（数据库 v${r.manifest.fromSchema}）。换下来的库留在 ${r.kept}`);
-      console.log(r.manifest.fromApp ? `这份数据配 ${r.manifest.fromApp}：npm i -g zhiro@${r.manifest.fromApp}` : "这份数据配升级前用的那个版本（它没有记下版本号）；装回那个版本再启动");
+      console.log(r.manifest.fromApp ? `这份数据配 ${r.manifest.fromApp}：npm i -g @mazjq/zhiro@${r.manifest.fromApp}` : "这份数据配升级前用的那个版本（它没有记下版本号）；装回那个版本再启动");
     }
   } catch (e: any) { console.error(String(e?.message ?? e)); process.exitCode = 1; }
   finally { await lock.release(); }

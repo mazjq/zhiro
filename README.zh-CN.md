@@ -7,7 +7,7 @@
 [English](README.md) | 简体中文
 
 [![CI](https://github.com/mazjq/zhiro/actions/workflows/ci.yml/badge.svg)](https://github.com/mazjq/zhiro/actions/workflows/ci.yml)
-[![npm](https://img.shields.io/npm/v/zhiro)](https://www.npmjs.com/package/zhiro)
+[![npm](https://img.shields.io/npm/v/@mazjq/zhiro)](https://www.npmjs.com/package/@mazjq/zhiro)
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 
 </div>
@@ -38,8 +38,8 @@
 **装了 Node 22.13 或更新？**
 
 ```bash
-npx zhiro                 # 试一下
-npm i -g zhiro && zhiro   # 长期用
+npx @mazjq/zhiro                 # 试一下
+npm i -g @mazjq/zhiro && zhiro   # 长期用（装好后命令叫 zhiro）
 ```
 
 **没有 Node？** 一行命令，自带它需要的一切（自带一份官方 Node，按 nodejs.org 的校验和核对过；不动你系统里的东西）：

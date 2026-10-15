@@ -7,7 +7,7 @@
 English | [简体中文](README.zh-CN.md)
 
 [![CI](https://github.com/mazjq/zhiro/actions/workflows/ci.yml/badge.svg)](https://github.com/mazjq/zhiro/actions/workflows/ci.yml)
-[![npm](https://img.shields.io/npm/v/zhiro)](https://www.npmjs.com/package/zhiro)
+[![npm](https://img.shields.io/npm/v/@mazjq/zhiro)](https://www.npmjs.com/package/@mazjq/zhiro)
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 
 </div>
@@ -49,8 +49,8 @@ pressing Submit for you**. It is built first for campus recruiting in China (校
 **Have Node 22.13 or newer?**
 
 ```bash
-npx zhiro                 # try it
-npm i -g zhiro && zhiro   # keep it
+npx @mazjq/zhiro                 # try it
+npm i -g @mazjq/zhiro && zhiro   # keep it (the command is `zhiro`)
 ```
 
 **No Node?** One line installs everything it needs (its own Node, checked against nodejs.org's checksums; your system
