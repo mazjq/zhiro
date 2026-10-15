@@ -1,11 +1,14 @@
 /** ADR-058: moving the data directory — the path stays, the data goes; a move that cannot finish leaves everything where it was. */
 import { describe, it, expect } from "vitest";
 import { DatabaseSync } from "node:sqlite";
-import { closeSync, existsSync, lstatSync, mkdirSync, mkdtempSync, openSync, readFileSync, readdirSync, realpathSync, renameSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
+import { closeSync, existsSync, lstatSync, mkdirSync, mkdtempSync, openSync, readFileSync, readdirSync, realpathSync, renameSync, rmSync, symlinkSync, unlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, parse } from "node:path";
 import { checkTarget, cancelMove, ensureEntry, locationInfo, readLog, requestMove, resolveVault, VaultUnavailable, type Drive, type MoveLog } from "./move.js";
 import { loadConfig } from "./config.js";
+
+/** the link only, never what it points to (rmSync follows a symlink to the folder on macOS / Linux) */
+const dropLink = (p: string) => (process.platform === "win32" ? rmSync(p) : unlinkSync(p));
 
 /** A data directory with a database (in WAL mode, with a row that holds an absolute path into the directory) and a few files. */
 function vault() {
@@ -120,7 +123,7 @@ describe("moving the data directory", () => {
     requestMove(a.entry, a.to, a.ok);
     await resolveVault(a.entry, quiet, a.ok);
     const done = log(a.entry);
-    rmSync(a.entry); // the link only
+    dropLink(a.entry); // the link only
     writeFileSync(join(a.to, `.jobos-move-${done.id}`), "", "utf8");
     writeLog(a.entry, { ...done, phase: "switched" });
     expect(() => ensureEntry(a.entry)).toThrow(VaultUnavailable); // any other entry point waits for a daemon start
@@ -143,7 +146,7 @@ describe("moving the data directory", () => {
     const v = vault();
     requestMove(v.entry, v.to, v.ok);
     await resolveVault(v.entry, quiet, v.ok);
-    rmSync(v.entry); // deleted in the file manager: only the link goes
+    dropLink(v.entry); // deleted in the file manager: only the link goes
     expect(existsSync(join(v.to, "jobos.db"))).toBe(true);
     loadConfig(v.entry);
     expect(isLink(v.entry)).toBe(true);
@@ -151,7 +154,7 @@ describe("moving the data directory", () => {
     // the disk is gone (here: the folder renamed away) — with the link dangling, and with the link deleted too
     renameSync(v.to, v.to + "-拔掉了");
     expect(() => loadConfig(v.entry)).toThrow(VaultUnavailable);
-    rmSync(v.entry);
+    dropLink(v.entry);
     expect(() => loadConfig(v.entry)).toThrow(VaultUnavailable);
     expect(existsSync(v.entry)).toBe(false);
     // an empty folder something made where the link should be is replaced once the data is back

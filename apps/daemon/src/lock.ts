@@ -1,7 +1,6 @@
 import net from "node:net";
 import { createHash } from "node:crypto";
 import { realpathSync, rmSync } from "node:fs";
-import { tmpdir } from "node:os";
 import { join } from "node:path";
 
 /**
@@ -22,7 +21,9 @@ function endpoint(vault: string): string {
   let dir = vault;
   try { dir = realpathSync(vault); } catch { /* not there yet: its spelling will do */ }
   const key = createHash("sha256").update(process.platform === "win32" ? dir.toLowerCase() : dir).digest("hex").slice(0, 24);
-  return process.platform === "win32" ? `\\\\.\\pipe\\jobos-${key}` : join(tmpdir(), `jobos-${key}.sock`);
+  // a unix socket path may be at most ~104 bytes, and macOS's temp folder alone is ~50: /tmp keeps it short. The name
+  // stays jobos-… so a pre-rename JobOS and Zhiro on the same data directory still see each other's lock.
+  return process.platform === "win32" ? `\\\\.\\pipe\\jobos-${key}` : join("/tmp", `jobos-${key}.sock`);
 }
 
 /** Ask the endpoint who is there; "" when nobody answers (a socket file left by a process that was killed). */
