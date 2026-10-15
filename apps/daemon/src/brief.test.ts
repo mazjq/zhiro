@@ -69,19 +69,25 @@ describe("the short form", () => {
     }
   });
 
-  it("pool.list brief: a few previews under a new name, with the totals; positions never cut short", async () => {
+  it("pool.list brief: every matched post (compact) under a new name, the rest counted; expired kept even when unknown", async () => {
     const w = await world(), s = w.s;
-    const full = (await callTool("pool.list", {}, AGENT, s)) as any;
-    const b = (await callTool("pool.list", { detail: "brief" }, AGENT, s)) as any;
+    const full = (await callTool("pool.list", { limit: 1000 }, AGENT, s)) as any;
+    const b = (await callTool("pool.list", { detail: "brief", limit: 1000 }, AGENT, s)) as any;
     expect(b.total).toBe(full.total);
     for (const c of b.items) {
       const f = full.items.find((x: any) => x.companyId === c.companyId);
+      const matched = f.positions.filter((p: any) => p.match).map((p: any) => p.id).sort();
       expect(c.positions).toBeUndefined();
-      expect(c.positionPreviews.length).toBeLessThanOrEqual(3);
+      expect(c.matchedPositions.map((p: any) => p.id).sort()).toEqual(matched.slice(0, 50).length === matched.length ? matched : expect.any(Array));
+      expect(c.matchedPositionsTotal).toBe(matched.length);
+      expect(c.otherPositionsTotal).toBe(f.positions.length - matched.length);
       expect(c.allPositionsTotal).toBe(f.positions.length);
-      expect(c.positionsHasMore).toBe(f.positions.length > 3);
       expect(c.sourcesCount).toBe(f.sources.length);
+      for (const p of [...c.matchedPositions, ...c.otherPositionPreviews]) expect("expired" in p).toBe(true);
     }
+    const page = (await callTool("pool.list", { detail: "brief" }, AGENT, s)) as any;
+    expect(page.items.length).toBeLessThanOrEqual(20);
+    expect(page.hasMore).toBe(full.total > 20);
   });
 });
 

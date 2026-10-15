@@ -37,31 +37,39 @@ export function applicationBrief(x: Record<string, any>) {
   };
 }
 
-const PREVIEWS = 3;
-const MATCH_CHARS = 40;
+const MATCHED_CAP = 50;
+const OTHER_PREVIEWS = 3;
 const TIER: Record<string, number> = { 优先考虑: 0, 可迁移: 1 };
 
+/** One post in a company's short form. `expired` is always there: null = not known, which is not "still open". */
+function postBrief(p: any) {
+  const d = deadlineBrief(p.deadline);
+  return { ...dropEmpty({ id: p.id, title: p.title, cities: p.cities?.length ? p.cities : null, fit: p.fit?.verdict, applicationState: p.applicationState, watched: p.watched || null, closesAt: d?.closesAt, say: d?.say }), expired: d ? d.expired : null };
+}
+
 /**
- * pool.list (20 companies a page unless a limit is given): one company, with a few of its posts under a new name — `positions` would read as "all of them". The
- * previews are the best matches first, then the earliest deadline; the totals say how many more there are, and
- * position.list({ companyId }) lists them.
+ * pool.list (20 companies a page unless a limit is given), one company. Every post the query or the profile matched is
+ * listed (compact; up to 50 — positionsLimit raises it for one company — then matchedHasMore) — a few previews hid most of them (measured 2026-10-15: 3 previews
+ * showed 2–56% of the matched posts). Posts that did not match are counted; a company with no matched post shows a
+ * few of them. New names throughout: `positions` would read as "all of them". position.list({ companyId }) lists all.
  */
-export function poolCompanyBrief(c: Record<string, any>) {
+export function poolCompanyBrief(c: Record<string, any>, matchedCap = MATCHED_CAP) {
   const posts: any[] = c.positions ?? [];
-  const matched = posts.filter((p) => p.match);
-  const rank = (p: any) => [p.match ? 0 : 1, TIER[p.fit?.verdict] ?? 2, p.deadline?.date ?? "9999", p.id] as const;
-  const order = [...posts].sort((a, b) => { const x = rank(a), y = rank(b); for (let i = 0; i < x.length; i++) if (x[i] !== y[i]) return x[i] < y[i] ? -1 : 1; return 0; });
+  const rank = (p: any) => [TIER[p.fit?.verdict] ?? 2, p.deadline?.date ?? "9999", p.id] as const;
+  const sorted = (xs: any[]) => [...xs].sort((a, b) => { const x = rank(a), y = rank(b); for (let i = 0; i < x.length; i++) if (x[i] !== y[i]) return x[i] < y[i] ? -1 : 1; return 0; });
+  const matched = sorted(posts.filter((p) => p.match)), others = posts.filter((p) => !p.match);
+  const shownMatched = matched.slice(0, matchedCap), shownOthers = matched.length ? [] : sorted(others).slice(0, OTHER_PREVIEWS);
   return {
     ...omit(c, ["positions", "sources", "conflicts", "noticeUrl", "tags"]),
     tagNames: (c.tags ?? []).map((t: any) => t.tag), // the recommendation tags by name (the full form has each tag's mode and reason)
     sourcesCount: (c.sources ?? []).length,
     conflictsCount: (c.conflicts ?? []).length,
-    positionPreviews: order.slice(0, PREVIEWS).map((p) => {
-      const d = deadlineBrief(p.deadline), m: string | null = p.match?.reason ?? null;
-      return dropEmpty({ id: p.id, title: p.title, cities: p.cities, applicationState: p.applicationState, watched: p.watched || null, match: m && m.length > MATCH_CHARS ? m.slice(0, MATCH_CHARS) + "…" : m, closesAt: d?.closesAt, expired: d?.expired, say: d?.say });
-    }),
+    matchedPositions: shownMatched.map(postBrief),
     matchedPositionsTotal: matched.length,
+    matchedHasMore: matched.length > shownMatched.length,
+    otherPositionPreviews: shownOthers.map(postBrief),
+    otherPositionsTotal: others.length,
     allPositionsTotal: posts.length,
-    positionsHasMore: posts.length > PREVIEWS,
+    positionsHasMore: posts.length > shownMatched.length + shownOthers.length,
   };
 }

@@ -66,12 +66,16 @@ entries condense what still holds.
 
 - **D-22 · 2026-10-15 · List tools have a short form, asked for explicitly.** `position.list`, `application.list` and
   `pool.list` take `detail: "brief"`: no job descriptions or other long texts; a deadline keeps what a decision needs
-  (`closesAt`, `deadlineKind`, `expired` — `null` when unknown, never `false` — `status`, `say`); `pool.list` gives each
-  company `positionPreviews` (3) with totals and `positionsHasMore`, 20 companies a page. Leaving `detail` out returns
-  exactly what it always did — agents in the wild depend on it; Zhiro's own skill, chat-drawer rules and built-in
-  assistant ask for the short form. *Why:* measured on a real database, one `pool.list` was about a million tokens
-  (every company carried all its posts); short forms: `pool.list` ≈ 8,000, `position.list` (20) 10,900 → 3,900,
-  `application.list` (50) 26,700 → 11,600. New fields have new names: an old name never changes meaning.
+  (`closesAt`, `deadlineKind`, `expired` — `null` when unknown, never `false` — `status`, `say`); `pool.list` pages by 20 companies
+  and lists every post the query or profile matched (`matchedPositions`, compact, up to 50 a company — `positionsLimit`
+  raises it for one company), the others by count. Leaving `detail` out returns exactly what it always did — agents in
+  the wild depend on it; Zhiro's own skill, chat-drawer rules and built-in assistant ask for the short form and tell
+  the agent to page while `hasMore`. *Why:* measured on a real database, one `pool.list` was about a million tokens
+  (every company carried all its posts). *Not at the cost of finding things:* on 12 real queries, the short form
+  followed as the skill says (pages, then `positionsLimit` for a company with `matchedHasMore`) reached 100% of the
+  companies and matched posts of the full result, with 5–30% of its tokens; deadlines agreed in every case. A first
+  version showing 3 previews per company reached only 8–56% of the matched posts and was dropped. New fields have new
+  names: an old name never changes meaning.
 - **D-23 · 2026-10-15 · One copy of each result, for a connection that asks.** By default a tool result carries the
   JSON both as text and as `structuredContent` (what MCP asks for). Claude Code gives its model the structured copy
   only; Codex gives it both (measured with differing markers), which roughly doubles every result. A connection with
