@@ -2,7 +2,7 @@
 
 # Zhiro · 职路
 
-**Find the best career path open to you — not just the next job.**
+An open-source job-search tool that runs on your own computer and works with the AI agent you already use.
 
 English | [简体中文](README.zh-CN.md)
 
@@ -12,85 +12,83 @@ English | [简体中文](README.zh-CN.md)
 
 </div>
 
-Most job tools help you apply faster. Zhiro helps you choose better. It looks at three things together:
+I built Zhiro while looking for a job myself. Sending applications is the easy part. The hard part is knowing where to
+send them: which jobs actually fit, whether the skills I'm missing are worth learning, and what a company is like
+beyond its job ad.
 
-- **you** — what you can do and what you are missing;
-- **the companies** — their financials, how much they invest in R&D, how they pay and reward their people, and whether
-  their place in the industry is hard to replace;
-- **the openings** — every relevant job, with its real deadline.
-
-Then it keeps the whole job hunt moving, from finding a job to an offer. It runs on your own computer and works with the
-AI agent you already use (Claude Code, Codex, WorkBuddy or any MCP client). It is built first for campus recruiting in
-China (校招), and works for any job search.
+Zhiro keeps all of that in one place: your profile, a job pool that refreshes every day, and companies' financials and
+announcements. It also tracks what happens after you apply. It works with Claude Code, Codex, WorkBuddy or any MCP
+client. It was built for campus recruiting in China (校招) first, and works for other job searches too.
 
 ![Zhiro: jobs ranked against your profile](docs/assets/jobs.png)
 
-<sub>All screenshots use made-up data.</sub>
+<sub>Every company, job and number in the screenshots is made up.</sub>
 
 ## Why Zhiro
 
-### 1. See what to learn next, not just what you fail
+### 1. Opportunity gaps: what you're missing
 
-Job filters quietly drop the jobs you "don't match". Zhiro turns them into **opportunity gaps**:
+Job filters drop the jobs you "don't match", so you never learn what stood in the way. Zhiro keeps every job related to
+your work, picks out the requirements your profile doesn't show yet, groups them by skill, and counts how many jobs
+and companies each one blocks.
 
-1. It collects the requirements, across all the jobs related to your work, that your profile does not show yet.
-2. It groups them by skill and counts how many jobs, and how many companies, would open up if you had each one.
-3. It labels each skill: *unknown* (your profile is silent), *transferable* (you have related experience), or a real
-   gap you have confirmed.
+Most gaps only mean your profile is silent, not that you can't do it. Click *I can do this* or *haven't done this* and
+the matching runs again. In the screenshot below, C++ is required by 4 of the jobs and ROS by 2.
 
-So a long list of rejections becomes a short list of things worth learning next. Answer "I can do this" or "I haven't
-done this", and the matching runs again.
+![Opportunity gaps: how many jobs each skill blocks](docs/assets/gaps.png)
 
-### 2. Judge the company, not the job ad
+### 2. Look at the company itself
 
-A job ad says little about where a career goes. Zhiro gives you, and your agent, the data to judge the company
-behind it:
+Job ads all read the same. To judge a company you need its numbers and its announcements, so Zhiro gives your agent
+data tools for them:
 
-- **Financials** of listed companies (A-shares, Hong Kong, US, NEEQ): revenue, net profit, growth, gross margin, R&D
-  spending, headcount, cash paid per employee.
-- **Signals from a year of announcements**: equity incentives and employee share plans, expansion and new capacity,
-  government grants, "专精特新" (specialised niche leaders, often hard to replace in a supply chain), share sales by
-  insiders.
-- **Industry context**: the listed companies in a sector or theme, recent broker reports, and US salary statistics
-  (BLS) for comparison.
+- Listed companies (A-shares, Hong Kong, US, NEEQ): three years of revenue, net profit, growth, gross margin, R&D
+  spending, headcount, and cash paid per employee.
+- A year of announcements: equity incentives and employee share plans, expansion, government grants, "专精特新"
+  (specialised niche) status, insider share sales. 专精特新 firms are often the hard-to-replace link in a supply chain.
+- Industries: the listed companies in a sector, recent broker reports, and US salary statistics from the BLS.
 
-Ask your agent to research an industry or a company. It uses these tools and the web, and writes a report you can
-check. Each claim names its source. The report links back to the jobs in your pool, so "is this a good place to grow?"
-becomes a question you can answer with evidence.
+Ask your agent to research an industry or a company and it writes a report from these tools plus web search. Each
+claim names its source, and Zhiro checks the numbers in it against the data that was fetched. Companies the report
+mentions are matched to your job pool, so their open jobs are one click away.
+
+![A research report: key points, their sources, the companies it names](docs/assets/research.png)
 
 <img src="docs/assets/company-intel.png" alt="A company's card: financials, R&D, pay per employee" width="520">
 
-### 3. Never miss what matters
+### 3. Jobs and deadlines
 
-- **One job pool, refreshed every day**: companies' own recruiting sites (Moka, Beisen, Feishu Jobs, Dayee, 51job,
-  Zhaopin, iGuopin and more) and your own spreadsheets (Feishu Base, CSV).
-- **Reconciled deadlines**: when sources disagree, Zhiro compares them; every deadline says where it came from and
-  whether it has been verified.
-- **Matching**: jobs are matched against your profile — small, checkable cards for education, skills, projects and
-  preferences.
+The job pool refreshes every day. It reads companies' own recruiting sites (Moka, Beisen, Feishu Jobs, Dayee, 51job,
+Zhaopin, iGuopin and more) and your own spreadsheets (Feishu Base, CSV). When sources give different deadlines, Zhiro
+compares them, and every deadline says where it came from and whether it has been verified.
+
+Jobs are matched against your profile, which is a set of small cards for education, skills, projects and preferences
+that you can edit any time.
 
 | Today: what closes soon, what waits for you | Your profile: one source for matching, resumes and forms |
 |---|---|
 | ![Today](docs/assets/today.png) | ![Profile](docs/assets/profile.png) |
 
-### 4. Keep every application moving
+### 4. After you apply
 
-- **The pipeline**: watch → prepare → applied → tests and interviews → result, with reminders.
-- **An inbox that reads recruiting mail**: it recognises test and interview invitations, links each one to its
-  application, and suggests the update for you to confirm.
-- **Form filling up to *Submit***: a separate Chrome profile fills in application forms from your profile and the
-  right resume, then stops. You press *Submit*.
+Each application's stage is tracked (watching, preparing, applied, tests and interviews, result), with reminders. The
+inbox reads recruiting mail, spots test and interview invitations, works out which application each one belongs to,
+and asks before updating it.
+
+Zhiro can also fill in application forms. It uses a separate Chrome profile, fills the form from your profile and the
+right resume, and stops before *Submit*. You press it yourself.
 
 | Applications: every stage, with the job's own requirements | Inbox: recruiting mail turned into next steps |
 |---|---|
 | ![Applications](docs/assets/pipeline.png) | ![Inbox](docs/assets/inbox.png) |
 
-### 5. Your agent, your data, your rules
+### 5. What the agent may do, and where your data lives
 
-- **Safe agent actions**: anything an agent does that can be undone, it does, and you can undo it. Anything with
-  consequences becomes a card you confirm. Logins and credentials are never an agent's to touch.
-- **Local data**: everything stays in one folder on your computer. Upgrades run on a copy and are checked before they
-  replace anything; one command verifies the data, one rolls back.
+An agent only acts directly when the action can be undone. Anything with consequences becomes a card you confirm.
+Logins and passwords are out of its reach.
+
+Your data lives in one folder on your computer. Upgrades run on a copy and replace the original only after the copy
+checks out. If something goes wrong, one command takes you back to before the upgrade.
 
 ## Install
 
@@ -101,8 +99,8 @@ npx @mazjq/zhiro                 # try it
 npm i -g @mazjq/zhiro && zhiro   # keep it (the command is `zhiro`)
 ```
 
-**No Node?** One line installs everything it needs (its own Node, checked against nodejs.org's checksums; your system
-is not touched):
+**No Node?** One line installs it. The script brings its own Node (checked against nodejs.org's checksums) and leaves
+your system alone:
 
 ```powershell
 # Windows (PowerShell)
@@ -143,7 +141,7 @@ Zhiro is a set of MCP tools. Start Zhiro, then connect your agent once:
 ```bash
 claude mcp add zhiro -- zhiro mcp            # Windows: claude mcp add zhiro -- cmd /c zhiro mcp
 ```
-Or open Claude Code inside Zhiro's agent folder (shown on the settings page) — everything is set up there.
+Or open Claude Code inside Zhiro's agent folder (shown on the settings page); everything is set up there.
 [More](docs/harness/claude-code.md)
 </details>
 
@@ -152,7 +150,7 @@ Or open Claude Code inside Zhiro's agent folder (shown on the settings page) —
 ```bash
 codex mcp add zhiro --env ZHIRO_RESULT_MODE=text -- zhiro mcp
 # Windows: codex mcp add zhiro --env ZHIRO_RESULT_MODE=text -- cmd /c zhiro mcp
-# (ZHIRO_RESULT_MODE: Codex then gets each result once instead of twice — about half the tokens)
+# (ZHIRO_RESULT_MODE: Codex then gets each result once instead of twice, about half the tokens)
 ```
 [More](docs/harness/codex.md)
 </details>
@@ -195,7 +193,7 @@ Most user docs are in Chinese for now; PRs translating them are welcome.
 
 ## Contributing
 
-Bug reports, recruiting sites to support, and pull requests are welcome — see [CONTRIBUTING.md](CONTRIBUTING.md).
+Bug reports, recruiting sites to support, and pull requests are welcome. See [CONTRIBUTING.md](CONTRIBUTING.md).
 Adding a recruiting site is one file plus a test ([how](apps/daemon/src/data/readers/README.md)).
 Security issues: please report privately ([SECURITY.md](SECURITY.md)).
 
