@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.1.1](https://github.com/mazjq/zhiro/compare/v0.1.0...v0.1.1) (2026-10-15)
+
+
+### Bug Fixes
+
+* the npm package is @mazjq/zhiro (npm refused the bare name as too close to "tjiro"); the command is still zhiro ([0952bd7](https://github.com/mazjq/zhiro/commit/0952bd7f841b587eb8e55692cb630af2d865d496))
+
 ## 0.1.0 (2026-10-15)
 
 
