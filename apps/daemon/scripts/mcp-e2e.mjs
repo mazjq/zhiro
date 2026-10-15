@@ -1,0 +1,12 @@
+import { Client } from "@modelcontextprotocol/sdk/client/index.js";
+import { StdioClientTransport } from "@modelcontextprotocol/sdk/client/stdio.js";
+const t = new StdioClientTransport({ command: "node", args: ["--no-warnings=ExperimentalWarning", "--import", "tsx", "src/mcp/stdio.ts"], env: { ...process.env, JOBOS_ACTOR: "mcp" }, cwd: process.cwd() });
+const c = new Client({ name: "e2e", version: "0" });
+await c.connect(t);
+const tools = await c.listTools();
+console.log("tools:", tools.tools.length, tools.tools[0].name, "inputSchema.type=", tools.tools[0].inputSchema.type);
+const r = await c.callTool({ name: "today.summary", arguments: { days: 30 } });
+console.log("today:", JSON.stringify(r.structuredContent).slice(0, 200));
+const w = await c.callTool({ name: "position.watch", arguments: { positionId: "nope", priority: 1 } });
+console.log("agent write:", (w.content?.[0]?.text ?? "").slice(0, 120));
+await c.close();

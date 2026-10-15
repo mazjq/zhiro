@@ -1,0 +1,25 @@
+{
+  "name": "zhiro",
+  "private": true,
+  "packageManager": "pnpm@11.3.0",
+  "scripts": {
+    "dev": "pnpm --filter @zhiro/daemon dev",
+    "test": "pnpm -r test",
+    "typecheck": "pnpm -r typecheck",
+    "lint": "biome lint --error-on-warnings",
+    "build": "pnpm --filter @zhiro/desktop build && node scripts/build.mjs",
+    "smoke": "node scripts/smoke.mjs",
+    "check:clean": "node scripts/check-clean.mjs",
+    "prepare": "node -e \"try{require('child_process').execSync('git config core.hooksPath .githooks',{stdio:'ignore'})}catch{}\""
+  },
+  "version": "0.0.0",
+  "devDependencies": {
+    "@biomejs/biome": "2.2.4",
+    "esbuild": "0.28.2"
+  },
+  "description": "Zhiro · 职路 — local-first AI career research and job hunting",
+  "license": "MIT",
+  "engines": {
+    "node": ">=22.13"
+  }
+}

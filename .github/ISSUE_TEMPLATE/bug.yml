@@ -1,0 +1,45 @@
+name: Bug / 问题
+description: Something does not work as it should / 哪里不对
+labels: [bug]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks! Please **leave out anything personal** (your name, resume, application details, keys, links to your own spreadsheets).
+        谢谢！请**不要贴个人信息**（姓名、简历、申请细节、钥匙、你自己表格的链接）。
+  - type: textarea
+    id: what
+    attributes:
+      label: What happened / 发生了什么
+      description: Steps to reproduce, what you expected, what you saw. / 怎么复现、期望什么、看到什么。
+    validations:
+      required: true
+  - type: input
+    id: version
+    attributes:
+      label: Version / 版本
+      description: "`zhiro --version`"
+    validations:
+      required: true
+  - type: dropdown
+    id: install
+    attributes:
+      label: How you run it / 怎么装的
+      options: [npx / npm, install script / 安装脚本, from source / 源码]
+    validations:
+      required: true
+  - type: input
+    id: os
+    attributes:
+      label: OS and Node / 系统与 Node
+      placeholder: Windows 11, Node 22.13
+  - type: dropdown
+    id: agent
+    attributes:
+      label: Which agent answers / 用的哪个 agent
+      options: [Claude Code, Codex, WorkBuddy, built-in / 内置, other / 其他, not relevant / 无关]
+  - type: textarea
+    id: verify
+    attributes:
+      label: "`zhiro vault verify` output (if it is about data) / 数据相关时贴这个"
+      render: text

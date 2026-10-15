@@ -1,0 +1,20 @@
+name: Idea / 建议
+description: Something Zhiro should do / 希望 Zhiro 能做什么
+labels: [enhancement]
+body:
+  - type: textarea
+    id: need
+    attributes:
+      label: What you are trying to do / 你想做成什么
+      description: The situation and the goal, not the solution first. / 先说处境和目的，再说办法。
+    validations:
+      required: true
+  - type: textarea
+    id: how
+    attributes:
+      label: How it could work / 可以怎么做
+  - type: input
+    id: site
+    attributes:
+      label: A recruiting site or sheet to support? / 想接的招聘站或表格
+      description: "A public example link helps (not your own private sheet). / 给一个公开的示例链接（别给你自己的私人表格）。"

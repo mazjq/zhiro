@@ -1,0 +1,55 @@
+name: Release
+
+# release-please keeps a release PR open with the next version and the CHANGELOG; merging it tags the release, and this
+# workflow then checks everything again, publishes to npm (when NPM_TOKEN is set) and attaches the install scripts.
+on:
+  push:
+    branches: [main]
+
+permissions:
+  contents: write
+  pull-requests: write
+  id-token: write
+
+jobs:
+  release-please:
+    runs-on: ubuntu-latest
+    outputs:
+      created: ${{ steps.rp.outputs.release_created }}
+      tag: ${{ steps.rp.outputs.tag_name }}
+    steps:
+      - id: rp
+        uses: googleapis/release-please-action@v4 # release-please-config.json, .release-please-manifest.json
+
+  publish:
+    needs: release-please
+    if: needs.release-please.outputs.created == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+          registry-url: https://registry.npmjs.org
+      - run: pnpm install --frozen-lockfile
+      - run: node scripts/check-clean.mjs
+      - run: pnpm lint && pnpm typecheck
+      - run: pnpm --filter @zhiro/daemon test
+      - run: pnpm build
+      - run: node scripts/smoke.mjs
+      - run: node scripts/check-clean.mjs out/npm
+      - name: Publish to npm
+        if: ${{ env.NPM_TOKEN != '' }}
+        env:
+          NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+        run: npm publish ./out/npm --provenance --access public
+      - name: Attach the install scripts and the package (the install scripts fetch zhiro.tgz from the latest release)
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          npm pack ./out/npm --pack-destination "$RUNNER_TEMP"
+          cp "$RUNNER_TEMP"/zhiro-*.tgz "$RUNNER_TEMP/zhiro.tgz"
+          gh release upload "${{ needs.release-please.outputs.tag }}" scripts/install.ps1 scripts/install.sh "$RUNNER_TEMP/zhiro.tgz" --clobber

@@ -1,0 +1,52 @@
+{
+  "name": "@zhiro/daemon",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "node --no-warnings=ExperimentalWarning --import tsx src/main.ts",
+    "mcp": "node --no-warnings=ExperimentalWarning --import tsx src/mcp/stdio.ts",
+    "test": "vitest run",
+    "test:data": "vitest run src/data",
+    "data": "node --no-warnings=ExperimentalWarning --import tsx src/data/cli.ts",
+    "typecheck": "tsc --noEmit -p .",
+    "auth": "node --no-warnings=ExperimentalWarning --import tsx src/cli/login.ts",
+    "vault": "node --no-warnings=ExperimentalWarning --import tsx src/cli/vault.ts",
+    "check:apply": "node --no-warnings=ExperimentalWarning --import tsx src/cli/check-apply.ts",
+    "eval:agent": "node --no-warnings=ExperimentalWarning --import tsx src/eval/agent-eval.ts",
+    "eval:pages": "node --no-warnings=ExperimentalWarning --import tsx src/eval/pages.ts",
+    "eval:research": "node --no-warnings=ExperimentalWarning --import tsx src/eval/research-bench.ts",
+    "make-fixture": "node --no-warnings=ExperimentalWarning --import tsx scripts/make-fixture.ts"
+  },
+  "dependencies": {
+    "@agentclientprotocol/sdk": "1.8.0",
+    "@earendil-works/pi-agent-core": "^1.0.0",
+    "@earendil-works/pi-ai": "^1.0.0",
+    "@earendil-works/pi-session-backend-sqlite-node": "^0.99.2",
+    "@hono/node-server": "^2.1.1",
+    "@zhiro/contracts": "workspace:*",
+    "@larksuiteoapi/node-sdk": "^1.73.3",
+    "@modelcontextprotocol/sdk": "^1.30.0",
+    "@sinclair/typebox": "^0.34.52",
+    "croner": "^10.0.1",
+    "hono": "^4.13.7",
+    "imapflow": "^2.0.5",
+    "jpeg-js": "^0.4.4",
+    "jsqr": "^1.4.0",
+    "mailparser": "^3.9.28",
+    "playwright-core": "^1.63.0",
+    "pngjs": "^7.0.0",
+    "ulid": "^3.0.2",
+    "yaml": "^2.9.1"
+  },
+  "devDependencies": {
+    "@types/mailparser": "^3.4.6",
+    "@types/node": "^22.14.0",
+    "@types/pngjs": "^6.0.5",
+    "@types/qrcode": "^1.5.6",
+    "qrcode": "^1.5.4",
+    "tsx": "^4.23.13",
+    "typescript": "^5.9.0",
+    "vitest": "^5.0.0"
+  }
+}

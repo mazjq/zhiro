@@ -1,0 +1,8 @@
+{"type":"thread.started","thread_id":"01a136ac-9db2-7fb0-9652-2cfdb00e82ad"}
+{"type":"turn.started"}
+{"type":"item.completed","item":{"id":"item_0","type":"error","message":"Skill descriptions were shortened to fit the skills context budget. Codex can still see every skill, but some descriptions are shorter. Disable unused skills or plugins to leave more room for the rest."}}
+{"type":"item.completed","item":{"id":"item_1","type":"agent_message","text":"规则已读。\n"}}
+{"type":"item.started","item":{"id":"item_2","type":"mcp_tool_call","server":"jobos","tool":"today.summary","arguments":{"days":0},"result":null,"error":null,"status":"in_progress"}}
+{"type":"item.completed","item":{"id":"item_2","type":"mcp_tool_call","server":"jobos","tool":"today.summary","arguments":{"days":0},"result":{"content":[{"type":"text","text":"{\"deadlines\":[],\"verify\":[],\"pendingProposals\":0,\"nextActions\":[],\"workflowsRunning\":2,\"reminders\":1,\"notifyConfigured\":false}"}],"structured_content":{"deadlines":[],"verify":[],"pendingProposals":0,"nextActions":[],"workflowsRunning":2,"reminders":1,"notifyConfigured":false}},"error":null,"status":"completed"}}
+{"type":"item.completed","item":{"id":"item_3","type":"agent_message","text":"JobOS 显示，你关注或正在准备申请的岗位中，今天没有截止的岗位。"}}
+{"type":"turn.completed","usage":{"input_tokens":59445,"cached_input_tokens":51456,"cache_write_input_tokens":0,"output_tokens":130,"reasoning_output_tokens":0}}
