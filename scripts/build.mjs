@@ -38,7 +38,7 @@ cpSync(join(root, "bin", "zhiro.cjs"), join(out, "bin", "zhiro.cjs"));
 for (const f of ["LICENSE", "README.md", "README.zh-CN.md"]) if (existsSync(join(root, f))) cpSync(join(root, f), join(out, f));
 
 writeFileSync(join(out, "package.json"), JSON.stringify({
-  name: "zhiro",
+  name: "@mazjq/zhiro", // npm refused the bare name (too close to "tjiro"); the command is still `zhiro`
   version,
   description: "Zhiro · 职路 — local-first AI career research and job hunting, with your own agent (Claude Code, Codex, …) over MCP",
   license: "MIT",
@@ -53,4 +53,4 @@ writeFileSync(join(out, "package.json"), JSON.stringify({
   engines: { node: ">=22.13" },
   dependencies: deps,
 }, null, 2) + "\n");
-console.log(`out/npm: zhiro@${version}`);
+console.log(`out/npm: @mazjq/zhiro@${version}`);

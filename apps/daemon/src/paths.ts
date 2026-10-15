@@ -39,7 +39,7 @@ export function nodeArgs(name: keyof typeof SOURCES): string[] {
 export function mcpCommand(): { command: string; args: string[] } {
   if (!BUNDLED) return { command: process.execPath, args: [join(ROOT, "bin", "jobos-mcp.cjs")] };
   if (ROOT.split(sep).includes("_npx")) {
-    const npx = ["-y", `zhiro@${VERSION}`, "mcp"];
+    const npx = ["-y", `@mazjq/zhiro@${VERSION}`, "mcp"];
     return process.platform === "win32" ? { command: "cmd", args: ["/c", "npx", ...npx] } : { command: "npx", args: npx };
   }
   return { command: process.execPath, args: [join(ROOT, "bin", "zhiro.cjs"), "mcp"] };

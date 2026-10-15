@@ -30,7 +30,7 @@ try {
   mkdirSync(app);
   writeFileSync(join(app, "package.json"), "{}");
   execFileSync(npm, ["install", "--no-audit", "--no-fund", tgz], { cwd: app, stdio: "inherit", shell: sh });
-  const bin = join(app, "node_modules", "zhiro", "bin", "zhiro.cjs");
+  const bin = join(app, "node_modules", "@mazjq", "zhiro", "bin", "zhiro.cjs");
   const data = join(tmp, "data");
   const port = String(18000 + Math.floor(Math.random() * 1000));
   const env = { ...process.env, ZHIRO_PORT: port, JOBOS_VAULT: "", ZHIRO_DATA: "" };

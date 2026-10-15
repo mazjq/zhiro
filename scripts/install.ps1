@@ -37,7 +37,7 @@ try {
   Push-Location (Join-Path $Target "app")
   try { & $Node (Join-Path $Target "node\node_modules\npm\bin\npm-cli.js") install --no-audit --no-fund --loglevel=error $Pkg; $ok = $LASTEXITCODE -eq 0 } finally { Pop-Location }
   if (-not $ok) { Remove-Item -Recurse -Force $Target; throw "npm install failed; nothing was changed" }
-  $Cli = Join-Path $Target "app\node_modules\zhiro\bin\zhiro.cjs"
+  $Cli = Join-Path $Target "app\node_modules\@mazjq\zhiro\bin\zhiro.cjs"
   & $Node $Cli --version | Out-Null
   if ($LASTEXITCODE -ne 0) { Remove-Item -Recurse -Force $Target; throw "the new version does not start; nothing was changed" }
 
@@ -48,7 +48,7 @@ try {
   New-Item -ItemType Junction -Path $Current -Target $Target | Out-Null
   $Bin = Join-Path $Root "bin"
   New-Item -ItemType Directory -Force $Bin | Out-Null
-  Set-Content -Path (Join-Path $Bin "zhiro.cmd") -Encoding ascii -Value "@`"%~dp0..\current\node\node.exe`" `"%~dp0..\current\app\node_modules\zhiro\bin\zhiro.cjs`" %*"
+  Set-Content -Path (Join-Path $Bin "zhiro.cmd") -Encoding ascii -Value "@`"%~dp0..\current\node\node.exe`" `"%~dp0..\current\app\node_modules\@mazjq\zhiro\bin\zhiro.cjs`" %*"
   # keep the new version and the one before it (one still running keeps its files; try again next time)
   Get-ChildItem (Join-Path $Root "versions") -Directory | Sort-Object Name | Select-Object -SkipLast 2 | ForEach-Object { try { Remove-Item -Recurse -Force $_.FullName } catch { } }
 

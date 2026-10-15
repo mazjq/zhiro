@@ -4,9 +4,8 @@
   "packages": {
     ".": {
       "release-type": "node",
-      "package-name": "zhiro",
-      "changelog-path": "CHANGELOG.md",
-      "release-as": "0.1.0"
+      "package-name": "@mazjq/zhiro",
+      "changelog-path": "CHANGELOG.md"
     }
   }
 }

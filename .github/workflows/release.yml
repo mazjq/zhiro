@@ -51,5 +51,5 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           npm pack ./out/npm --pack-destination "$RUNNER_TEMP"
-          cp "$RUNNER_TEMP"/zhiro-*.tgz "$RUNNER_TEMP/zhiro.tgz"
+          cp "$RUNNER_TEMP"/*zhiro-*.tgz "$RUNNER_TEMP/zhiro.tgz"
           gh release upload "${{ needs.release-please.outputs.tag }}" scripts/install.ps1 scripts/install.sh "$RUNNER_TEMP/zhiro.tgz" --clobber
