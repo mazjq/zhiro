@@ -26,7 +26,7 @@ export function writeAgentDir(vault: string, url: string): string {
   // Claude Code: project-level MCP + project skill
   w(".mcp.json", JSON.stringify({ mcpServers: { zhiro: { command: launch.command, args: launch.args, env: env("claude") } } }, null, 2) + "\n");
   // Codex: project-level config (asks once to trust the directory) + the documented project skill place
-  w(".codex/config.toml", `[mcp_servers.zhiro]\ncommand = ${JSON.stringify(launch.command)}\nargs = ${JSON.stringify(launch.args)}\n\n[mcp_servers.zhiro.env]\n${toml(env("codex"))}\n`);
+  w(".codex/config.toml", `[mcp_servers.zhiro]\ncommand = ${JSON.stringify(launch.command)}\nargs = ${JSON.stringify(launch.args)}\n\n[mcp_servers.zhiro.env]\n${toml({ ...env("codex"), ZHIRO_RESULT_MODE: "text" })}\n`); // Codex gives its model both copies of a result unless told (D-23)
   // WorkBuddy reaches custom MCP servers only over HTTP through its connector proxy (a stdio entry is listed but never
   // started — seen 2026-10-13), so it gets the daemon's /mcp with the agent key in the header. The key is the same file
   // as config/.agent-token next door; this directory lives inside the vault.

@@ -19,12 +19,13 @@ Zhiro 是本机的校招系统（岗位库、截止、申请、画像、调研�
 - **网申永不点提交**：`apply.*` 只填写，提交按钮由用户自己点。
 - **你发起的、要 AI 的活由你来做**：画像匹配、整理邮件、抽简章、联网调研这类，Zhiro 不替你调别的模型，而是把要回答的问题交还给你——返回里有 `needsModel`（照 `systemPrompt` 作答后调 `llm.reply({ jobId, text })`，再重新调原来的工具），或 `llm.pending` 里有你的任务。用你自己的能力答，答完交回。
 - **`changedByUser`**：返回里如果有这一段，是用户在 Zhiro 窗口里自你上次调用以来改过的东西（一行一处：时间、工具、对象、改动）。以它为准更新你记着的情况，必要时重新读；不要把旧的说法再告诉用户。
+- **列表用简版，省 token**：`position.list`、`pool.list`、`application.list` 一律带 `"detail": "brief"`——不带岗位描述等长文本；截止看 `deadline.closesAt` / `expired`（`null` = 不知道，不等于没截止）/ `say`。要岗位描述原文、完整截止依据，再对那一个调 `position.get`。`pool.list` 简版每家公司只给 `positionPreviews`（最多 3 个，默认 20 家一页），`positionsHasMore` 为真时用 `position.list({ companyId, detail: "brief" })` 看全。翻页用 `offset`，看 `hasMore`。
 
 ## 完整流程：找岗位 → 关注 → 准备申请 → 网申
 
 | 步 | 工具 | 说明 |
 |---|---|---|
-| 找岗位 | `position.list` `{ "query": "控制", "city": "北京", "limit": 20 }` | 也可按 `companyId` / `major` / `degree`；结果带 `closesAt`、`deadline`、`match`。岗位名只是类别（「技术类」）或没有描述时，先 `lead.resolve({ companyIds: [...] })` 让系统补出具体岗位 |
+| 找岗位 | `position.list` `{ "query": "控制", "city": "北京", "limit": 20, "detail": "brief" }` | 也可按 `companyId` / `major` / `degree`；结果带 `closesAt`、`deadline`、`match`。岗位名只是类别（「技术类」）或没有描述时，先 `lead.resolve({ companyIds: [...] })` 让系统补出具体岗位 |
 | 看公司 / 项目 | `company.search`、`campaign.get` `{ "id" }` | 投递链接、简章、截止依据在这里 |
 | 关注 | `position.watch` `{ "positionId", "priority": 1, "note": "可选" }` | 直接做；`priority: 0` 取消关注 |
 | 准备申请 | `application.create` `{ "positionId", "channel": "official" }` | 直接做，state=draft |

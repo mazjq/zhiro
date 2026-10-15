@@ -10,7 +10,7 @@
 zhiro mcp
 ```
 
-（从源码跑的：`node <仓库>/bin/jobos-mcp.cjs`。）Claude Code 一行：`claude mcp add zhiro -- zhiro mcp`；Codex 一行：`codex mcp add zhiro -- zhiro mcp`。
+（从源码跑的：`node <仓库>/bin/jobos-mcp.cjs`。）Claude Code 一行：`claude mcp add zhiro -- zhiro mcp`；Codex 一行：`codex mcp add zhiro --env ZHIRO_RESULT_MODE=text -- zhiro mcp`（`ZHIRO_RESULT_MODE=text`：每个结果只给一份文字版；Codex 默认会把文字版和结构化两份都交给模型，约多一倍 token）。
 
 环境变量（可选）：`ZHIRO_DATA`（数据目录，不设就用 Zhiro 自己记住的位置）、`ZHIRO_URL`（默认 `http://127.0.0.1:8787`）、`ZHIRO_ACTOR`（审计标签，随便起个名）。旧名 `JOBOS_*` 也认。这个进程自己读数据目录里的 `config/.agent-token`，不用你处理钥匙。Zhiro 的 agent 工作目录（`<数据目录>/agent`）里各家的配置文件就是这么写的，照抄即可。
 

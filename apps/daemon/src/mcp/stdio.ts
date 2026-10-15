@@ -21,7 +21,9 @@ const token = process.env.JOBOS_AGENT_TOKEN ?? readFileSync(join(vault, "config"
 const actorVia = process.env.JOBOS_ACTOR ?? "mcp"; // an audit label only (claude / codex / workbuddy / …)
 
 const down = new StdioServerTransport();
-const up = new StreamableHTTPClientTransport(new URL("/mcp", base), { requestInit: { headers: { authorization: `Bearer ${token}`, "x-jobos-actor": actorVia } } });
+// ZHIRO_RESULT_MODE=text: each result comes once, as text, for a client that would take both copies (Codex, D-23)
+const resultMode: Record<string, string> = process.env.JOBOS_RESULT_MODE === "text" ? { "x-zhiro-result-mode": "text" } : {};
+const up = new StreamableHTTPClientTransport(new URL("/mcp", base), { requestInit: { headers: { authorization: `Bearer ${token}`, "x-jobos-actor": actorVia, ...resultMode } } });
 
 down.onmessage = (m: JSONRPCMessage) => {
   up.send(m).catch((e: any) => {

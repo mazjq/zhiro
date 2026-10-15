@@ -102,7 +102,9 @@ Or open Claude Code inside Zhiro's agent folder (shown on the settings page) —
 <details><summary>Codex</summary>
 
 ```bash
-codex mcp add zhiro -- zhiro mcp             # Windows: codex mcp add zhiro -- cmd /c zhiro mcp
+codex mcp add zhiro --env ZHIRO_RESULT_MODE=text -- zhiro mcp
+# Windows: codex mcp add zhiro --env ZHIRO_RESULT_MODE=text -- cmd /c zhiro mcp
+# (ZHIRO_RESULT_MODE: Codex then gets each result once instead of twice — about half the tokens)
 ```
 [More](docs/harness/codex.md)
 </details>

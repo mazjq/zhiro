@@ -86,7 +86,9 @@ claude mcp add zhiro -- zhiro mcp            # Windows：claude mcp add zhiro --
 <details><summary>Codex</summary>
 
 ```bash
-codex mcp add zhiro -- zhiro mcp             # Windows：codex mcp add zhiro -- cmd /c zhiro mcp
+codex mcp add zhiro --env ZHIRO_RESULT_MODE=text -- zhiro mcp
+# Windows：codex mcp add zhiro --env ZHIRO_RESULT_MODE=text -- cmd /c zhiro mcp
+#（ZHIRO_RESULT_MODE：让 Codex 每个结果只收一份，省约一半 token）
 ```
 [详细](docs/harness/codex.md)
 </details>
