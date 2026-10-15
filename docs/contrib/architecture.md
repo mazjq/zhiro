@@ -7,6 +7,24 @@ person's own agent. One user, one machine, one data folder.
 
 Each layer only uses the ones below it.
 
+```mermaid
+flowchart TB
+  subgraph access["access"]
+    UI["Web UI /app/"]
+    MCP["MCP · zhiro mcp · /mcp"]
+    HTTP["HTTP /api/tools"]
+    CLI["zhiro data · zhiro vault"]
+    Drawer["chat drawer → your harness"]
+  end
+  Tools["tools · callTool(name, input, actor)<br/>key → identity · 3 permission tiers · confirm cards · undo · audit"]
+  Biz["business · pool · deadlines · matching · profile · resumes · applications · form filling · inbox · research"]
+  Data["data · readers · subscriptions · ingest · job catalog · daily pull"]
+  Base["base · SQLite + migrations · upgrade on a copy · data folder + lock · config · scheduler · backup / move"]
+  Contracts[["contracts<br/>(shared vocabulary)"]]
+  UI & MCP & HTTP & CLI & Drawer --> Tools --> Biz --> Data --> Base
+  Contracts -.- Tools
+```
+
 ```
 access     UI (apps/desktop) · HTTP /api/tools · MCP (/mcp, `zhiro mcp`) · `zhiro data|vault` · the chat drawer's backends
              └────────────── all through one entry: callTool(name, input, actor) ──────────────┘
@@ -58,6 +76,27 @@ Three kinds, with fixed homes:
 Sources only produce observations; `data/ingest.ts` is the one way they become state. Ingest is incremental: unchanged
 rows are only marked as seen.
 
+## Agents, both directions
+
+Your agent calls Zhiro, or Zhiro starts your agent. Either way the tool calls come back through `callTool`, under the
+same rules.
+
+```mermaid
+flowchart LR
+  subgraph yours["your agent calls Zhiro"]
+    CC["Claude Code / Codex"] -->|stdio| Relay["zhiro mcp"]
+    WB["WorkBuddy / any MCP client"] -->|HTTP /mcp| D
+    Relay --> D
+  end
+  D(("daemon<br/>callTool"))
+  subgraph started["Zhiro starts your agent"]
+    D -->|"one chat turn, per-turn key"| T["claude -p / codex exec / ACP"]
+    D -->|"research, sandboxed run folder"| W["research worker + data tools"]
+    D -->|"background tidying, no tools"| O["one-shot answer or built-in model"]
+  end
+  T & W -->|tool calls| Relay
+```
+
 ## Processes
 
 - **daemon** (`zhiro`, or `pnpm dev`): HTTP on `127.0.0.1:8787`, the scheduler (`service/workflow.ts`: SQLite table,
@@ -77,6 +116,17 @@ platform default) → finish a requested move (`move.ts`) → take the lock (no 
 the program is newer** (`upgrade.ts`) → open → schedule → serve.
 
 ## Upgrades
+
+```mermaid
+flowchart LR
+  A["jobos.db (vN)"] -->|"WAL folded in, VACUUM INTO"| B["copy"]
+  B -->|migrations| C["copy (vN+k)"]
+  C -->|"compare with the original:<br/>row counts, your rows, structure, integrity"| Q{"all match?"}
+  Q -->|no| X["delete the copy<br/>original untouched"]
+  Q -->|yes| S["upgrade.json, then two renames"]
+  S --> L["jobos.db = the upgraded copy"]
+  S --> K["backups/pre-vN-vN+k-*.db<br/>+ manifest (sha256, counts, versions)"]
+```
 
 The live database is never migrated in place. `upgrade.ts` copies it (`VACUUM INTO`), migrates the copy, compares it
 with the original (every table's row count, the person's own rows row by row, the expected tables / indexes /

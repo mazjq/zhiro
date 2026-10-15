@@ -19,6 +19,12 @@ pressing Submit for you**. It is built first for campus recruiting in China (校
 
 ![Zhiro: jobs ranked against your profile](docs/assets/jobs.png)
 
+| Today: what closes soon, what waits for you | Applications: every stage, with the job's own requirements |
+|---|---|
+| ![Today](docs/assets/today.png) | ![Applications](docs/assets/pipeline.png) |
+
+<sub>Screenshots use made-up data.</sub>
+
 ## What it does
 
 - **One job pool, always fresh.** Reads companies' own recruiting sites (Moka, Beisen, Feishu Jobs, Dayee, 51job,
