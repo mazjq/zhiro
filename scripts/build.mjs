@@ -40,7 +40,7 @@ for (const f of ["LICENSE", "README.md", "README.zh-CN.md"]) if (existsSync(join
 writeFileSync(join(out, "package.json"), JSON.stringify({
   name: "@mazjq/zhiro", // npm refused the bare name (too close to "tjiro"); the command is still `zhiro`
   version,
-  description: "Zhiro · 职路 — local-first AI career research and job hunting, with your own agent (Claude Code, Codex, …) over MCP",
+  description: "Zhiro · 职路 — find the best career path open to you: opportunity gaps, company research (financials, R&D, incentives), every job and deadline, with your own AI agent over MCP",
   license: "MIT",
   author: "mazjq",
   homepage: "https://github.com/mazjq/zhiro",

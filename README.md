@@ -2,7 +2,7 @@
 
 # Zhiro · 职路
 
-**Local-first AI career research and job hunting — with the agent you already use.**
+**Find the best career path open to you — not just the next job.**
 
 English | [简体中文](README.zh-CN.md)
 
@@ -12,37 +12,85 @@ English | [简体中文](README.zh-CN.md)
 
 </div>
 
-Zhiro keeps your whole job hunt in one place on your own computer: which companies are hiring, what fits you, what
-closes this week, where each application stands — and lets your own AI agent (Claude Code, Codex, WorkBuddy, or any
-MCP client) research industries and companies, track things for you and fill in application forms, **without ever
-pressing Submit for you**. It is built first for campus recruiting in China (校招), and works for any job search.
+Most job tools help you apply faster. Zhiro helps you choose better. It looks at three things together:
+
+- **you** — what you can do and what you are missing;
+- **the companies** — their financials, how much they invest in R&D, how they pay and reward their people, and whether
+  their place in the industry is hard to replace;
+- **the openings** — every relevant job, with its real deadline.
+
+Then it keeps the whole job hunt moving, from finding a job to an offer. It runs on your own computer and works with the
+AI agent you already use (Claude Code, Codex, WorkBuddy or any MCP client). It is built first for campus recruiting in
+China (校招), and works for any job search.
 
 ![Zhiro: jobs ranked against your profile](docs/assets/jobs.png)
 
-| Today: what closes soon, what waits for you | Applications: every stage, with the job's own requirements |
+<sub>All screenshots use made-up data.</sub>
+
+## Why Zhiro
+
+### 1. See what to learn next, not just what you fail
+
+Job filters quietly drop the jobs you "don't match". Zhiro turns them into **opportunity gaps**:
+
+1. It collects the requirements, across all the jobs related to your work, that your profile does not show yet.
+2. It groups them by skill and counts how many jobs, and how many companies, would open up if you had each one.
+3. It labels each skill: *unknown* (your profile is silent), *transferable* (you have related experience), or a real
+   gap you have confirmed.
+
+So a long list of rejections becomes a short list of things worth learning next. Answer "I can do this" or "I haven't
+done this", and the matching runs again.
+
+### 2. Judge the company, not the job ad
+
+A job ad says little about where a career goes. Zhiro gives you, and your agent, the data to judge the company
+behind it:
+
+- **Financials** of listed companies (A-shares, Hong Kong, US, NEEQ): revenue, net profit, growth, gross margin, R&D
+  spending, headcount, cash paid per employee.
+- **Signals from a year of announcements**: equity incentives and employee share plans, expansion and new capacity,
+  government grants, "专精特新" (specialised niche leaders, often hard to replace in a supply chain), share sales by
+  insiders.
+- **Industry context**: the listed companies in a sector or theme, recent broker reports, and US salary statistics
+  (BLS) for comparison.
+
+Ask your agent to research an industry or a company. It uses these tools and the web, and writes a report you can
+check. Each claim names its source. The report links back to the jobs in your pool, so "is this a good place to grow?"
+becomes a question you can answer with evidence.
+
+<img src="docs/assets/company-intel.png" alt="A company's card: financials, R&D, pay per employee" width="520">
+
+### 3. Never miss what matters
+
+- **One job pool, refreshed every day**: companies' own recruiting sites (Moka, Beisen, Feishu Jobs, Dayee, 51job,
+  Zhaopin, iGuopin and more) and your own spreadsheets (Feishu Base, CSV).
+- **Reconciled deadlines**: when sources disagree, Zhiro compares them; every deadline says where it came from and
+  whether it has been verified.
+- **Matching**: jobs are matched against your profile — small, checkable cards for education, skills, projects and
+  preferences.
+
+| Today: what closes soon, what waits for you | Your profile: one source for matching, resumes and forms |
 |---|---|
-| ![Today](docs/assets/today.png) | ![Applications](docs/assets/pipeline.png) |
+| ![Today](docs/assets/today.png) | ![Profile](docs/assets/profile.png) |
 
-<sub>Screenshots use made-up data.</sub>
+### 4. Keep every application moving
 
-## What it does
+- **The pipeline**: watch → prepare → applied → tests and interviews → result, with reminders.
+- **An inbox that reads recruiting mail**: it recognises test and interview invitations, links each one to its
+  application, and suggests the update for you to confirm.
+- **Form filling up to *Submit***: a separate Chrome profile fills in application forms from your profile and the
+  right resume, then stops. You press *Submit*.
 
-- **One job pool, always fresh.** Reads companies' own recruiting sites (Moka, Beisen, Feishu Jobs, Dayee, 51job,
-  Zhaopin, iGuopin, and more) and your own spreadsheets (Feishu Base, CSV links or files), every day. Deadlines are
-  reconciled across sources, and each one says where it came from.
-- **What fits you.** Your profile is a set of small, checkable cards (education, skills, projects, preferences); jobs
-  are matched against them, and gaps become directions to grow in, not silent filters.
-- **Today.** What closes in the next 14 days, what changed, and the few things waiting for your decision.
-- **Applications.** Watch → prepare → applied → tests and interviews → result, with reminders and an inbox that
-  turns recruiting mail into suggestions.
-- **Form filling up to Submit.** A separate Chrome profile fills in application forms from your profile and the
-  right resume; it stops before *Submit*, and you press it.
-- **Research with your own agent.** Ask about an industry or a company; your agent searches the web and gets
-  financial and industry data through Zhiro's tools, and the report links back to the jobs in your pool.
-- **Your agent, your rules.** Reversible actions happen and can be undone; anything with consequences becomes a card
-  you confirm; logins and credentials are never an agent's to touch.
-- **Your data stays yours.** Everything is in one folder on your machine. Upgrades run on a copy and are checked
-  before they replace anything; one command verifies, one rolls back.
+| Applications: every stage, with the job's own requirements | Inbox: recruiting mail turned into next steps |
+|---|---|
+| ![Applications](docs/assets/pipeline.png) | ![Inbox](docs/assets/inbox.png) |
+
+### 5. Your agent, your data, your rules
+
+- **Safe agent actions**: anything an agent does that can be undone, it does, and you can undo it. Anything with
+  consequences becomes a card you confirm. Logins and credentials are never an agent's to touch.
+- **Local data**: everything stays in one folder on your computer. Upgrades run on a copy and are checked before they
+  replace anything; one command verifies the data, one rolls back.
 
 ## Install
 
