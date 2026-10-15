@@ -76,7 +76,7 @@ describe("the short form", () => {
     expect(b.total).toBe(full.total);
     for (const c of b.items) {
       const f = full.items.find((x: any) => x.companyId === c.companyId);
-      const matched = f.positions.filter((p: any) => p.match).map((p: any) => p.id).sort();
+      const matched = f.positions.filter((p: any) => p.match).map((p: any) => p.id).sort(); // no search words here: the profile's matches
       expect(c.positions).toBeUndefined();
       expect(c.matchedPositions.map((p: any) => p.id).sort()).toEqual(matched.slice(0, 50).length === matched.length ? matched : expect.any(Array));
       expect(c.matchedPositionsTotal).toBe(matched.length);
@@ -88,6 +88,18 @@ describe("the short form", () => {
     const page = (await callTool("pool.list", { detail: "brief" }, AGENT, s)) as any;
     expect(page.items.length).toBeLessThanOrEqual(20);
     expect(page.hasMore).toBe(full.total > 20);
+  });
+});
+
+describe("pool.list brief: a search lists every post whose title has the words", () => {
+  it("all of them, saying why, none missing against the full result", async () => {
+    const w = await world(), s = w.s;
+    const full = (await callTool("pool.list", { query: "算法", limit: 1000 }, AGENT, s)) as any;
+    const b = (await callTool("pool.list", { query: "算法", detail: "brief", limit: 1000 }, AGENT, s)) as any;
+    const want = full.items.flatMap((c: any) => c.positions.filter((p: any) => p.title.includes("算法")).map((p: any) => p.id)).sort();
+    const got = b.items.flatMap((c: any) => c.matchedPositions.filter((p: any) => p.matchedBy.includes("岗位名")).map((p: any) => p.id)).sort();
+    expect(want.length).toBeGreaterThan(0);
+    expect(got).toEqual(want);
   });
 });
 
