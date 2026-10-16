@@ -24,7 +24,6 @@ function AiCard({ cfg, reload, onError }: { cfg: any; reload: () => void; onErro
   const tauri = !!window.__TAURI_INTERNALS__;
   const backend = cfg?.chat?.backend ?? "builtin";
   const useModel = cfg?.background?.useModel ?? true;
-  const followed = backend === "claude" ? cfg?.chat?.models?.claude : backend === "codex" ? cfg?.chat?.models?.codex : "";
   const refused = backend === "claude" || backend === "codex" ? cfg?.chat?.models?.refused?.[backend] : undefined;
   const pick = async (b: string) => { try { await call("agent.backend", { backend: b }); reload(); } catch (e: any) { onError(e.message); } };
   const setBackground = async (v: boolean) => { try { await call("agent.background", { useModel: v }); reload(); } catch (e: any) { onError(e.message); } };
@@ -43,8 +42,8 @@ function AiCard({ cfg, reload, onError }: { cfg: any; reload: () => void; onErro
           </div>
         </div>
         <div className="text-sm text-ink-2 mt-2">
-          {backend === "builtin" ? "模型在下面「内置模型」里选。" : backend === "dsh" ? "模型和 DeepSeek 密钥在 dsh 自己的设置里（它的 acp 档）。dsh 还不能做后台整理，请保持下面的开关打开。" : `模型：跟随你在 ${backend === "claude" ? "Claude Code" : "Codex"} 里的设置${followed ? `（${followed}）` : "（没设，用它的默认）"}。`}
-          {refused && <span className="text-amber"> 你设的 {refused} 在这台电脑装的 {backend === "codex" ? "Codex" : "Claude Code"} 上用不了，暂用它的默认模型；把它更新到最新版就能用。</span>}
+          {backend === "builtin" ? "模型在下面「内置模型」里选。" : backend === "dsh" ? "模型和 DeepSeek 密钥在 dsh 自己的设置里（它的 acp 档）。dsh 还不能做后台整理，请保持下面的开关打开。" : <ModelPick cfg={cfg} backend={backend} reload={reload} onError={onError} />}
+          {refused && <span className="text-amber"> 你选的 {refused} 在这台电脑装的 {backend === "codex" ? "Codex" : "Claude Code"} 上用不了，暂用它的默认模型；换一个，或把它更新到最新版。</span>}
           <span className="text-ink-3"> 在你自己的 AI 助手里（经 MCP）发起的事，由那个助手自己做。</span>
         </div>
         <div className="mt-3 pt-3 border-t border-line">
@@ -61,13 +60,38 @@ function AiCard({ cfg, reload, onError }: { cfg: any; reload: () => void; onErro
         </div>
         {cfg?.chat?.agentDir && (
           <div className="mt-3 pt-3 border-t border-line text-xs text-ink-3 flex items-center gap-2">
-            <span className="min-w-0">想在你自己的 Claude Code / Codex / WorkBuddy 里用 Zhiro：在这个文件夹里打开它 <span className="font-mono break-all">{cfg.chat.agentDir}</span></span>
+            <span className="min-w-0">想在你自己的 Claude Code / Codex / WorkBuddy 里用 Zhiro：在这个文件夹里打开它 <span className="font-mono break-all">{cfg.chat.agentDir}</span>。它在数据文件夹里，要换位置，在下面「数据」点「换个位置」，它会跟着搬。</span>
             {tauri && <Button onClick={() => open(cfg.chat.agentDir)}>打开</Button>}
           </div>
         )}
+        {(backend === "builtin" || useModel) && <ModelService inside />}
       </Card>
-      {(backend === "builtin" || useModel) && <ModelService />}
     </>
+  );
+}
+
+/**
+ * Which model Zhiro runs Claude Code / Codex with: 跟随 (its own setting) or one of the models the harness on this
+ * computer lists itself (read from its own cache, newest first). Zhiro's runs only; the harness's settings stay as they are.
+ */
+function ModelPick({ cfg, backend, reload, onError }: { cfg: any; backend: "claude" | "codex"; reload: () => void; onError: (m: string) => void }) {
+  const label = backend === "claude" ? "Claude Code" : "Codex";
+  const m = cfg?.chat?.models ?? {};
+  const own: string = m.own?.[backend] ?? "", chosen: string = m.chosen?.[backend] ?? "";
+  const choices: { id: string; name: string; description: string; older: boolean }[] = m.choices?.[backend] ?? [];
+  const set = async (model: string) => { try { await call("agent.model", { backend, model }); reload(); } catch (e: any) { onError(e.message); } };
+  const opt = (c: (typeof choices)[number]) => <option key={c.id} value={c.id}>{c.name}{c.description ? ` · ${c.description}` : ""}</option>;
+  return (
+    <span className="inline-flex items-center gap-2">
+      模型：
+      <select value={chosen} onChange={(e) => set(e.target.value)} className="px-2 py-1 border border-line rounded-md bg-paper text-sm max-w-md">
+        <option value="">跟随 {label} 自己的设置{own ? `（${own}）` : "（没设，用它的默认）"}</option>
+        {chosen && !choices.some((c) => c.id === chosen) && <option value={chosen}>{chosen}</option>}
+        {choices.filter((c) => !c.older).map(opt)}
+        {choices.some((c) => c.older) && <optgroup label="更早的">{choices.filter((c) => c.older).map(opt)}</optgroup>}
+      </select>
+      {!choices.length && <span className="text-xs text-ink-3">没读到这台电脑上 {label} 的模型列表：先在 {label} 里用一次，它会把列表存下来</span>}
+    </span>
   );
 }
 

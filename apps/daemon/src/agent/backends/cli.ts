@@ -5,7 +5,7 @@
  * and bounds the process: wall clock, silence, output size, and a kill of the whole tree on cancel or timeout.
  */
 import { spawn, execFileSync, type ChildProcess } from "node:child_process";
-import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readdirSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { homedir } from "node:os";
 import { createInterface } from "node:readline";
@@ -53,12 +53,48 @@ export function killTree(pid: number): void {
  */
 export function followedModel(name: "claude" | "codex", home = process.env.JOBOS_HARNESS_HOME || homedir()): string {
   if (refused.has(name)) return "";
+  return chosen.get(name) || harnessModel(name, home);
+}
+
+/**
+ * A model picked on Zhiro's settings page (agent.model) instead of the harness's own: used for Zhiro's runs only, the
+ * harness's settings are not touched. Held here because every start of a harness asks followedModel; set from the
+ * config at daemon start and by agent.model.
+ */
+const chosen = new Map<string, string>();
+export function chooseModel(name: "claude" | "codex", model: string): void {
+  if (model) chosen.set(name, model); else chosen.delete(name);
+  refused.delete(name); // a refusal was of the model chosen before
+}
+
+/** What the harness itself is set to (its own settings), "" when nothing is set: the 跟随 option on the settings page. */
+export function harnessModel(name: "claude" | "codex", home = process.env.JOBOS_HARNESS_HOME || homedir()): string {
   try {
     if (name === "claude") return process.env.ANTHROPIC_MODEL || String(JSON.parse(readFileSync(join(home, ".claude", "settings.json"), "utf8")).model ?? "");
     if (process.env.JOBOS_CODEX_MODEL) return process.env.JOBOS_CODEX_MODEL;
     const top = readFileSync(join(home, ".codex", "config.toml"), "utf8").split(/^\s*\[/m)[0];
     return /^\s*model\s*=\s*"([^"]+)"/m.exec(top)?.[1] ?? "";
   } catch { return ""; }
+}
+
+export interface HarnessModel { id: string; name: string; description: string; older: boolean }
+/**
+ * The models the harness on this computer offers, read from the list it keeps itself (no network, no login): Claude
+ * Code's model catalog cache, Codex's models cache. Newest first; `older` = shown only under 更早的. A harness that has
+ * not written its list yet gives none, and the page offers only 跟随.
+ */
+export function harnessModels(name: "claude" | "codex", home = process.env.JOBOS_HARNESS_HOME || homedir()): HarnessModel[] {
+  try {
+    if (name === "claude") {
+      const dir = join(home, ".claude", "cache", "model-catalog");
+      const file = readdirSync(dir).filter((f) => f.endsWith(".json")).map((f) => join(dir, f)).sort((a, b) => statSync(b).mtimeMs - statSync(a).mtimeMs)[0];
+      const models = JSON.parse(readFileSync(file, "utf8")).catalog?.config?.models ?? [];
+      return models.filter((m: any) => m?.id).map((m: any) => ({ id: String(m.id), name: String(m.name ?? m.id), description: String(m.description ?? ""), older: m.section !== "main" }));
+    }
+    const models = JSON.parse(readFileSync(join(home, ".codex", "models_cache.json"), "utf8")).models ?? [];
+    return models.filter((m: any) => m?.slug && m.visibility === "list").sort((a: any, b: any) => (a.priority ?? 99) - (b.priority ?? 99))
+      .map((m: any, i: number) => ({ id: String(m.slug), name: String(m.display_name ?? m.slug), description: String(m.description ?? ""), older: i >= 4 }));
+  } catch { return []; }
 }
 
 /**

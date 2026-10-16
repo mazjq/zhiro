@@ -2,7 +2,7 @@
 
 # Zhiro · 职路
 
-一个跑在你自己电脑上的开源求职工具，配合你已经在用的 AI agent。
+在你自己电脑上运行的求职助手：找岗位、了解公司、管理投递。可以配合 Claude Code、Codex 等 AI 助手使用。
 
 [English](README.md) | 简体中文
 
@@ -12,112 +12,119 @@
 
 </div>
 
-我做职路，是因为自己在找工作。投简历不难，难的是知道往哪投：哪些岗位真的对口，差的那几项值不值得补，一家公司在招聘启事之外到底怎么样。
+职路每天从各公司的招聘网站收集岗位，按你的学历、专业和经历挑出合适的，并提醒你哪些快截止了。它能查上市公司的财报和公告，帮你判断一家公司值不值得去。投递以后的进度、面试邮件和网申表格，也可以交给它。
 
-职路把这些放在一处：你的画像、每天更新的岗位库、公司的财报和公告。投出去以后的进度、邮件、网申，它也一起管。它配合 Claude Code、Codex、WorkBuddy 或任何支持 MCP 的客户端用。先为国内校招做，社招也能用。
+目前主要面向国内校招，社招也能用。
 
-![职路：按你的画像排好的岗位](docs/assets/jobs.png)
+![职路：按你的资料排好的岗位](docs/assets/jobs.png)
 
 <sub>截图里的公司、岗位和数字都是虚构的。</sub>
 
 ## 为什么用职路
 
-### 1. 机会缺口：还差哪几项
+### 1. 知道自己该补什么
 
-一般的筛选会把「不符合」的岗位直接拿掉，你也就不知道自己差在哪。职路把和你方向相关的岗位都留着，挑出你画像里还看不出来的要求，按能力归类，数清每一项卡住了几个岗位、几家公司。
+职路会把和你方向相关的岗位要求汇总起来，列出你的资料里还没写到的技能，并算出每一项出现在多少个岗位、多少家公司的要求里。比如下图中，C++ 出现在 4 个岗位的要求里，ROS 出现在 2 个。
 
-大多数缺口只是画像里没写，不等于你不会。点「我会」或「没做过」，相关岗位会重新匹配。下图里，C++ 出现在 4 个岗位的要求里，ROS 出现在 2 个。
+其实会的，点「我会」，它会记进你的资料；没学过的点「没做过」。岗位推荐会按你的回答重新算一遍。
 
-![机会缺口：每项能力卡住了几个岗位](docs/assets/gaps.png)
+![机会缺口：每项技能出现在几个岗位的要求里](docs/assets/gaps.png)
 
-### 2. 看公司本身
+### 2. 了解公司的经营情况
 
-招聘启事大同小异。想知道一家公司怎么样，要看它的经营和公告。职路给你的 agent 这些数据工具：
+对上市公司（A 股、港股、美股、新三板），职路能查到：
 
-- 上市公司（A 股、港股、美股、新三板）近三年的营收、净利、增速、毛利率、研发投入、员工数、人均支付给职工的现金。
-- 一年内的公告：股权激励和员工持股、扩产、政府补助、专精特新认定、大股东减持。专精特新公司常是产业链里不好替代的那一环。
-- 行业层面：一个板块有哪些上市公司，券商最近出了哪些研报，美国劳工统计局（BLS）的岗位薪资。
+- 近三年的营收、利润、增长率、毛利率和研发投入；
+- 员工人数，以及公司平均为每位员工支付的现金（工资、社保等）；
+- 近一年的公告，比如员工持股或股权激励、扩建产线、获得政府补助、被认定为「专精特新」企业（一般是某个细分领域里很难被替代的公司）、大股东减持。
 
-让 agent 调研一个行业或一家公司，它会拿这些数据加上网搜索写一份报告。每条结论标了依据，职路再核对句子里的数字和取到的数据对不对得上。报告提到的公司会和岗位库对上，在招的岗位点一下就能看。
+你也可以让 AI 助手调研一个行业。它会结合这些数据、券商研报和网上的资料写一份报告，每条结论注明出处，引用的数字会自动和原始数据核对一遍。报告里提到的公司如果正在招聘，可以直接点进去看岗位。
 
-![调研报告：要点、依据、提到的公司](docs/assets/research.png)
+![调研报告：要点、出处、提到的公司](docs/assets/research.png)
 
-<img src="docs/assets/company-intel.png" alt="一家公司的情况卡：营收、研发、人均职工现金" width="520">
+<img src="docs/assets/company-intel.png" alt="一家公司的经营情况：营收、研发、人均薪酬" width="520">
 
-### 3. 岗位和截止日期
+### 3. 不错过岗位和截止日期
 
-岗位库每天自动更新。它读公司自己的招聘站（Moka、北森、飞书招聘、大易、前程无忧、智联校园、国聘等），也读你自己的表格（飞书多维表格、CSV）。几个来源给的截止日期不一样时，职路会对照，每个日期都写着从哪来、核实过没有。
+职路每天自动查看各公司的招聘网站（Moka、北森、飞书招聘、前程无忧、智联校园、国聘等），也可以读你自己整理的表格（飞书多维表格、CSV 文件）。
 
-匹配按你的画像来。画像是一张张小卡片，教育、技能、项目、偏好各一类，随时能改。
+同一个岗位在不同网站上写的截止日期有时对不上。职路会把它们放在一起比对，注明每个日期来自哪个网站、有没有核实过。
 
-| 今日：快截止的、等你拍板的 | 求职资料：匹配、选简历、网申都从这里取值 |
+你的学历、技能、项目经历和意向城市都存在「求职资料」里。推荐岗位、挑简历、填网申，都从这里取信息。
+
+| 今日：快截止的岗位、等你确认的事 | 求职资料：你的学历、技能、经历 |
 |---|---|
 | ![今日](docs/assets/today.png) | ![求职资料](docs/assets/profile.png) |
 
-### 4. 投递以后
+### 4. 投递之后
 
-每份申请的进度都记着（关注、准备、已投、笔试面试、结果），快到日子会提醒。收件箱读招聘邮件，认出笔试和面试邀请，对上是哪份申请，再问你要不要更新。
+每份申请到了哪一步（准备中、已投递、笔试、面试、结果）都会记下来，日子临近时提醒你。
 
-网申可以交给它填。它用一个单独的 Chrome 档案，按画像和合适的那份简历把表填好，停在提交前。提交按钮你自己点。
+接入邮箱后，职路会读招聘邮件，认出笔试和面试通知，找到对应的申请，问你要不要更新进度。
 
-| 投递：每一步进度，岗位要求原文随手可查 | 收件箱：招聘邮件变成下一步 |
+网申表格也可以让它填。它会打开一个单独的 Chrome 窗口，用你的资料和合适的简历把表格填好，然后停下来，由你检查后自己点提交。
+
+| 投递：每份申请的进度和岗位要求 | 收件箱：从招聘邮件里认出的笔试、面试通知 |
 |---|---|
 | ![投递](docs/assets/pipeline.png) | ![收件箱](docs/assets/inbox.png) |
 
-### 5. agent 能做什么，数据放在哪
+### 5. 数据安全
 
-agent 直接做的只有能撤销的事。有影响的操作会变成一张确认卡，等你点。登录和密码它碰不到。
+AI 助手只能直接做可以撤销的操作，其他操作要你点确认才会执行。你在各个网站的登录信息它拿不到。
 
-数据都在你电脑上的一个文件夹里。升级先在副本上做，核对无误才换上；出了问题，一条命令回到升级前。
+所有数据都存在你电脑上的一个文件夹里。每次升级前会先备份，升级出了问题，一条命令就能恢复。
 
 ## 安装
 
-**装了 Node 22.13 或更新？**
-
-```bash
-npx @mazjq/zhiro                 # 试一下
-npm i -g @mazjq/zhiro && zhiro   # 长期用（装好后命令叫 zhiro）
-```
-
-**没有 Node？** 一行命令装好。脚本自带一份官方 Node（按 nodejs.org 的校验和核对过），不动你系统里的东西：
+Windows：在开始菜单搜「PowerShell」并打开，粘贴下面这行，回车：
 
 ```powershell
-# Windows（PowerShell）
 irm https://github.com/mazjq/zhiro/releases/latest/download/install.ps1 | iex
 ```
 
+macOS / Linux：打开「终端」，粘贴下面这行，回车：
+
 ```bash
-# macOS / Linux
 curl -fsSL https://github.com/mazjq/zhiro/releases/latest/download/install.sh | sh
 ```
 
-<details><summary>想先看看脚本再运行？</summary>
+装好后，第一次启动会问数据存在哪（直接回车用默认位置），然后在浏览器里打开职路。以后再运行同一行命令就是升级。
 
-下载 [`install.ps1`](https://github.com/mazjq/zhiro/releases/latest/download/install.ps1) 或 [`install.sh`](https://github.com/mazjq/zhiro/releases/latest/download/install.sh)，看过再运行。再运行一次就是升级，上一个版本会保留。
+<details><summary>已经装了 Node.js 22.13 或更新版本</summary>
+
+```bash
+npx @mazjq/zhiro                 # 先试一下
+npm i -g @mazjq/zhiro && zhiro   # 长期用，之后输入 zhiro 就能启动
+```
 </details>
 
-**想改代码？** 见 [CONTRIBUTING.md](CONTRIBUTING.md)：`git clone`、`pnpm install`、`pnpm dev`。
+<details><summary>想先看看安装脚本做了什么</summary>
 
-第一次启动会问数据放哪（直接回车用默认位置），然后在浏览器里打开。
+下载 [`install.ps1`](https://github.com/mazjq/zhiro/releases/latest/download/install.ps1) 或 [`install.sh`](https://github.com/mazjq/zhiro/releases/latest/download/install.sh) 看过再运行。脚本会下载一份官方的 Node.js 放在职路自己的文件夹里（按 nodejs.org 公布的校验值核对），不改动你电脑上原有的软件。升级时上一个版本会保留。
+</details>
 
-### 让你的 agent 帮你装
+想参与开发，见 [CONTRIBUTING.md](CONTRIBUTING.md)。
 
-把这句话贴给 Claude Code、Codex 或任何编程 agent：
+### 让 AI 助手帮你装
+
+如果你在用 Claude Code、Codex 这类 AI 编程助手，把这句话发给它：
 
 ```text
 按 https://raw.githubusercontent.com/mazjq/zhiro/main/llms-install.md 帮我安装 Zhiro（用 curl 取原文，不要用网页摘要）。
 ```
 
-## 在你自己的 agent 里用
+## 接到你的 AI 助手
 
-职路是一组 MCP 工具。启动职路后，给你的 agent 接一次：
+不接 AI 助手，也能直接在浏览器里用职路。接上以后，你可以用聊天的方式让 AI 助手替你查岗位、做调研、填网申。
+
+AI 助手通过 MCP（一种让 AI 调用外部工具的通用接口）使用职路。先启动职路，再按你用的助手设置一次：
 
 <details><summary>Claude Code</summary>
 
 ```bash
 claude mcp add zhiro -- zhiro mcp            # Windows：claude mcp add zhiro -- cmd /c zhiro mcp
 ```
-或者在职路的 agent 工作目录（设置页里有位置）里打开 Claude Code，那里都配好了。[详细](docs/harness/claude-code.md)
+也可以在职路准备好的文件夹里打开 Claude Code（位置在职路的设置页），那里已经设置好了。[详细](docs/harness/claude-code.md)
 </details>
 
 <details><summary>Codex</summary>
@@ -125,7 +132,7 @@ claude mcp add zhiro -- zhiro mcp            # Windows：claude mcp add zhiro --
 ```bash
 codex mcp add zhiro --env ZHIRO_RESULT_MODE=text -- zhiro mcp
 # Windows：codex mcp add zhiro --env ZHIRO_RESULT_MODE=text -- cmd /c zhiro mcp
-#（ZHIRO_RESULT_MODE：让 Codex 每个结果只收一份，省约一半 token）
+#（ZHIRO_RESULT_MODE=text 让 Codex 少收一份重复内容，大约省一半用量）
 ```
 [详细](docs/harness/codex.md)
 </details>
@@ -135,18 +142,30 @@ codex mcp add zhiro --env ZHIRO_RESULT_MODE=text -- zhiro mcp
 [WorkBuddy](docs/harness/workbuddy.md) · [任何 MCP 客户端](docs/harness/others.md)
 </details>
 
-然后直接说：「这周有什么截止的」「关注武汉的控制算法岗」「调研一下人形机器人行业」「给第一个岗位填网申」。
+设置好后直接跟它说，比如：「这周有什么快截止的」「关注武汉的控制算法岗」「调研一下人形机器人行业」「帮我填第一个岗位的网申」。
 
-职路窗口里的聊天面板也可以选由谁来回答（Claude Code、Codex，或可选的内置助手）：[docs/harness/embedded.md](docs/harness/embedded.md)。
+### 在职路里直接用 AI
+
+不想另开 AI 助手，也可以在职路里直接用。在设置页选好由谁来回答（Claude Code、Codex、DeepSeek，或职路自带的助手），之后点左下角的「助手」就能聊天。
+
+选 Claude Code 或 Codex 时，模型可以直接在下拉框里挑。列表是职路从你电脑上装的 Claude Code、Codex 里读出来的，最新的排在前面；不挑就和你平时在它们里面设的一样。这里的选择只影响职路，不会改动它们自己的设置。
+
+设置页里那行文件夹地址，是给你自己的 AI 助手准备好的：在那里打开 Claude Code 或 Codex，不用再做任何设置。[详细](docs/harness/embedded.md)
+
+![设置页：选 AI 助手和模型](docs/assets/settings.png)
+
+选「内置助手」时，在同一张卡片里选模型服务（DeepSeek、OpenAI、Anthropic 等）并登录或填 API key。
+
+![设置页：内置助手和它用的模型](docs/assets/builtin.png)
 
 ## 你的数据
 
-一个文件夹，在你的电脑上：`%APPDATA%\Zhiro\data`（Windows）、`~/Library/Application Support/Zhiro`（macOS）、`~/.local/share/zhiro`（Linux），或者你选的位置。不上传任何东西；联网的只有你订阅的招聘站、你选的 agent 或模型。
+都存在你电脑上的一个文件夹里，默认位置是 `%APPDATA%\Zhiro\data`（Windows）、`~/Library/Application Support/Zhiro`（macOS）、`~/.local/share/zhiro`（Linux），也可以第一次启动时自己选。职路只会连接你订阅的招聘网站，以及你选用的 AI 助手。
 
 ```bash
-zhiro vault verify      # 数据完整吗
-zhiro vault backup      # 随时备份一次（带检查）
-zhiro vault rollback    # 回到上次升级前
+zhiro vault verify      # 检查数据是否完整
+zhiro vault backup      # 手动备份一次
+zhiro vault rollback    # 恢复到上次升级前
 ```
 
 详细：[docs/data.md](docs/data.md) · 接你自己的表格：[docs/data-sources.md](docs/data-sources.md)

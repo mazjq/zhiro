@@ -2,7 +2,8 @@
 
 # Zhiro · 职路
 
-An open-source job-search tool that runs on your own computer and works with the AI agent you already use.
+A job-search assistant that runs on your own computer: find jobs, look into companies, keep track of applications.
+Works with AI assistants such as Claude Code and Codex.
 
 English | [简体中文](README.zh-CN.md)
 
@@ -12,13 +13,12 @@ English | [简体中文](README.zh-CN.md)
 
 </div>
 
-I built Zhiro while looking for a job myself. Sending applications is the easy part. The hard part is knowing where to
-send them: which jobs actually fit, whether the skills I'm missing are worth learning, and what a company is like
-beyond its job ad.
+Every day Zhiro collects jobs from companies' recruiting sites, picks the ones that fit your degree, major and
+experience, and reminds you which ones close soon. It can look up listed companies' financial reports and
+announcements to help you decide whether a company is worth joining. After you apply, it can also keep track of your
+progress, read interview emails and fill in application forms.
 
-Zhiro keeps all of that in one place: your profile, a job pool that refreshes every day, and companies' financials and
-announcements. It also tracks what happens after you apply. It works with Claude Code, Codex, WorkBuddy or any MCP
-client. It was built for campus recruiting in China (校招) first, and works for other job searches too.
+It is built mainly for campus recruiting in China (校招), and works for other job searches too.
 
 ![Zhiro: jobs ranked against your profile](docs/assets/jobs.png)
 
@@ -26,122 +26,130 @@ client. It was built for campus recruiting in China (校招) first, and works fo
 
 ## Why Zhiro
 
-### 1. Opportunity gaps: what you're missing
+### 1. Know what to learn next
 
-Job filters drop the jobs you "don't match", so you never learn what stood in the way. Zhiro keeps every job related to
-your work, picks out the requirements your profile doesn't show yet, groups them by skill, and counts how many jobs
-and companies each one blocks.
+Zhiro gathers the requirements of the jobs related to your field, lists the skills your profile doesn't mention yet,
+and counts how many jobs and companies ask for each one. In the screenshot below, C++ is required by 4 jobs and ROS by 2.
 
-Most gaps only mean your profile is silent, not that you can't do it. Click *I can do this* or *haven't done this* and
-the matching runs again. In the screenshot below, C++ is required by 4 of the jobs and ROS by 2.
+If you already have a skill, click *I can do this* and it is added to your profile. If you don't, click *haven't done
+this*. Job recommendations are recalculated from your answers.
 
-![Opportunity gaps: how many jobs each skill blocks](docs/assets/gaps.png)
+![Opportunity gaps: how many jobs ask for each skill](docs/assets/gaps.png)
 
-### 2. Look at the company itself
+### 2. See how a company is doing
 
-Job ads all read the same. To judge a company you need its numbers and its announcements, so Zhiro gives your agent
-data tools for them:
+For listed companies (A-shares, Hong Kong, US, NEEQ), Zhiro can look up:
 
-- Listed companies (A-shares, Hong Kong, US, NEEQ): three years of revenue, net profit, growth, gross margin, R&D
-  spending, headcount, and cash paid per employee.
-- A year of announcements: equity incentives and employee share plans, expansion, government grants, "专精特新"
-  (specialised niche) status, insider share sales. 专精特新 firms are often the hard-to-replace link in a supply chain.
-- Industries: the listed companies in a sector, recent broker reports, and US salary statistics from the BLS.
+- three years of revenue, profit, growth, gross margin and R&D spending;
+- headcount, and the average cash the company pays per employee (salary, social insurance and so on);
+- the past year's announcements, such as employee share plans or equity incentives, new production lines, government
+  grants, being named a "专精特新" company (usually a niche firm that is hard to replace in its industry), and share
+  sales by major shareholders.
 
-Ask your agent to research an industry or a company and it writes a report from these tools plus web search. Each
-claim names its source, and Zhiro checks the numbers in it against the data that was fetched. Companies the report
-mentions are matched to your job pool, so their open jobs are one click away.
+You can also ask your AI assistant to research a whole industry. It writes a report from this data, broker research
+and what it finds online. Every point names its source, and the numbers it quotes are checked against the original
+data. If a company in the report is hiring, you can click through to its jobs.
 
-![A research report: key points, their sources, the companies it names](docs/assets/research.png)
+![A research report: key points, sources, the companies it names](docs/assets/research.png)
 
-<img src="docs/assets/company-intel.png" alt="A company's card: financials, R&D, pay per employee" width="520">
+<img src="docs/assets/company-intel.png" alt="A company's financials: revenue, R&D, pay per employee" width="520">
 
-### 3. Jobs and deadlines
+### 3. Don't miss a job or a deadline
 
-The job pool refreshes every day. It reads companies' own recruiting sites (Moka, Beisen, Feishu Jobs, Dayee, 51job,
-Zhaopin, iGuopin and more) and your own spreadsheets (Feishu Base, CSV). When sources give different deadlines, Zhiro
-compares them, and every deadline says where it came from and whether it has been verified.
+Zhiro checks companies' recruiting sites every day (Moka, Beisen, Feishu Jobs, 51job, Zhaopin, iGuopin and more), and
+can also read spreadsheets you keep yourself (Feishu Base, CSV files).
 
-Jobs are matched against your profile, which is a set of small cards for education, skills, projects and preferences
-that you can edit any time.
+The same job sometimes shows different deadlines on different sites. Zhiro compares them and notes which site each
+date came from and whether it has been verified.
 
-| Today: what closes soon, what waits for you | Your profile: one source for matching, resumes and forms |
+Your education, skills, projects and preferred cities are kept in your profile. Job recommendations, choosing a
+resume and filling in forms all take their information from there.
+
+| Today: jobs closing soon, things waiting for you | Profile: your education, skills and experience |
 |---|---|
 | ![Today](docs/assets/today.png) | ![Profile](docs/assets/profile.png) |
 
 ### 4. After you apply
 
-Each application's stage is tracked (watching, preparing, applied, tests and interviews, result), with reminders. The
-inbox reads recruiting mail, spots test and interview invitations, works out which application each one belongs to,
-and asks before updating it.
+Zhiro records where each application stands (preparing, applied, written test, interview, result) and reminds you as
+dates come up.
 
-Zhiro can also fill in application forms. It uses a separate Chrome profile, fills the form from your profile and the
-right resume, and stops before *Submit*. You press it yourself.
+Once you connect your mailbox, Zhiro reads recruiting emails, recognises test and interview invitations, finds the
+application each one belongs to, and asks whether to update it.
 
-| Applications: every stage, with the job's own requirements | Inbox: recruiting mail turned into next steps |
+It can fill in application forms for you. It opens a separate Chrome window, fills the form from your profile and the
+right resume, and then stops so you can check it and press *Submit* yourself.
+
+| Applications: the progress and requirements of each one | Inbox: test and interview invitations found in your mail |
 |---|---|
 | ![Applications](docs/assets/pipeline.png) | ![Inbox](docs/assets/inbox.png) |
 
-### 5. What the agent may do, and where your data lives
+### 5. Your data stays safe
 
-An agent only acts directly when the action can be undone. Anything with consequences becomes a card you confirm.
-Logins and passwords are out of its reach.
+An AI assistant can only directly do things that can be undone. Anything else waits until you click to confirm. It
+never gets your logins for any site.
 
-Your data lives in one folder on your computer. Upgrades run on a copy and replace the original only after the copy
-checks out. If something goes wrong, one command takes you back to before the upgrade.
+All your data is kept in one folder on your computer. Zhiro backs it up before every upgrade, and if an upgrade goes
+wrong, one command restores it.
 
 ## Install
 
-**Have Node 22.13 or newer?**
-
-```bash
-npx @mazjq/zhiro                 # try it
-npm i -g @mazjq/zhiro && zhiro   # keep it (the command is `zhiro`)
-```
-
-**No Node?** One line installs it. The script brings its own Node (checked against nodejs.org's checksums) and leaves
-your system alone:
+Windows: search for "PowerShell" in the Start menu, open it, paste this line and press Enter:
 
 ```powershell
-# Windows (PowerShell)
 irm https://github.com/mazjq/zhiro/releases/latest/download/install.ps1 | iex
 ```
 
+macOS / Linux: open Terminal, paste this line and press Enter:
+
 ```bash
-# macOS / Linux
 curl -fsSL https://github.com/mazjq/zhiro/releases/latest/download/install.sh | sh
 ```
 
-<details><summary>Prefer to read the script first?</summary>
+The first start asks where to keep your data (press Enter for the default), then opens Zhiro in your browser. Running
+the same line again later upgrades it.
 
-Download [`install.ps1`](https://github.com/mazjq/zhiro/releases/latest/download/install.ps1) or
-[`install.sh`](https://github.com/mazjq/zhiro/releases/latest/download/install.sh), look at it, then run it. Running it
-again upgrades; the previous version is kept.
+<details><summary>Already have Node.js 22.13 or newer</summary>
+
+```bash
+npx @mazjq/zhiro                 # try it
+npm i -g @mazjq/zhiro && zhiro   # keep it; start it later by typing zhiro
+```
 </details>
 
-**Want to change the code?** See [CONTRIBUTING.md](CONTRIBUTING.md): `git clone`, `pnpm install`, `pnpm dev`.
+<details><summary>Want to see what the install script does first</summary>
 
-The first start asks where to keep your data (press Enter for the usual place), then opens the app in your browser.
+Download [`install.ps1`](https://github.com/mazjq/zhiro/releases/latest/download/install.ps1) or
+[`install.sh`](https://github.com/mazjq/zhiro/releases/latest/download/install.sh) and read it before running it. The
+script downloads an official copy of Node.js into Zhiro's own folder (checked against the checksums nodejs.org
+publishes) and leaves the software already on your computer alone. When you upgrade, the previous version is kept.
+</details>
 
-### Let your agent install it
+To work on the code, see [CONTRIBUTING.md](CONTRIBUTING.md).
 
-Paste this into Claude Code, Codex or any coding agent:
+### Let an AI assistant install it
+
+If you use an AI coding assistant such as Claude Code or Codex, send it this:
 
 ```text
 Install Zhiro for me by following https://raw.githubusercontent.com/mazjq/zhiro/main/llms-install.md
 (fetch it with curl, not a summarizer).
 ```
 
-## Use it from your own agent
+## Connect your AI assistant
 
-Zhiro is a set of MCP tools. Start Zhiro, then connect your agent once:
+You can use Zhiro in your browser without any AI assistant. Once you connect one, you can ask it in chat to find jobs,
+research companies or fill in applications for you.
+
+AI assistants use Zhiro through MCP (a common way for AI to call outside tools). Start Zhiro, then set it up once for
+the assistant you use:
 
 <details><summary>Claude Code</summary>
 
 ```bash
 claude mcp add zhiro -- zhiro mcp            # Windows: claude mcp add zhiro -- cmd /c zhiro mcp
 ```
-Or open Claude Code inside Zhiro's agent folder (shown on the settings page); everything is set up there.
+Or open Claude Code in the folder Zhiro prepares for it (shown on Zhiro's settings page); it is already set up there.
 [More](docs/harness/claude-code.md)
 </details>
 
@@ -150,7 +158,7 @@ Or open Claude Code inside Zhiro's agent folder (shown on the settings page); ev
 ```bash
 codex mcp add zhiro --env ZHIRO_RESULT_MODE=text -- zhiro mcp
 # Windows: codex mcp add zhiro --env ZHIRO_RESULT_MODE=text -- cmd /c zhiro mcp
-# (ZHIRO_RESULT_MODE: Codex then gets each result once instead of twice, about half the tokens)
+# (ZHIRO_RESULT_MODE=text stops Codex receiving each result twice, which saves about half the usage)
 ```
 [More](docs/harness/codex.md)
 </details>
@@ -160,22 +168,38 @@ codex mcp add zhiro --env ZHIRO_RESULT_MODE=text -- zhiro mcp
 [WorkBuddy](docs/harness/workbuddy.md) · [any MCP client](docs/harness/others.md)
 </details>
 
-Then just ask: *"What closes this week?"*, *"Watch the control-algorithm jobs in Wuhan"*, *"Research the humanoid
-robot industry"*, *"Fill in the application for the first one."*
+Then just ask, for example: *"What closes this week?"*, *"Watch the control-algorithm jobs in Wuhan"*, *"Research the
+humanoid robot industry"*, *"Fill in the application for the first job."*
 
-You can also pick which agent answers in Zhiro's own chat panel (Claude Code, Codex, or an optional built-in
-assistant): [docs/harness/embedded.md](docs/harness/embedded.md).
+### Use AI inside Zhiro
+
+You can also use AI without leaving Zhiro. Pick who answers on the settings page (Claude Code, Codex, DeepSeek, or
+Zhiro's built-in assistant), then click *Assistant* in the bottom-left corner to chat.
+
+With Claude Code or Codex you pick the model from a list. Zhiro reads the list from the Claude Code and Codex installed
+on your computer, newest first; if you don't pick one, it uses whatever you have set in them. The choice only applies
+inside Zhiro and doesn't change their own settings.
+
+The folder shown on the settings page is set up for your own AI assistant: open Claude Code or Codex there and there is
+nothing else to configure. [More](docs/harness/embedded.md)
+
+![Settings: choose the AI assistant and its model](docs/assets/settings.png)
+
+With the built-in assistant, choose a model provider (DeepSeek, OpenAI, Anthropic and others) in the same card and sign
+in or enter an API key.
+
+![Settings: the built-in assistant and its model](docs/assets/builtin.png)
 
 ## Your data
 
-One folder, on your machine: `%APPDATA%\Zhiro\data` (Windows), `~/Library/Application Support/Zhiro` (macOS),
-`~/.local/share/zhiro` (Linux), or wherever you chose. Nothing is uploaded; the only network traffic is the
-recruiting sites you subscribe to and the agent or model you pick.
+Everything is kept in one folder on your computer. By default that is `%APPDATA%\Zhiro\data` (Windows),
+`~/Library/Application Support/Zhiro` (macOS) or `~/.local/share/zhiro` (Linux), or you can choose a folder at the first
+start. Zhiro only connects to the recruiting sites you subscribe to and the AI assistant you choose.
 
 ```bash
-zhiro vault verify      # is everything intact?
-zhiro vault backup      # a checked backup, any time
-zhiro vault rollback    # back to before the last upgrade
+zhiro vault verify      # check that the data is intact
+zhiro vault backup      # make a backup now
+zhiro vault rollback    # go back to before the last upgrade
 ```
 
 More: [docs/data.md](docs/data.md) · Bring your own spreadsheet: [docs/data-sources.md](docs/data-sources.md)
@@ -193,9 +217,9 @@ Most user docs are in Chinese for now; PRs translating them are welcome.
 
 ## Contributing
 
-Bug reports, recruiting sites to support, and pull requests are welcome. See [CONTRIBUTING.md](CONTRIBUTING.md).
-Adding a recruiting site is one file plus a test ([how](apps/daemon/src/data/readers/README.md)).
-Security issues: please report privately ([SECURITY.md](SECURITY.md)).
+Bug reports, suggestions for recruiting sites to support, and pull requests are welcome. See
+[CONTRIBUTING.md](CONTRIBUTING.md). Adding a recruiting site takes one file plus a test
+([how](apps/daemon/src/data/readers/README.md)). Please report security issues privately ([SECURITY.md](SECURITY.md)).
 
 ## License
 

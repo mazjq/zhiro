@@ -86,3 +86,10 @@ entries condense what still holds.
   its Codex configs — gets the text copy only. Not the structured copy only: given `content: []`, Codex's model took
   the result for empty in three runs of four, while text-only was read right every time. Never inferred from a
   client's name or the audit label.
+- **D-24 · 2026-10-15 · The model for Claude Code / Codex is picked from the harness's own list.** By default Zhiro
+  follows the model set inside the harness (unchanged). The settings page can pick another one for Zhiro's runs only:
+  the choices are read from the list the installed harness keeps itself (Claude Code's model catalog cache, Codex's
+  `models_cache.json`), newest first, so the person never types a model name. Kept in `agent.models` of the config;
+  the harness's own settings are never written. A pick the installed command line refuses falls back to its default,
+  as before, and the page says so. The built-in model is drawn inside the same card, only when it serves something
+  (内置助手 chosen, or background tidying on it).
