@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.2.0](https://github.com/mazjq/zhiro/compare/v0.1.2...v0.2.0) (2026-10-16)
+
+
+### Features
+
+* pick the harness model from the installed harness's own list ([#4](https://github.com/mazjq/zhiro/issues/4)) ([8f696b2](https://github.com/mazjq/zhiro/commit/8f696b23f529b6adeb822e8d02c8af7b157a2497))
+
 ## [0.1.2](https://github.com/mazjq/zhiro/compare/v0.1.1...v0.1.2) (2026-10-15)
 
 
