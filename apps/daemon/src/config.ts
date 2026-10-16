@@ -17,7 +17,7 @@ export interface JobosConfig {
    * harnessConfirm (ADR-047): where the person's own harness confirms its cards and undoes — in the harness ("harness",
    * default: the agent asks the person in its own chat, then decides) or only in the Zhiro window ("window").
    */
-  agent?: { mode?: "default" | "conservative"; maxWritesPerTurn?: number; harnessConfirm?: "harness" | "window"; backend?: "builtin" | "claude" | "codex" | "dsh" };
+  agent?: { mode?: "default" | "conservative"; maxWritesPerTurn?: number; harnessConfirm?: "harness" | "window"; backend?: "builtin" | "claude" | "codex" | "dsh"; models?: { claude?: string; codex?: string } };
   /** the chat backends that run a harness's command line (ADR-046): per-message budget and limits */
   chat?: { maxBudgetUsd?: number; maxTurns?: number; wallMs?: number; idleMs?: number };
   /** 待补资料 leads the model reads per day (ADR-035); 0 turns the daily job off */

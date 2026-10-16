@@ -11,7 +11,7 @@ import { callTool, type Services } from "./registry.js";
 import { runBackup, staleBackups } from "./service/backup.js";
 
 const CSV = `更新时间,公司,企业类型,行业类别,批次,招聘届次,工作地点,招聘岗位,学历要求,专业要求,开始时间,截止时间,简历投递链接,公告链接,是否笔试,公告来源,备注
-2026-09-01,示例汽车,民企,汽车,2027届博士专项,2027届,武汉 上海,"底盘控制算法工程师,仿真建模工程师",博士,控制/车辆,2026-08-20,2026-10-15,https://app.mokahr.com/campus-recruitment/demo/1,https://mp.weixin.qq.com/s/x,有笔试,官网,/
+2026-09-01,示例汽车,民企,汽车,2027届博士专项,2027届,武汉 上海,"底盘控制算法工程师,仿真建模工程师",博士,控制/车辆,2026-08-20,2030-10-15,https://app.mokahr.com/campus-recruitment/demo/1,https://mp.weixin.qq.com/s/x,有笔试,官网,/
 2026-09-01,示例电子,民企,工控,秋招,2027届,深圳,电机控制算法工程师,硕士及以上,电气,2026-09-01,招满为止,https://campus.51job.com/demo/,,含免笔试,校园招聘网,
 `;
 
@@ -147,12 +147,12 @@ describe("campaign.deadline (the proposal the research worker files)", () => {
     const pos = domain.listPositions({ query: "底盘" }).items[0];
     const companyId = domain.getCampaign(pos.campaignId).campaign.companyId;
     await expect(callTool("campaign.deadline", { companyId, date: "10月15日" }, { kind: "human", via: "desktop" }, s)).rejects.toMatchObject({ code: "BAD_DATE" });
-    const r: any = await callTool("campaign.deadline", { companyId, date: "2026-11-30", text: "简历投递截止 11 月 30 日" }, { kind: "human", via: "desktop" }, s);
+    const r: any = await callTool("campaign.deadline", { companyId, date: "2030-11-30", text: "简历投递截止 11 月 30 日" }, { kind: "human", via: "desktop" }, s);
     expect(r.updated).toBe(1);
     // the source's value is untouched (a refresh cannot undo the person's word); the pool shows the override
-    expect(domain.getCampaign(pos.campaignId).campaign.closesAt).toBe("2026-10-15");
+    expect(domain.getCampaign(pos.campaignId).campaign.closesAt).toBe("2030-10-15");
     const shown = () => ((callTool("pool.list", { companyId }, { kind: "human", via: "desktop" }, s)) as Promise<any>).then((x) => x.items[0]);
-    expect((await shown()).closesAt).toBe("2026-11-30");
+    expect((await shown()).closesAt).toBe("2030-11-30");
     // 「官方未写截止」 clears the sheet's date on display
     await callTool("campaign.deadline", { companyId, unknown: true }, { kind: "human", via: "desktop" }, s);
     expect((await shown()).closesAt).toBeNull();

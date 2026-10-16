@@ -64,7 +64,7 @@ import { withPurpose, usageSummary, asAgentCall } from "./service/usage.js";
 import { changesCursor, changesSince } from "./service/changes.js";
 import { readReference } from "./service/apply-reference.js";
 import { backgroundOnModel, describeBackground } from "./agent/route.js";
-import { followedModel, modelRefused } from "./agent/backends/cli.js";
+import { chooseModel, followedModel, harnessModel, harnessModels, modelRefused } from "./agent/backends/cli.js";
 import { pendingJobs, replyJob } from "./service/model-jobs.js";
 import { checkResume } from "./service/resume-check.js";
 import { listPlatforms } from "./service/platforms.js";
@@ -478,6 +478,13 @@ const handlers: { [N in ToolName]: Handler<N> } = {
     setAgentConfig(s, { backend: i.backend });
     return { backend: i.backend };
   },
+  // a model for Zhiro's runs of Claude Code / Codex; "" = follow the harness's own setting. Their settings are not touched.
+  "agent.model": (i, a, s) => {
+    humanOnly(a);
+    setAgentConfig(s, { models: { ...(s.config.agent?.models ?? {}), [i.backend]: i.model } });
+    chooseModel(i.backend, i.model);
+    return { backend: i.backend, model: i.model, using: followedModel(i.backend) };
+  },
   "agent.harnessConfirm": (i, a, s) => { humanOnly(a); setAgentConfig(s, { harnessConfirm: i.where }); return { where: i.where }; },
   "apply.reference": (i, _a, s) => {
     const path = i.path.trim();
@@ -514,7 +521,7 @@ const handlers: { [N in ToolName]: Handler<N> } = {
       llm: { ...s.config.llm, ...(s.llm ? await s.llm.status() : {}) },
       worker: workerStatus(),
       // ADR-046 / 047: who answers the drawer, what is installed; where the person's own harness confirms
-      chat: { backend: backendOf(s), backends: s.chat?.status() ?? {}, harnessConfirm: harnessConfirm(s), agentDir: join(s.config.vault, "agent"), models: { claude: followedModel("claude"), codex: followedModel("codex"), refused: { claude: modelRefused("claude"), codex: modelRefused("codex") } } },
+      chat: { backend: backendOf(s), backends: s.chat?.status() ?? {}, harnessConfirm: harnessConfirm(s), agentDir: join(s.config.vault, "agent"), models: { claude: followedModel("claude"), codex: followedModel("codex"), refused: { claude: modelRefused("claude"), codex: modelRefused("codex") }, own: { claude: harnessModel("claude"), codex: harnessModel("codex") }, chosen: s.config.agent?.models ?? {}, choices: { claude: harnessModels("claude"), codex: harnessModels("codex") } } },
       background: { useModel: backgroundOnModel(s), doneBy: describeBackground(s) },
       applyReference: s.config.apply?.referenceDoc ?? "",
       configFile: s.config.vault + "\\config\\jobos.yaml",
@@ -567,7 +574,7 @@ function executeDirect<N extends ToolName>(name: N, input: ToolInput<N>, actor: 
  *  - agent + write/effect tool → proposal (returned as { proposal }) instead of execution
  *  - audit row for every call
  */
-export const HUMAN_ONLY = new Set(["gap.confirm", "model.login", "model.answer", "model.cancel", "model.provider", "model.select", "model.refresh", "inbox.connect", "inbox.disconnect", "history.undo", "agent.mode", "agent.backend", "agent.harnessConfirm", "agent.background", "data.export", "data.move"]);
+export const HUMAN_ONLY = new Set(["agent.model", "gap.confirm", "model.login", "model.answer", "model.cancel", "model.provider", "model.select", "model.refresh", "inbox.connect", "inbox.disconnect", "history.undo", "agent.mode", "agent.backend", "agent.harnessConfirm", "agent.background", "data.export", "data.move"]);
 
 /** What an actor may call at all: agents never see the human-only tools or proposal.decide (they would only be refused) — except the person's own harness, when confirmation happens there (ADR-047). */
 export const callableBy = (actor: Actor, s?: Services) => {

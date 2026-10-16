@@ -1477,6 +1477,15 @@ export const tools = {
     execution: "sync",
     errors: ["NOT_AVAILABLE"],
   }),
+  "agent.model": defineTool({
+    name: "agent.model",
+    description: "Zhiro 里用 Claude Code / Codex 时用哪个模型：model 为空 = 跟随它自己的设置；否则用这里选的（只影响 Zhiro 里的用法，不改它自己的设置）。可选的模型见 config.get 的 chat.models.choices。只能由本人。",
+    input: Type.Object({ backend: Type.Union([Type.Literal("claude"), Type.Literal("codex")]), model: Type.String() }),
+    output: Type.Object({ backend: Type.String(), model: Type.String(), using: Type.String() }),
+    effects: WRITE,
+    execution: "sync",
+    errors: [],
+  }),
   "agent.harnessConfirm": defineTool({
     name: "agent.harnessConfirm",
     description: "在你自己的 agent（Claude Code / Codex / WorkBuddy 经 MCP）里用 Zhiro 时，确认和撤销在哪里完成：harness = 在 agent 里（agent 复述、你同意后它来确认）；window = 只在 Zhiro 窗口。只能由本人。",

@@ -10,3 +10,4 @@ out/
 *.db-wal
 *.db-shm
 *.tgz
+CLAUDE.local.md

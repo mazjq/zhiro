@@ -10,7 +10,12 @@ const STATE: Record<string, [string, "good" | "amber" | "bad" | ""]> = { ready: 
  * 模型服务 — same interaction as FortheFuture's settings module (both apps sit on pi's model layer):
  * 供应商 → 认证方式 → 登录（浏览器自动打开；需要时粘贴授权码 / 设备码 / API key）→ 选模型。Changes apply at once.
  */
-export default function ModelService() {
+// a component of its own (not made in render): its inputs keep focus while the person types
+const Box = ({ inside, children }: { inside: boolean; children: any }) => (inside ? <div className="mt-3 pt-3 border-t border-line">{children}</div> : <Card className="p-5 mb-4">{children}</Card>);
+
+/** inside: drawn as a part of the 「AI 用哪家」 card (it serves 内置助手 and 后台整理, not a choice beside them) */
+export default function ModelService({ inside = false }: { inside?: boolean }) {
+  const title = inside ? "内置模型（内置助手和后台整理用）" : "内置模型";
   const [st, setSt] = useState<any>(null);
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState("");
@@ -31,16 +36,16 @@ export default function ModelService() {
   // open the provider's login page once per attempt, like a desktop app would
   useEffect(() => { const url = st?.auth?.url; if (url && opened.current !== url) { opened.current = url; window.open(url, "_blank", "noopener"); } }, [st?.auth?.url]);
 
-  if (!st) return <Card className="p-5 mb-4"><div className="font-bold">内置模型</div><div className="text-sm text-ink-3 mt-1">{err || "加载中…"}</div></Card>;
+  if (!st) return <Box inside={inside}><div className="font-bold">{title}</div><div className="text-sm text-ink-3 mt-1">{err || "加载中…"}</div></Box>;
   const provider = st.providers.find((p: any) => p.id === st.providerId);
   const method = provider?.methods.find((m: any) => m.id === st.authType) ?? provider?.methods[0];
   const locked = st.state === "awaiting_user";
   const prompt = st.auth?.prompt;
 
   return (
-    <Card className="p-5 mb-4">
+    <Box inside={inside}>
       <div className="flex items-center gap-2 mb-3 min-h-8">
-        <div className="font-bold">内置模型</div><Chip tone={STATE[st.state]?.[1] ?? ""}>{STATE[st.state]?.[0] ?? st.state}</Chip>
+        <div className="font-bold">{title}</div><Chip tone={STATE[st.state]?.[1] ?? ""}>{STATE[st.state]?.[0] ?? st.state}</Chip>
         {st.state === "ready" && <span className="text-xs text-ink-3 font-mono">{st.modelId}</span>}
         {st.state === "ready" && st.providerId !== "external" && <span className="ml-auto"><Button disabled={busy} onClick={async () => { setTest(null); setBusy(true); try { setTest(await call("llm.test")); } finally { setBusy(false); } }}>测试</Button></span>}
       </div>
@@ -93,6 +98,6 @@ export default function ModelService() {
       )}
       {(err || st.error) && <div className="text-sm text-bad mt-2">{err || st.error}</div>}
       {test && <div className={`text-sm mt-2 ${test.ok ? "text-good" : "text-bad"}`}>{test.ok ? `可用 · ${(test.latencyMs / 1000).toFixed(1)} 秒` : `不可用：${test.error}`}</div>}
-    </Card>
+    </Box>
   );
 }
