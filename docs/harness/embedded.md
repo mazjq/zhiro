@@ -1,6 +1,6 @@
 # 在 Zhiro 窗口里用你自己的 Claude Code / Codex
 
-Zhiro 的聊天抽屉可以由你装好的 Claude Code 或 Codex 来回答：你在抽屉里说话，Zhiro 在后台拉起它们的命令行，步骤、回答、确认卡都在抽屉里。用的是你自己的 Claude / ChatGPT 订阅额度，Zhiro 不用再配模型。
+Zhiro 的聊天抽屉可以由你装好的 Claude Code 或 Codex 来回答：你在抽屉里说话，Zhiro 在后台拉起它们的命令行，步骤、回答、确认卡都在抽屉里。用的是你自己的 Claude / ChatGPT 订阅额度，不用在 Zhiro 里另配模型服务。模型默认跟随你在它们里面的设置，也可以在设置页的「模型」下拉框里换（列表从你电脑上装的 Claude Code / Codex 读出，只影响 Zhiro）。
 
 ## 前提
 
@@ -29,4 +29,4 @@ Zhiro 的聊天抽屉可以由你装好的 Claude Code 或 Codex 来回答：你
 - 「没找到 … 的命令行」：见前提。
 - 「上一条还在回答」：等它答完或点停止。
 - 「超过时间上限 / 太久没有输出」：这条作废，换个问法；登录过期时会在这里报出来。
-- Codex 报模型不可用：在 `ZHIRO_CODEX_MODEL` 环境变量里指定一个你的账号能用的模型。
+- Codex 报模型不可用：在设置页的「模型」下拉框里换一个，或把 Codex 更新到最新版。

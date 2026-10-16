@@ -10,7 +10,7 @@ import { Auth, loadCredentials } from "./auth.js";
 import { writeAgentDir } from "./agent/agent-dir.js";
 import { mcpCommand } from "./paths.js";
 import { ChatHub, builtinBackend } from "./agent/backend.js";
-import { cliBackend, reapOrphans } from "./agent/backends/cli.js";
+import { chooseModel, cliBackend, reapOrphans } from "./agent/backends/cli.js";
 import { claudeSpec } from "./agent/backends/claude.js";
 import { codexSpec } from "./agent/backends/codex.js";
 import { dshSpec } from "./agent/backends/acp.js";
@@ -47,6 +47,7 @@ import { announcer } from "./service/background.js";
 let config: JobosConfig;
 try { await firstRun(dataDir()); await resolveVault(defaultVaultDir()); config = loadConfig(); }
 catch (e: any) { if (e instanceof VaultUnavailable) { console.error(`[zhiro] ${e.message}`); process.exit(1); } throw e; }
+for (const n of ["claude", "codex"] as const) chooseModel(n, config.agent?.models?.[n] ?? ""); // picked on the settings page
 // one writing process per data directory (a second daemon, or `data watch` already running on it). Without the lock
 // nothing starts: an upgrade or a second writer on the same files is how data gets lost (ADR-050).
 let lock: Awaited<ReturnType<typeof lockVault>>;

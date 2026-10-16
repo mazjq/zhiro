@@ -11,7 +11,7 @@ import { callTool, type Services } from "./registry.js";
 import { asAgentCall, callingAgent } from "./service/usage.js";
 import { backgroundTarget, researchTarget } from "./agent/route.js";
 import { promptParts, oneshotArgv, oneshotLine, asciiJson, oneshot } from "./agent/backends/oneshot.js";
-import { followedModel } from "./agent/backends/cli.js";
+import { chooseModel, followedModel, harnessModel, harnessModels } from "./agent/backends/cli.js";
 import { importCsv } from "./service/import-csv.js";
 import { tierOf } from "./service/tiers.js";
 import { spawnRun } from "./agent/worker.js";
@@ -131,6 +131,25 @@ describe("one answer from a harness, with no tools", () => {
     mkdirSync(join(home, ".codex")); writeFileSync(join(home, ".codex", "config.toml"), 'model_reasoning_effort = "high"\nmodel = "gpt-6.1-sol"\n\n[profiles.x]\nmodel = "other"\n');
     expect(followedModel("claude", home)).toBe("opus");
     expect(followedModel("codex", home)).toBe("gpt-6.1-sol");
+  });
+
+  it("lists the models the harness keeps on this computer, newest first; a model picked in Zhiro wins until cleared", () => {
+    const home = mkdtempSync(join(tmpdir(), "jobos-home-"));
+    expect(harnessModels("claude", home)).toEqual([]);
+    mkdirSync(join(home, ".claude", "cache", "model-catalog"), { recursive: true });
+    writeFileSync(join(home, ".claude", "cache", "model-catalog", "x-cc.json"), JSON.stringify({ catalog: { config: { models: [
+      { id: "claude-new", name: "New", description: "d", section: "main" }, { id: "claude-old", name: "Old", section: "overflow" }] } } }));
+    mkdirSync(join(home, ".codex"));
+    writeFileSync(join(home, ".codex", "models_cache.json"), JSON.stringify({ models: [
+      { slug: "b", display_name: "B", visibility: "list", priority: 2 }, { slug: "hidden", visibility: "hide", priority: 0 }, { slug: "a", display_name: "A", visibility: "list", priority: 1 }] }));
+    expect(harnessModels("claude", home).map((m) => [m.id, m.older])).toEqual([["claude-new", false], ["claude-old", true]]);
+    expect(harnessModels("codex", home).map((m) => m.id)).toEqual(["a", "b"]);
+    writeFileSync(join(home, ".claude", "settings.json"), '{"model":"opus"}');
+    chooseModel("claude", "claude-new");
+    expect(followedModel("claude", home)).toBe("claude-new");
+    expect(harnessModel("claude", home)).toBe("opus"); // the harness's own setting is untouched
+    chooseModel("claude", "");
+    expect(followedModel("claude", home)).toBe("opus");
   });
 });
 
