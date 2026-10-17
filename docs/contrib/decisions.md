@@ -93,3 +93,14 @@ entries condense what still holds.
   the harness's own settings are never written. A pick the installed command line refuses falls back to its default,
   as before, and the page says so. The built-in model is drawn inside the same card, only when it serves something
   (内置助手 chosen, or background tidying on it).
+- **D-25 · 2026-10-17 · 高校人才网 as a subscription: a reprint, read whole each time.** Research institutes, labs,
+  university teams, 事业单位 and small firms rarely post on a hiring system, so the hiring-system readers never see them;
+  高校人才网 collects their notices by city and kind. One subscription is one column (`siteKey` = column id). Its mobile
+  list needs no login (desktop paging does); each announcement's desktop page gives the dates, deadline text, body and
+  the original notice, and its job list gives jobs with the site's own ids. Because a read that leaves a post out closes
+  it, each read returns the whole set still open by a fixed rule — a stated date not passed; 长期有效 / 招满 posted within
+  180 days; anything else within 90 — and a read that hits the page cap first fails instead of returning half. Only a
+  whole date becomes a deadline; 「详见正文」「11月30日」 stay as text (shown 待核实). Every post is 聚合, `isOriginal`
+  false, confidence 0.7 (official readers give 0.85–0.9). Not `notices`: each job has its own id and page, and marking
+  it would queue every such company for the daily model-paid lead resolution. Pages are 0.6–1.4 s apart; a column of
+  ~110 open announcements takes about nine minutes.
