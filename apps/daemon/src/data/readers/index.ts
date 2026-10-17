@@ -10,13 +10,14 @@ import { dayee } from "./dayee.js";
 import { job51 } from "./job51.js";
 import { kuaishou, xiaohongshu } from "./own-sites.js";
 import { csv } from "./csv.js";
+import { gaoxiaojob } from "./gaoxiaojob.js";
 import type { Source } from "../types.js";
 
 /** A push source is registered for discovery/documentation; its listings arrive via a tool (listing.capture). */
 export const capturePush: Source = { id: "capture", name: "任意页面抓取", mode: "push", describe: "任意招聘页/简章：书签一键捕获，或给 URL 由 daemon 抓取（公众号/就业网/官网），模型抽取岗位" };
 
 /** The registry: a reader is in the system once it is in this list. */
-export const sources: Record<string, Source> = Object.fromEntries([moka, beisen, feishuBase, feishuJobs, zhilian, iguopin, chnenergy, chng, dayee, job51, kuaishou, xiaohongshu, csv, capturePush].map((s) => [s.id, s]));
+export const sources: Record<string, Source> = Object.fromEntries([moka, beisen, feishuBase, feishuJobs, zhilian, iguopin, chnenergy, chng, dayee, job51, kuaishou, xiaohongshu, gaoxiaojob, csv, capturePush].map((s) => [s.id, s]));
 
 export function sourceFor(url: string): Source | undefined {
   return Object.values(sources).find((s) => s.detect?.(url));
