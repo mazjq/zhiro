@@ -138,3 +138,17 @@ entries condense what still holds.
   6 sessions a day, 10 search screens and 20 job pages a session (half for the first 3 days), the person's call. Tried on
   2026-10-18: two screens (30 posts) in 26 s, one job page in 5 s, no check. Approach from open-source BOSS readers that
   attach to a logged-in browser (e.g. boss-zhipin-scraper, MIT); no code taken.
+- **D-29 · 2026-10-18 · Comparing employers: places in the industry and under preferences, no total score.** The
+  person asked which employers are most worth joining and for sound methods. Each listed company is placed among all
+  A-share companies of its 申万一级 industry (a dated snapshot of 东方财富 F10 company list, income and cash-flow
+  statements, kept 30 days in `peer_snapshot`) on four measures, one per aspect: growth (three-year revenue CAGR), R&D
+  (R&D ÷ revenue), a pay signal (cash paid to staff ÷ latest staff count; rough) and profit (net margin). Among the
+  companies asked about, places are given under three open preferences (成长研发优先 / 均衡 / 稳定回报优先) or the
+  person's own weights, with the usual range (10th–90th) and the share of top-three places over weights drawn evenly
+  within ±0.1 of them (fixed seed), plus the share over every weighting. A company that does no better than another on
+  all four is named as such; that is a screen, not a tier. A missing measure is not filled in: the company gets its
+  place by what is known and the best and worst it could be. What changed together in the year is said as that, never
+  as a cause. Labels are plain rules on the percentiles. Hong Kong, US, 新三板 and unlisted companies are not ranked
+  with them. Left out after review (Codex, 2026-10-18): AHP (the person would compare pairs of abstract aspects),
+  grey relational analysis and TOPSIS (unstable with a handful of companies), Ward clustering, fuzzy evaluation, and a
+  model playing the expert.

@@ -417,6 +417,11 @@ export const MIGRATIONS: string[] = [
   );
   create index boss_candidate_seen on boss_candidate(last_seen);
   `,
+  // v39: D-29 — the A-share list and one industry's statements for a year, kept with the time they were fetched, so a
+  // comparison of employers can say which data it used and be run again on the same data
+  `
+  create table peer_snapshot (key text primary key, fetched_at text not null, data_json text not null);
+  `,
 ];
 
 /**

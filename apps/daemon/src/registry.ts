@@ -88,6 +88,7 @@ import { backendOf, type ChatHub } from "./agent/backend.js";
 import { exportVault, defaultExportPath } from "./service/export.js";
 import { join } from "node:path";
 import { getIntel, getIntelDetail, refreshIntel, importSme } from "./service/intel.js";
+import { compare as employerCompare } from "./service/employer.js";
 import { sameCompanies } from "./service/same-company.js";
 import { enqueueFit, listFit } from "./service/fit.js";
 import { listGaps, confirmGap } from "./service/opportunity-gaps.js";
@@ -342,6 +343,7 @@ const handlers: { [N in ToolName]: Handler<N> } = {
   "industry.reports": (i, _a, s) => dataTool("industry.reports", i, s),
   "industry.companies": (i, _a, s) => dataTool("industry.companies", i, s),
   "company.financials": (i, _a, s) => dataTool("company.financials", i, s),
+  "employer.compare": (i, _a, s) => employerCompare(s.domain.db, i),
   "labor.us": (i, _a, s) => dataTool("labor.us", i, s),
   "research.report": (i, _a, s) => { const r = getTopic(s, i.runId); if (!r) throw new ToolError("NOT_FOUND", `没有这份主题调研：${i.runId}`); return r; },
   "research.get": (i, _a, s) => { const r = getResearch(s, i.runId); if (!r) throw new ToolError("NOT_FOUND", `run ${i.runId}`); return r; },
