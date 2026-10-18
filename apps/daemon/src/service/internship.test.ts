@@ -22,4 +22,19 @@ describe("找实习", () => {
     expect(domain.listPositions({ internship: true, query: "运动" }).items.map((p) => p.title)).toEqual(["运动控制算法实习生"]);
     expect(domain.listPositions({}).items).toHaveLength(5); // 找岗位 still lists them all
   });
+
+  it("leads with what the profile matcher found most related; an internship row carries the verdict, other lists do not change", () => {
+    const dir = mkdtempSync(join(tmpdir(), "zhiro-intern-"));
+    const domain = new Domain(openDb(join(dir, "jobos.db")));
+    ingest(domain, dir, "moka", "s1", [post("审计实习生", { validThrough: "2030-01-01" }), post("运动控制实习生", { validThrough: "2030-12-31" }), post("机器人实习生", { validThrough: "2030-06-30" })]);
+    const id = (title: string) => (domain.db.prepare("select id from position where title = ?").get(title) as { id: string }).id;
+    const assess = domain.db.prepare("insert into position_assessment(position_id, json, profile_hash, rules_version, created_at) values (?,?,?,?,?)");
+    assess.run(id("运动控制实习生"), JSON.stringify({ A: 80, tier: "优先考虑", judgements: [] }), "h", 1, "2026-10-18");
+    assess.run(id("机器人实习生"), JSON.stringify({ A: 40, tier: "可迁移", judgements: [] }), "h", 1, "2026-10-18");
+    const items = domain.listPositions({ internship: true }).items as any[];
+    expect(items.map((p) => p.title)).toEqual(["运动控制实习生", "机器人实习生", "审计实习生"]);
+    expect(items.map((p) => p.fit)).toEqual([{ tier: "优先考虑", score: 80 }, { tier: "可迁移", score: 40 }, null]);
+    expect(domain.listPositions({}).items.every((p: any) => !("fit" in p))).toBe(true);
+    expect(domain.listPositions({}).items.map((p) => p.title)[0]).toBe("审计实习生"); // 找岗位 keeps its deadline order
+  });
 });

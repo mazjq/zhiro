@@ -8,6 +8,7 @@ import { H1, Card, Button, Chip, Empty, STATE_LABEL, deadlineTone } from "../ui"
  * files the batch as 实习 (position.list `internship`). 找岗位 still lists them too; this page only gathers them.
  */
 const PAGE = 50;
+const FIT_TONE: Record<string, "good" | "accent" | "amber" | ""> = { 优先考虑: "good", 可迁移: "accent", 明显缺口: "amber" };
 const daysTo = (d: string | null) => (d ? Math.ceil((Date.parse(`${d}T23:59:59+08:00`) - Date.now()) / 86400_000) : null);
 
 export default function Internships() {
@@ -35,7 +36,7 @@ export default function Internships() {
   const input = "px-3 py-1.5 border border-line rounded-md bg-paper text-sm";
   return (
     <>
-      <H1 sub="岗位名带「实习」的，和来源标明是实习的，都在这里；「找岗位」里也照样有它们">找实习</H1>
+      <H1 sub="和你的资料越相关的排越前；岗位名带「实习」的，和来源标明是实习的，都在这里">找实习</H1>
       <div className="flex gap-2 mb-3">
         <input value={query} onChange={(e) => setQuery(e.target.value)} onKeyDown={(e) => e.key === "Enter" && load()} placeholder="岗位或公司，如 运动控制" className={`${input} flex-1 min-w-0`} />
         <input value={city ?? ""} onChange={(e) => setCity(e.target.value)} onKeyDown={(e) => e.key === "Enter" && load()} placeholder="城市（可空）" className={`${input} w-32`} />
@@ -69,6 +70,7 @@ function Row({ p, open, onToggle, onWatch }: { p: any; open: boolean; onToggle: 
           <span className="text-ink-2 ml-2">{p.companyName}</span>
           <span className="text-xs text-ink-3 ml-2">{(p.cities ?? []).slice(0, 3).join("、")}{p.degreeReq ? ` · ${p.degreeReq}` : ""}</span>
         </button>
+        {p.fit && <span title={`和你资料的相关度 ${p.fit.score}/100`}><Chip tone={FIT_TONE[p.fit.tier] ?? ""}>{p.fit.tier}</Chip></span>}
         {p.applicationState && <Chip tone="good">{STATE_LABEL[p.applicationState] ?? p.applicationState}</Chip>}
         <span title={dl.say ?? ""}><Chip tone={deadlineTone(left)}>{when}</Chip></span>
         <Button onClick={onWatch}>{p.watchPriority ? "已关注" : "关注"}</Button>
