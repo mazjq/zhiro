@@ -70,7 +70,9 @@ describe("upgrade from every sample in test/fixtures", () => {
 
       const db = openDb(join(dir, "jobos.db"));
       const now = census(db).counts;
-      for (const [t, n] of Object.entries(want.tables)) if (t !== "meta") expect([t, now[t]]).toEqual([t, n]); // meta: the upgrade notes the program version
+      // meta: the upgrade notes the program version; upgrade_log: it adds its own line (checked below) — first seen
+      // when a sample that already had the table (v36) was upgraded
+      for (const [t, n] of Object.entries(want.tables)) if (t !== "meta" && t !== "upgrade_log") expect([t, now[t]]).toEqual([t, n]);
       // the person's things read back through the program, not just counted
       const d = new Domain(db);
       expect(counts(db)).toMatchObject({ application: want.tables.application, fact: want.tables.fact });

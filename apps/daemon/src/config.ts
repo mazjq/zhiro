@@ -24,6 +24,8 @@ export interface JobosConfig {
   leads?: { dailyBudget?: number };
   /** pages the browser reads per day for page.read (ADR-038); HTTP reads are not counted */
   pages?: { dailyBudget?: number };
+  /** BOSS 直聘 through the person's agent (D-27): sessions a day and pages a session; see service/boss.ts */
+  boss?: { sessionsPerDay?: number; perSession?: { home?: number; search?: number; detail?: number }; rampDays?: number };
   /** 网申: the person's own 「系统填写」 document (.docx), read at every run and preferred for what it covers (apply-reference.ts) */
   apply?: { referenceDoc?: string };
   /** the application season: applications since this date count against a company's exploration slots (ADR-036) */
