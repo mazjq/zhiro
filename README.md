@@ -56,8 +56,9 @@ data. If a company in the report is hiring, you can click through to its jobs.
 
 ### 3. Don't miss a job or a deadline
 
-Zhiro checks companies' recruiting sites every day (Moka, Beisen, Feishu Jobs, 51job, Zhaopin, iGuopin and more), and
-can also read spreadsheets you keep yourself (Feishu Base, CSV files).
+Every day Zhiro reads the recruiting sites you subscribe to: companies' own hiring systems (Moka, Beisen, Feishu Jobs,
+51job, Zhaopin, iGuopin and more) and 高校人才网 (gaoxiaojob.com, where research institutes, labs, university teams and
+public institutions post). It can also read spreadsheets you keep yourself (Feishu Base, CSV files).
 
 The same job sometimes shows different deadlines on different sites. Zhiro compares them and notes which site each
 date came from and whether it has been verified.
@@ -224,4 +225,5 @@ Bug reports, suggestions for recruiting sites to support, and pull requests are 
 ## License
 
 [MIT](LICENSE). The Moka reader includes three files from [career-ops](https://github.com/career-ops-hq/career-ops)
-(MIT).
+(MIT). The financial-report and announcement sources behind company profiles follow the public endpoints collected in
+Simon Lin's [a-stock-data](https://github.com/simonlin1212/a-stock-data) (Apache-2.0).
