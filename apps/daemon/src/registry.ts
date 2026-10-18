@@ -27,7 +27,7 @@ export function sameTenant(a: string, b: string): boolean {
     return key(ua) === key(ub);
   } catch { return a === b; }
 }
-import { startResearch, getResearch, listResearch } from "./agent/research.js";
+import { startResearch, startEmployerReport, getResearch, listResearch } from "./agent/research.js";
 import { startFindCompany } from "./agent/find-company.js";
 import { startTopicResearch, listTopics, getTopic } from "./agent/research-topic.js";
 import { callData, dataFile, type DataTool } from "./service/research-data.js";
@@ -337,7 +337,7 @@ const handlers: { [N in ToolName]: Handler<N> } = {
     poolDirty(); s.onDataChanged?.();
     return { id: i.id, name: cfg.name ?? "", droppedCampaigns };
   },
-  "research.company": (i, _a, s) => startResearch(s, i.companyName, i.question),
+  "research.company": (i, _a, s) => (i.question === "就业评估" ? startEmployerReport(s, i.companyName) : startResearch(s, i.companyName, i.question)),
   "research.topic": async (i, _a, s) => { try { return await startTopicResearch(s, i); } catch (e) { throw coded(e); } },
   "research.topics": (_i, _a, s) => ({ items: listTopics(s) }),
   "industry.reports": (i, _a, s) => dataTool("industry.reports", i, s),

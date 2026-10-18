@@ -21,6 +21,8 @@ describe("comparing employers: measures, places and how they move (D-29)", () =>
     expect(cut.main.growth).toBeNull(); // no 2022: not guessed
     expect(moved(cut.more)[0]).toMatch(/营收下降、利润增长；同期职工现金、研发费用减少/);
     expect(measures(firm("y", "丙", null, { 2025: yr(10, 1, 1, 1) }), 2025).main.pay).toBeNull();
+    expect(moved(measures(firm("z", "丁", 10, { 2025: yr(110, 1, 5, 150), 2024: yr(100, -8, 6, 200) }), 2025).more)).toEqual(["营收增长，扭亏为盈", "利润增长的同时职工现金减少（可能减员或降薪，待核实）"]);
+    expect(moved(measures(firm("z", "戊", 10, { 2025: yr(90, -1, 5, 150), 2024: yr(100, 3, 6, 150) }), 2025).more)).toEqual(["营收下降，由盈转亏"]);
   });
 
   it("percentiles count half the ties; labels say their rule", () => {

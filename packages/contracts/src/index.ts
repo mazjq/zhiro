@@ -614,7 +614,7 @@ export const tools = {
   "research.company": defineTool({
     name: "research.company",
     description: "派发一次公司调研：由系统侧 Claude Code worker（有联网搜索）在隔离 run 目录中检索官网/招聘系统/就业网/公众号/牛客，产出带证据等级的中文报告，落 vault/research/。异步，返回 runId；用 research.get 查看。",
-    input: Type.Object({ companyName: Type.String(), question: Type.Optional(Type.String({ description: "具体想知道什么；默认 2027 届校招全貌" })) }),
+    input: Type.Object({ companyName: Type.String(), question: Type.Optional(Type.String({ description: "具体想知道什么；默认 2027 届校招全貌。「企业情况」= 经营情况；「就业评估」= 就业评估报告（D-29：职路先放同行百分位和历年财务，再由调研员写利润为什么变、钱去了哪、激励是否覆盖技术人员、上市进展、和用户的匹配，每条结论带证据、反面说法和限制，不打分）" })) }),
     output: Type.Object({ runId: Id, workflowId: Id }),
     effects: EGRESS,
     execution: "job",

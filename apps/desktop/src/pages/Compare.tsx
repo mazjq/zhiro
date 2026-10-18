@@ -63,7 +63,7 @@ export default function Compare() {
           {r.notFound.length > 0 && <div className="mt-2 text-sm text-ink-3">{r.notFound.map((n: any) => `${n.query}：${n.reason}${n.candidates ? `（${n.candidates.join("、")}）` : ""}`).join("；")}</div>}
           <div className="mt-3 text-xs text-ink-3 leading-relaxed">
             {r.year} 年报 · 同行：{r.peerGroup}（{Object.entries(r.data.pools).map(([k, v]: any) => `${k} ${v.companies} 家，${v.at.slice(0, 10)} 取数`).join("；")}）· {r.data.source}<br />
-            {r.measures.map((m: any) => `${m.label}＝${m.measure}`).join("；")}<br />
+            {r.measures.map((m: any) => `${m.label}＝${m.measure}${m.note ? `（${m.note}）` : ""}`).join("；")}<br />
             {r.method}
           </div>
         </>

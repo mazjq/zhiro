@@ -97,10 +97,10 @@ export async function industryPool(db: Db, top: string, year: number, all: Compa
 
 // ---------- the measures ----------
 export type Facet = "growth" | "rd" | "pay" | "profit";
-export const FACETS: { key: Facet; label: string; measure: string }[] = [
+export const FACETS: { key: Facet; label: string; measure: string; note?: string }[] = [
   { key: "growth", label: "成长", measure: "营收三年复合增速" },
   { key: "rd", label: "研发", measure: "研发费用占营收" },
-  { key: "pay", label: "待遇信号", measure: "每名员工对应的职工现金支出（粗指标：含奖金、社保、离职补偿，员工数取最新）" },
+  { key: "pay", label: "待遇信号", measure: "每名员工对应的职工现金支出", note: "粗指标：含奖金、社保、离职补偿，员工数取最新" },
   { key: "profit", label: "盈利", measure: "归母净利润占营收" },
 ];
 const ratio = (a: number | null | undefined, b: number | null | undefined) => (a === null || a === undefined || !b || b <= 0 ? null : a / b);
@@ -112,7 +112,7 @@ export function measures(r: PeerRow, year: number) {
   return {
     main: { growth, rd: ratio(y.rd, y.revenue), pay: ratio(y.staffCash, r.employees), profit: ratio(y.netProfit, y.revenue) } as Record<Facet, number | null>,
     more: {
-      revenue: y.revenue ?? null, netProfit: y.netProfit ?? null, employees: r.employees,
+      revenue: y.revenue ?? null, netProfit: y.netProfit ?? null, prevNetProfit: p.netProfit ?? null, employees: r.employees,
       revenueChange: change(y.revenue, p.revenue), profitChange: change(y.netProfit, p.netProfit), staffCashChange: change(y.staffCash, p.staffCash), rdChange: change(y.rd, p.rd),
       grossMargin: y.revenue && y.opCost !== null && y.opCost !== undefined ? (y.revenue - y.opCost) / y.revenue : null,
       capexToRevenue: ratio(y.capex, y.revenue), dividendCashToProfit: (y.netProfit ?? 0) > 0 ? ratio(y.dividendCash, y.netProfit) : null,
@@ -130,12 +130,14 @@ export function percentile(values: number[], v: number) {
 /** What happened together in the year — never why. */
 export function moved(m: ReturnType<typeof measures>["more"]): string[] {
   const out: string[] = [], up = (x: number | null) => x !== null && x > 0.02, down = (x: number | null) => x !== null && x < -0.02;
-  if (up(m.revenueChange) && up(m.profitChange)) out.push("营收和利润同时增长");
-  if (up(m.revenueChange) && down(m.profitChange)) out.push("营收增长、利润下降（增收不增利）");
-  if (down(m.revenueChange) && up(m.profitChange)) out.push(`营收下降、利润增长${down(m.staffCashChange) || down(m.rdChange) ? `；同期${[down(m.staffCashChange) && "职工现金", down(m.rdChange) && "研发费用"].filter(Boolean).join("、")}减少，利润可能来自压缩成本（待核实）` : ""}`);
-  if (down(m.revenueChange) && down(m.profitChange)) out.push("营收和利润同时下降");
+  const turned = m.prevNetProfit !== null && m.netProfit !== null ? (m.prevNetProfit < 0 && m.netProfit > 0 ? "扭亏为盈" : m.prevNetProfit > 0 && m.netProfit < 0 ? "由盈转亏" : null) : null;
+  if (turned) out.push(`营收${up(m.revenueChange) ? "增长" : down(m.revenueChange) ? "下降" : "基本持平"}，${turned}`);
+  else if (up(m.revenueChange) && up(m.profitChange)) out.push("营收和利润同时增长");
+  else if (up(m.revenueChange) && down(m.profitChange)) out.push("营收增长、利润下降（增收不增利）");
+  else if (down(m.revenueChange) && up(m.profitChange)) out.push(`营收下降、利润增长${down(m.staffCashChange) || down(m.rdChange) ? `；同期${[down(m.staffCashChange) && "职工现金", down(m.rdChange) && "研发费用"].filter(Boolean).join("、")}减少，利润可能来自压缩成本（待核实）` : ""}`);
+  else if (down(m.revenueChange) && down(m.profitChange)) out.push("营收和利润同时下降");
   if (up(m.profitChange) && down(m.staffCashChange) && !down(m.revenueChange)) out.push("利润增长的同时职工现金减少（可能减员或降薪，待核实）");
-  if (m.netProfit !== null && m.netProfit < 0) out.push("当年亏损");
+  if (m.netProfit !== null && m.netProfit < 0 && turned !== "由盈转亏") out.push("当年亏损");
   return out;
 }
 
@@ -251,7 +253,7 @@ export async function compare(db: Db, q: { companies: string[]; weights?: Partia
       return [k, v === null ? null : percentile(all.map((x) => x[k]).filter((x): x is number => x !== null), v)];
     })) as Record<Facet, number | null>;
     const n = Object.fromEntries(KEYS.map((k) => [k, all.filter((x) => x[k] !== null).length])) as Record<Facet, number>;
-    return { company: c, value: m.main, pct, peers: n, more: m.more, moved: moved(m.more), labels: labels(pct), coverage: KEYS.filter((k) => m.main[k] !== null).length };
+    return { company: c, years: me.years, value: m.main, pct, peers: n, more: m.more, moved: moved(m.more), labels: labels(pct), coverage: KEYS.filter((k) => m.main[k] !== null).length };
   });
   const ok = rows.filter((r): r is Extract<typeof r, { pct: any }> => "pct" in r);
   const picks: Pick[] = ok.map((r) => ({ code: r.company.code, pct: r.pct }));
@@ -273,7 +275,7 @@ export async function compare(db: Db, q: { companies: string[]; weights?: Partia
       if (!("pct" in r)) return { code: r.company.code, name: r.company.name, org: r.company.org, industry: r.company.industry, note: `没有 ${year} 年报数据（可能是当年之后才上市）` };
       return {
         code: r.company.code, name: r.company.name, org: r.company.org, industry: r.company.industry,
-        value: r.value, percentile: r.pct, peers: r.peers, coverage: `${r.coverage}/4`, more: r.more, movedTogether: r.moved, labels: r.labels,
+        years: r.years, value: r.value, percentile: r.pct, peers: r.peers, coverage: `${r.coverage}/4`, more: r.more, movedTogether: r.moved, labels: r.labels,
         outdoneBy: outdone.has(r.company.code) ? outdone.get(r.company.code)!.map((c) => ok.find((x) => x.company.code === c)!.company.name) : null,
         under: Object.fromEntries(Object.entries(under).map(([k, v]) => [k, v.places.get(r.company.code)])),
         anyWeighting: any.places.get(r.company.code)?.top3Share ?? null,
@@ -283,4 +285,31 @@ export async function compare(db: Db, q: { companies: string[]; weights?: Partia
     spread, notFound,
     method: `每项先在本行业同行里算百分位（越高越好），名次只在这几家之间排。「通常第 a–b 名」是在所选权重上下各 ${Math.round(spread * 100)} 个百分点内随机抽权重（固定种子）时名次的 10%–90% 范围；「进前三的比例」是这些权重里排进前三的占比，是偏好情景的比例，不是现实概率。缺数据的不估值，只给按已知指标的名次和最好 / 最坏情况。`,
   };
+}
+
+// ---------- the facts at the top of an employer report ----------
+const yi = (v: number | null | undefined) => (v === null || v === undefined ? "—" : `${(v / 1e8).toFixed(2)} 亿`);
+const pc = (v: number | null | undefined) => (v === null || v === undefined ? "—" : `${(v * 100).toFixed(1)}%`);
+/**
+ * The fact table Zhiro puts at the top of an employer report (the agent writes what follows). `c` is one company from
+ * compare(); every number here is from the snapshot it names.
+ */
+export function factsMarkdown(c: any, r: { year: number; data: any; peerGroup: string }): string {
+  if (!c.years) return `## 一、事实（职路取数）\n\n${c.note ?? "不是 A 股上市公司，职路没有它的同行数据。"}\n`;
+  const ys = Object.keys(c.years).sort().reverse();
+  const row = (label: string, f: (y: YearRow) => string) => `| ${label} | ${ys.map((y) => f(c.years[y])).join(" | ")} |`;
+  const pool = r.data.pools[sector(c.industry)];
+  return [
+    `## 一、事实（职路取数，${r.year} 年报口径）`, "",
+    `${c.name}（${c.code}）· ${c.industry} · 员工 ${c.more.employees ?? "—"} 人（最新）`, "",
+    `| 年份 | ${ys.join(" | ")} |`, `|---|${ys.map(() => "---").join("|")}|`,
+    row("营业总收入", (y) => yi(y.revenue)), row("归母净利润", (y) => yi(y.netProfit)), row("研发费用", (y) => yi(y.rd)),
+    row("支付给职工的现金", (y) => yi(y.staffCash)), row("分配股利、利润或偿付利息的现金", (y) => yi(y.dividendCash)), row("购建长期资产的现金", (y) => yi(y.capex)), "",
+    `在${sector(c.industry)}行业 ${pool?.companies ?? "?"} 家 A 股公司里的位置（百分位越高越好）：`, "",
+    ...FACETS.map((f) => `- ${f.label}（${f.measure}）：${f.key === "pay" ? (c.value.pay === null ? "—" : `${(c.value.pay / 1e4).toFixed(1)} 万/人`) : pc(c.value[f.key])}，同行第 ${c.percentile[f.key] ?? "—"} 百分位${f.note ? `（${f.note}）` : ""}`),
+    `- 毛利率 ${pc(c.more.grossMargin)}；购建长期资产占营收 ${pc(c.more.capexToRevenue)}；分配股利和偿付利息的现金占净利 ${pc(c.more.dividendCashToProfit)}（含利息，不全是分红）`,
+    ...(c.movedTogether.length ? [`- ${r.year} 年同期一起发生的：${c.movedTogether.join("；")}`] : []),
+    ...(c.labels.length ? [`- 规则标签：${c.labels.map((l: any) => `${l.label}（${l.rule}）`).join("；")}`] : []),
+    "", `来源：${r.data.source}，取数 ${pool?.at?.slice(0, 10) ?? "?"}。`, "",
+  ].join("\n");
 }

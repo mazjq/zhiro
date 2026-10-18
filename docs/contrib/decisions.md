@@ -152,3 +152,9 @@ entries condense what still holds.
   with them. Left out after review (Codex, 2026-10-18): AHP (the person would compare pairs of abstract aspects),
   grey relational analysis and TOPSIS (unstable with a handful of companies), Ward clustering, fuzzy evaluation, and a
   model playing the expert.
+  An employer report (`research.company` with question 就业评估) starts with a fact table Zhiro writes from the same
+  snapshot (four years of revenue, profit, R&D, staff cash, dividend-and-interest cash, capex; the four places); the
+  person's agent writes the rest — why profit moved (a cause only where the annual report or a notice says it), where
+  the money went, whether incentive plans reach technical staff, listing or IPO progress across the three exchanges,
+  job signals, and the match with the person, kept apart — and hands back each conclusion with its kind, sources, the
+  counter-claims it looked for and its limits, shown as a table under the report.
