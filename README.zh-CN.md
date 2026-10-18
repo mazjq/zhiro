@@ -46,7 +46,7 @@
 
 ### 3. 不错过岗位和截止日期
 
-职路每天自动查看各公司的招聘网站（Moka、北森、飞书招聘、前程无忧、智联校园、国聘等），也可以读你自己整理的表格（飞书多维表格、CSV 文件）。
+你订阅的招聘网站，职路每天自动去读一遍：公司自己的招聘系统（Moka、北森、飞书招聘、前程无忧、智联校园、国聘等），还有高校人才网（研究院、实验室、高校团队、事业单位常在这里发公告）。也可以读你自己整理的表格（飞书多维表格、CSV 文件）。
 
 同一个岗位在不同网站上写的截止日期有时对不上。职路会把它们放在一起比对，注明每个日期来自哪个网站、有没有核实过。
 
@@ -185,4 +185,4 @@ zhiro vault rollback    # 恢复到上次升级前
 
 ## 许可
 
-[MIT](LICENSE)。Moka 读取器包含来自 [career-ops](https://github.com/career-ops-hq/career-ops) 的三个文件（MIT）。
+[MIT](LICENSE)。Moka 读取器包含来自 [career-ops](https://github.com/career-ops-hq/career-ops) 的三个文件（MIT）。企业情况的财报、公告接口参考了 Simon Lin 的 [a-stock-data](https://github.com/simonlin1212/a-stock-data)（Apache-2.0）整理的公开数据源。
