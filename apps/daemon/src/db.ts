@@ -397,6 +397,15 @@ export const MIGRATIONS: string[] = [
   `
   create table upgrade_log (at text not null, from_v integer not null, to_v integer not null, app_version text not null, backup text not null default '');
   `,
+  // v37: D-27 — BOSS 直聘 visits through the person's agent: one row per one-time permit (issued → used), and the stops
+  `
+  create table boss_visit (
+    id text primary key, session_id text not null, requested_at text not null, not_before text not null, expires_at text not null,
+    consumed_at text, target text not null, kind text not null, outcome text not null default 'issued', detail text not null default ''
+  );
+  create index boss_visit_at on boss_visit(requested_at);
+  create index boss_visit_session on boss_visit(session_id);
+  `,
 ];
 
 /**

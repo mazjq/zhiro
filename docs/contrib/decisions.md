@@ -111,3 +111,17 @@ entries condense what still holds.
   first, then the search URL; a page budget per session and per day; list pages first, details only for picks; dedupe
   against the pool; file picks with `listing.capture` (publisher `boss`); stop on any verification or login page; never
   press 沟通 / 投递. One quiet run is evidence, not a guarantee; the protocol keeps the volume low and stops early.
+- **D-27 · 2026-10-18 · BOSS visits: a budget and a circuit breaker held by Zhiro, not a rule the agent remembers.**
+  D-26 put the BOSS rules in the skill; a rule in a document is forgotten at the next handoff. Now every page the agent
+  opens needs a one-time permit (`boss.permit`): it names the one page, the earliest moment to open it (a person-like
+  pause by what came before: 4–10 s after the city page, 8–30 s from a list to a job, 12–45 s between jobs, now and then
+  a minute or two more, 20–60 min between sessions) and expires five minutes later. The page is handed back with what
+  it says (`boss.page`). A session starts on a city page; jobs come after a search; at most 4 sessions a day and 1 / 5 /
+  15 home / search / job pages a session, half of that for the first 3 days and after any stop (`jobos.yaml` → `boss`).
+  A check by BOSS (a redirect to a check or a login, a check at the top of the page, an empty page) stops visits for
+  24 hours; only the person lifts it. A job page is read by blocks and only the post is kept — title, pay, place,
+  days, months, degree, description, the registered company name, the address — filed as a 聚合 post under its BOSS
+  job id; nothing of the person's own block is stored or returned. A page missing a block is a preview that the agent
+  may complete with values found on that same page. An agent's `listing.capture` of a BOSS link is refused. What
+  Zhiro cannot see — whether the agent waited and which browser it used — stays a rule of the skill, and the page says
+  so. Advised by Codex (2026-10-18); the budget is the person's call (the review advised less).

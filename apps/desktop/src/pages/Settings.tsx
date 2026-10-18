@@ -243,6 +243,42 @@ function Channels({ ver }: { ver: number }) {
   );
 }
 
+/**
+ * BOSS 直聘 (D-27): the person's agent searches BOSS in the person's own browser; Zhiro counts its pages and stops it
+ * after a check. Shown here: today's use, the limits, a stop and its reason — and the person can lift a stop.
+ */
+function BossCard() {
+  const [st, setSt] = useState<any>(null);
+  const [err, setErr] = useState("");
+  const load = () => call("boss.status").then(setSt).catch((e) => setErr(e.message));
+  useEffect(() => { load(); }, []);
+  useOnDataChange(load);
+  const lift = async () => { try { setSt(await call("boss.resume")); } catch (e: any) { setErr(e.message); } };
+  if (!st) return err ? null : <Card className="p-5 mb-4 text-sm text-ink-3">BOSS 直聘：读取中…</Card>;
+  const l = st.limits, t = st.today;
+  return (
+    <Card className="p-5 mb-4">
+      <div className="flex items-center gap-2 mb-1">
+        <div className="font-bold">BOSS 直聘</div>
+        <span className="text-xs text-ink-3">你的 AI 助手在你自己的浏览器里按需搜；职路记次数、控节奏，遇到验证就暂停</span>
+        {st.stop ? <Chip tone="bad">已暂停</Chip> : <Chip tone="good">可用</Chip>}
+      </div>
+      <div className="text-sm text-ink-2">
+        今天：会话 {t.sessions}/{l.sessionsPerDay} · 搜索页 {t.search} · 详情页 {t.detail}（每次会话最多搜索 {l.perSession.search}、详情 {l.perSession.detail}）
+        {st.halfWhileNew && <span className="text-ink-3"> · 刚开始用，前几天只开一半额度</span>}
+      </div>
+      {st.stop && (
+        <div className="mt-2 text-sm text-bad flex items-center gap-2">
+          <span className="flex-1">暂停到 {new Date(st.stop.until).toLocaleString("zh-CN", { hour12: false })}：{st.stop.reason}。先在 BOSS 上确认账号正常，再解除。</span>
+          <Button onClick={lift}>解除暂停</Button>
+        </div>
+      )}
+      <div className="text-xs text-ink-3 mt-1">{st.note}。额度在 jobos.yaml 的 boss 一节里改。</div>
+      {err && <div className="text-xs text-bad mt-1">{err}</div>}
+    </Card>
+  );
+}
+
 /** 接入一个订阅：贴链接 → 预览（表格可以改每一列读成什么）→ 确认。 */
 function AddSource({ onDone, onCancel }: { onDone: (msg: string) => void; onCancel: () => void }) {
   const [url, setUrl] = useState("");
@@ -392,6 +428,7 @@ export default function Settings() {
       <AiCard cfg={cfg} reload={load} onError={setMsg} />
       <Usage />
       <Channels ver={ver} />
+      <BossCard />
       <div className="grid grid-cols-2 gap-4">
         <Card className="p-5">
           <div className="font-bold mb-2">捕获书签</div>

@@ -4,7 +4,8 @@ import { Value } from "@sinclair/typebox/value";
 import type { Domain } from "./service/domain.js";
 import { DomainError, NotFound, genericCompany } from "./service/domain.js";
 import { importCsv } from "./service/import-csv.js";
-import { capture } from "./service/capture.js";
+import { capture, providerOf } from "./service/capture.js";
+import { BossError, permit as bossPermit, handlePage as bossPage, status as bossStatus, resume as bossResume } from "./service/boss.js";
 import { runBackup } from "./service/backup.js";
 import { locationInfo, requestMove, cancelMove } from "./move.js";
 import { notify } from "./service/feishu.js";
@@ -123,6 +124,12 @@ function externalWritesRecently(s: Services): number {
   const r = s.domain.db.prepare("select count(*) as n from agent_action where at > ? and actor like 'agent:%' and actor not like 'agent:embedded:%' and actor != 'agent:career'").get(since) as { n: number };
   return r.n + externalInFlight;
 }
+
+/** BossError → ToolError, with what the agent needs to act on (the open permit, the stop's end) in the message */
+function bossCall<T>(fn: () => T): T {
+  try { return fn(); } catch (e) { if (e instanceof BossError) throw new ToolError(e.code, Object.keys(e.extra).length ? `${e.message}（${JSON.stringify(e.extra)}）` : e.message); throw e; }
+}
+const bossView = (s: Services) => { const st = bossStatus(s.domain.db, s.config.boss); return { limits: st.limits, today: st.today, halfWhileNew: st.halfWhileNew, stop: st.stop, note: "只算经职路的访问，不含你自己在网页或 App 上的操作" }; };
 
 export class ToolError extends Error {
   constructor(public code: string, message?: string) {
@@ -260,7 +267,14 @@ const handlers: { [N in ToolName]: Handler<N> } = {
     try { return await r; } catch (e) { throw coded(e); }
   },
   "import.csv": (i, _a, s) => { const r = importCsv(s.domain, i.path); s.onDataChanged?.(); return r; },
-  "listing.capture": async (i, _a, s) => {
+  // D-27: BOSS 直聘 through the person's own agent — a one-time permit per page, the page handed back with what it says
+  "boss.permit": (i, _a, s) => bossCall(() => bossPermit(s.domain.db, s.config.boss, i.url)),
+  "boss.page": (i, _a, s) => bossCall(() => bossPage(s.domain, s.config.vault, i)),
+  "boss.status": (_i, _a, s) => bossView(s),
+  "boss.resume": (_i, a, s) => { humanOnly(a); bossResume(s.domain.db); return bossView(s); },
+  "listing.capture": async (i, a, s) => {
+    // an agent's BOSS page goes through boss.page: counted, paced, stopped on a check (D-27); the person's bookmark is theirs
+    if (a.kind === "agent" && providerOf(i.url).provider === "boss") throw new ToolError("USE_BOSS_PAGE", "BOSS 直聘的页面请用 boss.permit → boss.page（会计数、控节奏、遇到验证会暂停）");
     // A bookmarked Moka/北森 tenant page is better served by the pull source: register it (once) and scan now.
     const pull = sourceFor(i.url);
     if (pull?.fetch) {
@@ -574,7 +588,7 @@ function executeDirect<N extends ToolName>(name: N, input: ToolInput<N>, actor: 
  *  - agent + write/effect tool → proposal (returned as { proposal }) instead of execution
  *  - audit row for every call
  */
-export const HUMAN_ONLY = new Set(["agent.model", "gap.confirm", "model.login", "model.answer", "model.cancel", "model.provider", "model.select", "model.refresh", "inbox.connect", "inbox.disconnect", "history.undo", "agent.mode", "agent.backend", "agent.harnessConfirm", "agent.background", "data.export", "data.move"]);
+export const HUMAN_ONLY = new Set(["boss.resume", "agent.model", "gap.confirm", "model.login", "model.answer", "model.cancel", "model.provider", "model.select", "model.refresh", "inbox.connect", "inbox.disconnect", "history.undo", "agent.mode", "agent.backend", "agent.harnessConfirm", "agent.background", "data.export", "data.move"]);
 
 /** What an actor may call at all: agents never see the human-only tools or proposal.decide (they would only be refused) — except the person's own harness, when confirmation happens there (ADR-047). */
 export const callableBy = (actor: Actor, s?: Services) => {
