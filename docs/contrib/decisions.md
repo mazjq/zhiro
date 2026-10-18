@@ -110,4 +110,4 @@ entries condense what still holds.
   job pages). So Zhiro ships no BOSS reader; the agent skill (`agent-skills/zhiro`) carries the protocol: city home page
   first, then the search URL; a page budget per session and per day; list pages first, details only for picks; dedupe
   against the pool; file picks with `listing.capture` (publisher `boss`); stop on any verification or login page; never
-  press 沟通 / 投递. One quiet run is evidence, not a guarantee, and the skill says so to no one: it simply stops.
+  press 沟通 / 投递. One quiet run is evidence, not a guarantee; the protocol keeps the volume low and stops early.
