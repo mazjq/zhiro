@@ -104,3 +104,10 @@ entries condense what still holds.
   false, confidence 0.7 (official readers give 0.85–0.9). Not `notices`: each job has its own id and page, and marking
   it would queue every such company for the daily model-paid lead resolution. Pages are 0.6–1.4 s apart; a column of
   ~110 open announcements takes about nine minutes.
+- **D-26 · 2026-10-18 · BOSS 直聘 is searched by the person's own agent in the person's own browser, not crawled.** A
+  headless browser was flagged by BOSS on its first search (2026-10-16, 「您的环境存在异常」). Searching in the person's
+  real, logged-in, visible browser with page loads 5–12 s apart did not trip it (2026-10-18, one search page and two
+  job pages). So Zhiro ships no BOSS reader; the agent skill (`agent-skills/zhiro`) carries the protocol: city home page
+  first, then the search URL; a page budget per session and per day; list pages first, details only for picks; dedupe
+  against the pool; file picks with `listing.capture` (publisher `boss`); stop on any verification or login page; never
+  press 沟通 / 投递. One quiet run is evidence, not a guarantee, and the skill says so to no one: it simply stops.
