@@ -1,10 +1,11 @@
 import { useEffect, useState } from "react";
-import { CalendarClock, Briefcase, MessageSquare, Settings as SettingsIcon, Send, Mail, FileText } from "lucide-react";
+import { CalendarClock, Briefcase, GraduationCap, MessageSquare, Settings as SettingsIcon, Send, Mail, FileText } from "lucide-react";
 import { initApi, events, CLIENT_ID, keyFile, loginWithKey } from "./api";
 import Today from "./pages/Today";
 import Chat from "./pages/Chat";
 import Settings from "./pages/Settings";
 import Jobs from "./pages/Jobs";
+import Internships from "./pages/Internships";
 import Gaps from "./pages/Gaps";
 import Research from "./pages/Research";
 import Pipeline from "./pages/Pipeline";
@@ -65,11 +66,12 @@ function KeyBox({ onDone }: { onDone: () => void }) {
 }
 
 // "profile" and "resumes" are the two tabs of 求职资料; settings sits behind the gear, the assistant in a drawer
-type Page = "today" | "jobs" | "gaps" | "research" | "pipeline" | "inbox" | "profile" | "resumes" | "settings";
+type Page = "today" | "jobs" | "interns" | "gaps" | "research" | "pipeline" | "inbox" | "profile" | "resumes" | "settings";
 
 const NAV: { id: Page; label: string; icon: React.ComponentType<{ size?: number }> }[] = [
   { id: "today", label: "今日", icon: CalendarClock },
   { id: "jobs", label: "找岗位", icon: Briefcase },
+  { id: "interns", label: "找实习", icon: GraduationCap },
   { id: "pipeline", label: "投递", icon: Send },
   { id: "inbox", label: "收件箱", icon: Mail },
   { id: "profile", label: "求职资料", icon: FileText },
@@ -145,6 +147,7 @@ export default function App() {
             </div>
           )}
           {page === "jobs" && <Jobs go={setPage} />}
+          {page === "interns" && <Internships />}
           {page === "gaps" && <Gaps />}
           {page === "research" && <Research />}
           {page === "pipeline" && <Pipeline go={setPage} />}
