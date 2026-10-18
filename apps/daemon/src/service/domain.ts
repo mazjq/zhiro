@@ -144,12 +144,14 @@ export class Domain {
     return { campaign: campaignRow(row), positions, applications };
   }
 
-  listPositions(q: { campaignId?: string; companyId?: string; query?: string; major?: string; degree?: string; city?: string; watchedOnly?: boolean; includeExpired?: boolean; limit?: number }) {
+  listPositions(q: { campaignId?: string; companyId?: string; query?: string; major?: string; degree?: string; city?: string; watchedOnly?: boolean; includeExpired?: boolean; internship?: boolean; limit?: number }) {
     const where: string[] = [];
     const args: unknown[] = [];
     if (q.campaignId) { where.push("p.campaign_id = ?"); args.push(q.campaignId); }
     if (q.companyId) { where.push("c.company_id = ?"); args.push(q.companyId); }
     if (q.watchedOnly) where.push("p.watch_priority is not null and p.watch_priority > 0");
+    // 实习: the post says so in its name, or its source files the whole batch as one (a sheet's 「实习」 row, a page read as 实习)
+    if (q.internship) where.push("(p.title like '%实习%' or lower(p.title) like '%intern%' or c.kind = '实习' or c.batch like '%实习%')");
     for (const word of (q.query ?? "").split(/\s+/).filter(Boolean)) { where.push("(p.title like ? or co.name like ?)"); args.push(`%${word}%`, `%${word}%`); }
     // the post's own requirement, else its campaign's (国能 states both per post, a sheet only per campaign); several words
     // in one field are alternatives — 「控制科学与工程 自动化」 means either

@@ -257,6 +257,7 @@ export const tools = {
       degree: Type.Optional(Type.String({ description: "学历要求含任一词" })),
       city: Type.Optional(Type.String()),
       watchedOnly: Type.Optional(Type.Boolean()),
+      internship: Type.Optional(Type.Boolean({ description: "只列实习岗：岗位名含「实习」/ intern，或来源把这批标成实习" })),
       includeExpired: Type.Optional(Type.Boolean({ description: "默认只列截止日未过的岗位；true 连已截止的也列" })),
       limit: Type.Optional(Type.Number({ default: 100 })),
       offset: Type.Optional(Type.Number({ default: 0, description: "跳过前几条（翻页）；简版结果的 hasMore 说还有没有" })),
