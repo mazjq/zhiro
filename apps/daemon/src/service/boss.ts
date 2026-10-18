@@ -17,7 +17,7 @@ import { ingest, type Listing } from "../data/index.js";
 export type BossKind = "home" | "search" | "detail";
 export interface BossLimits { sessionsPerDay: number; perSession: Record<BossKind, number>; rampDays: number }
 export type BossConfig = { sessionsPerDay?: number; perSession?: Partial<Record<BossKind, number>>; rampDays?: number };
-export const DEFAULT_LIMITS: BossLimits = { sessionsPerDay: 4, perSession: { home: 1, search: 5, detail: 15 }, rampDays: 3 };
+export const DEFAULT_LIMITS: BossLimits = { sessionsPerDay: 6, perSession: { home: 1, search: 10, detail: 20 }, rampDays: 3 };
 
 const SESSION_IDLE_MS = 30 * 60_000;
 const PERMIT_TTL_MS = 5 * 60_000;
