@@ -39,12 +39,17 @@ function campaignRow(r: any): CampaignT {
     lastVerifiedAt: r.last_verified_at, createdAt: r.created_at, updatedAt: r.updated_at,
   };
 }
+/** the profile matcher's relevance (0–100) of a post, for ordering the internship list (ADR-035) */
+const FIT_A = "(select json_extract(a.json, '$.A') from position_assessment a where a.position_id = p.id)";
+
 function positionRow(r: any): PositionT & { companyName: string; closesAt: string | null; deadlineKind: any; applyUrl: string; noticeUrl: string; applicationState: string | null } {
   return {
     id: r.id, campaignId: r.campaign_id, title: r.title, jdText: r.jd_text, cities: json.parse(r.cities, []), degreeReq: r.degree_req, majorReq: r.major_req || r.campaign_major_req || "",
     status: r.status, directionTags: json.parse(r.direction_tags, []), lastSeenAt: r.last_seen_at, watchPriority: r.watch_priority,
     companyName: r.company_name ?? "", closesAt: r.closes_at ?? null, deadlineKind: r.deadline_kind ?? "unknown",
     applyUrl: r.apply_url ?? "", noticeUrl: r.notice_url ?? "", applicationState: r.app_state ?? null,
+    // 找实习 only (internship list): the profile matcher's verdict on the post, so the list can lead with what fits
+    ...(r.fit_tier !== undefined ? { fit: r.fit_tier ? { tier: r.fit_tier as string, score: Number(r.fit_a ?? 0) } : null } : {}),
   };
 }
 function applicationRow(r: any): ApplicationT {
@@ -160,8 +165,8 @@ export class Domain {
     anyOf("coalesce(nullif(p.degree_req, ''), c.degree_req)", q.degree ?? "");
     if (q.city) { where.push("((case when p.cities != '[]' then p.cities else c.cities end) like ?)"); args.push(`%${q.city}%`); }
     where.push("p.status != 'closed'");
-    const from = `from position p join campaign c on c.id = p.campaign_id join company co on co.id = c.company_id ${where.length ? "where " + where.join(" and ") : ""} order by c.closes_at is null, c.closes_at asc, co.name`;
-    const full = `select p.*, co.name as company_name, c.closes_at, c.deadline_kind, c.apply_url, c.notice_url, c.major_req as campaign_major_req, (select a.state from application a where a.position_id = p.id and a.state != 'cancelled') as app_state`;
+    const from = `from position p join campaign c on c.id = p.campaign_id join company co on co.id = c.company_id ${where.length ? "where " + where.join(" and ") : ""} order by ${q.internship ? `coalesce(${FIT_A}, -1) desc, ` : ""}c.closes_at is null, c.closes_at asc, co.name`;
+    const full = `select p.*, co.name as company_name, c.closes_at, c.deadline_kind, c.apply_url, c.notice_url, c.major_req as campaign_major_req, (select a.state from application a where a.position_id = p.id and a.state != 'cancelled') as app_state${q.internship ? `, ${FIT_A} as fit_a, (select json_extract(a.json, '$.tier') from position_assessment a where a.position_id = p.id) as fit_tier` : ""}`;
     const limit = q.limit ?? 100;
     if (q.includeExpired) return { items: (this.db.prepare(`${full} ${from} limit ?`).all(...(args as any[]), limit) as any[]).map(positionRow) };
     // 在招 = the resolver says it has not passed (ADR-041): the person's word, the post's own day, its batch's, and what
