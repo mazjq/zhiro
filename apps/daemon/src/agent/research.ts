@@ -87,10 +87,18 @@ ${GRADE_RULES}
 export const EMPLOYER_SCHEMA = {
   type: "object",
   additionalProperties: false,
-  required: ["summary", "report_markdown", "evidence", "claims", "match"],
+  required: ["summary", "report_markdown", "evidence", "claims", "match", "staff", "layoffs"],
   properties: {
     summary: { type: "string", description: "3 句以内：这家公司作为雇主的要点，不打分" },
-    report_markdown: { type: "string", description: "中文 Markdown，从「## 二、利润为什么变」写起：二、利润为什么变 / 三、钱去了哪 / 四、激励和技术人员 / 五、上市与资本 / 六、求职信号 / 七、和你的匹配 / 八、证据清单" },
+    report_markdown: { type: "string", description: "中文 Markdown，从「## 二、人员：规模、人均薪资、裁员」写起：二、人员 / 三、利润为什么变 / 四、钱去了哪 / 五、激励和技术人员 / 六、上市与资本 / 七、求职信号 / 八、和你的匹配 / 九、证据清单" },
+    staff: {
+      type: "array", description: "近几年的年末员工数，每年一条，查不到的年份不写",
+      items: { type: "object", additionalProperties: false, required: ["year", "employees", "source", "url"], properties: { year: { type: "number" }, employees: { type: "number" }, source: { type: "string", description: "年报「员工情况」/ 公示年报社保参保人数 / 招股书 / 其他（写明）" }, url: { type: "string" } } },
+    },
+    layoffs: {
+      type: "array", description: "近三年裁员、降薪、欠薪、大规模离职的报道；没搜到就给空数组",
+      items: { type: "object", additionalProperties: false, required: ["date", "what", "url"], properties: { date: { type: "string" }, what: { type: "string", description: "发生了什么、涉及哪些部门或多少人，照报道写" }, url: { type: "string" } } },
+    },
     evidence: RESEARCH_SCHEMA.properties.evidence,
     claims: {
       type: "array", description: "报告里每条定性结论",
@@ -107,15 +115,16 @@ export const EMPLOYER_SCHEMA = {
 } as const;
 
 /** Pull the company's facts from Zhiro's own numbers; a company that is not an A-share listing gets a line saying so. */
-async function employerFacts(s: Services, companyName: string): Promise<string> {
+async function employerFacts(s: Services, companyName: string): Promise<{ md: string; staffCash: Record<string, number | null> }> {
   try {
     const r: any = await compare(s.domain.db, { companies: [companyName] });
-    return r.companies[0] ? factsMarkdown(r.companies[0], r) : factsMarkdown({ note: r.notFound[0]?.reason ?? "不是 A 股上市公司" }, r);
+    const c = r.companies[0];
+    return { md: c ? factsMarkdown(c, r) : factsMarkdown({ note: r.notFound[0]?.reason ?? "不是 A 股上市公司" }, r), staffCash: Object.fromEntries(Object.entries(c?.years ?? {}).map(([y, v]: [string, any]) => [y, v.staffCash])) };
   } catch (e: any) {
-    return `## 一、事实（职路取数）
+    return { staffCash: {}, md: `## 一、事实（职路取数）
 
 这次没取到行业数据（${String(e?.message ?? e).slice(0, 120)}），下面的数字都来自调研员给的来源。
-`;
+` };
   }
 }
 
@@ -149,18 +158,22 @@ ${posts.length ? posts.join("、") : "（库里没有）"}
 ${profile || "（画像是空的）"}
 
 ## 要回答的（证据不够就写「依据不足」，不要编）
-二、利润为什么变：营收、成本、人数分开说。只有年报「管理层讨论与分析」或公告写明的才说是原因，否则写「同时发生」并标待核实。是不是靠减员、降薪省出来的：查年报「员工情况」近几年在职员工数，和支付给职工的现金对照。
-三、钱去了哪：研发、分红和回购、资本开支、并购，按上面的事实表和公告说。
-四、激励和技术人员：近三年的股权激励、员工持股计划，读公告原文，摘出激励对象（核心技术人员几人、占员工比例）、授予价格、考核条件；写明有没有覆盖技术人员。研发人员占比、技术岗在公司里的分量。
-五、上市与资本：已上市的写板块和近期再融资、减持；未上市的查深交所、上交所、北交所的 IPO 项目库和证监会辅导备案，写「截至今天，以哪些名称在哪些库里没检出」，或者给出所处阶段和日期。
-六、求职信号：在招什么方向、口碑与风险（裁员、欠薪、诉讼、减持等新闻，注明日期和来源）。
-七、和这位求职者的匹配：优势、风险、未知各几条，单列，不并入对公司本身的判断。也放进 match 字段。
+二、人员：规模、人均薪资、裁员。想知道的是：在不在裁员、人均拿多少、规模多大。
+  - 近几年的年末员工数放进 staff，每年一条带来源：上市公司读年报「员工情况」的「在职员工的数量合计」；未上市的查国家企业信用信息公示系统年报里的「社保参保人数」（企查查、天眼查页面常有转载），或招股书。职路会用它和「支付给职工的现金」算每年人均，写在报告里，你不用算。
+  - 搜近三年的裁员、降薪、欠薪、大规模离职报道（脉脉、新闻、黑猫投诉都可以），放进 layoffs，照报道写日期、发生了什么、涉及多少人和链接；没搜到就给空数组，在正文里写「没有搜到」，不等于没有。
+  - 正文里写你对人员变化的解读：人数和工资总额怎么变的、和业务变化对得上吗。
+三、利润为什么变：营收、成本、人数分开说。只有年报「管理层讨论与分析」或公告写明的才说是原因，否则写「同时发生」并标待核实。是不是靠减员、降薪省出来的：和第二节的人数、职工现金对照。
+四、钱去了哪：研发、分红和回购、资本开支、并购，按上面的事实表和公告说。
+五、激励和技术人员：近三年的股权激励、员工持股计划，读公告原文，摘出激励对象（核心技术人员几人、占员工比例）、授予价格、考核条件；写明有没有覆盖技术人员。研发人员占比、技术岗在公司里的分量。
+六、上市与资本：已上市的写板块和近期再融资、减持；未上市的查深交所、上交所、北交所的 IPO 项目库和证监会辅导备案，写「截至今天，以哪些名称在哪些库里没检出」，或者给出所处阶段和日期。
+七、求职信号：在招什么方向、口碑与风险（裁员、欠薪、诉讼、减持等新闻，注明日期和来源）。
+八、和这位求职者的匹配：优势、风险、未知各几条，单列，不并入对公司本身的判断。也放进 match 字段。
 
 规则：
 - 每条定性结论放进 claims：类型（事实 / 解读 / 推断）、证据 URL、找过的反面说法（没找到写「没找到」）、限制。
 - 不打分、不给总分、不写「推荐指数」，不替求职者决定去不去。
 ${GRADE_RULES}
-最终只输出符合 schema 的 JSON（report_markdown 从「## 二、利润为什么变」写起，最后一节「八、证据清单」把 evidence 再列一遍）。`;
+最终只输出符合 schema 的 JSON（report_markdown 从「## 二、人员：规模、人均薪资、裁员」写起，最后一节「九、证据清单」把 evidence 再列一遍）。`;
 }
 
 /** 就业评估: Zhiro's facts first, then the agent's reading of them; same run and storage as research.company. */
@@ -168,9 +181,35 @@ export async function startEmployerReport(s: Services, companyName: string): Pro
   const company = s.domain.db.prepare("select id from company where name = ?").get(companyName) as { id: string } | undefined;
   const companyId = company?.id ?? s.domain.upsertCompany(companyName);
   const facts = await employerFacts(s, companyName);
-  const { runId } = spawnRun(s, { runner: "claude", mode: "research.company", subjectType: "company", subjectId: companyId, subjectLabel: companyName, prompt: employerPrompt(s, companyName, facts), schema: EMPLOYER_SCHEMA, maxTurns: 50 });
-  const workflowId = s.workflows.start("research_run", runId, `research_run:${runId}`, { companyName, companyId, prefix: facts });
+  const { runId } = spawnRun(s, { runner: "claude", mode: "research.company", subjectType: "company", subjectId: companyId, subjectLabel: companyName, prompt: employerPrompt(s, companyName, facts.md), schema: EMPLOYER_SCHEMA, maxTurns: 50 });
+  const workflowId = s.workflows.start("research_run", runId, `research_run:${runId}`, { companyName, companyId, prefix: facts.md, staffCash: facts.staffCash });
   return { runId, workflowId };
+}
+
+/**
+ * People, from the agent's year-end headcounts (each with its source) and Zhiro's own staff cash: the headcount and
+ * staff cash per person each year, how they moved, and the layoff reports found. Placed with the facts, before the
+ * agent's reading of them.
+ */
+export function staffMarkdown(so: any, staffCash: Record<string, number | null> = {}): string {
+  const staff = ((so.staff ?? []) as { year: number; employees: number; source: string; url: string }[]).filter((x) => x.employees > 0).sort((a, b) => b.year - a.year);
+  const layoffs = (so.layoffs ?? []) as { date: string; what: string; url: string }[];
+  if (!so.staff && !so.layoffs) return "";
+  const per = (x: (typeof staff)[number]) => { const c = staffCash[String(x.year)]; return c ? c / x.employees : null; };
+  const wan = (v: number | null) => (v === null ? "—" : `${(v / 1e4).toFixed(1)} 万`);
+  const pctOf = (a: number, b: number) => `${a >= b ? "+" : ""}${(((a - b) / b) * 100).toFixed(0)}%`;
+  const out = ["### 人员（员工数由调研员查、带来源；职工现金和人均由职路算）", ""];
+  if (staff.length) {
+    out.push("| 年份 | 年末员工数 | 来源 | 支付给职工的现金 | 人均 |", "|---|---|---|---|---|");
+    for (const x of staff) out.push(`| ${x.year} | ${x.employees} | [${x.source}](${x.url}) | ${staffCash[String(x.year)] ? `${(staffCash[String(x.year)]! / 1e8).toFixed(2)} 亿` : "—"} | ${wan(per(x))} |`);
+    const [last, first] = [staff[0], staff[staff.length - 1]];
+    if (staff.length > 1) {
+      const pl = per(last), pf = per(first);
+      out.push("", `${first.year}→${last.year}：人数 ${first.employees}→${last.employees}（${pctOf(last.employees, first.employees)}）${pl && pf ? `；人均 ${wan(pf)}→${wan(pl)}（${pctOf(pl, pf)}）` : ""}。人均按年末人数算，含奖金、社保和离职补偿，裁员当年会偏高。`);
+    }
+  } else out.push("调研员没有查到历年员工数。");
+  out.push("", layoffs.length ? "裁员、降薪等报道：" : "没有搜到近三年的裁员、降薪报道（没搜到不等于没有）。", ...layoffs.map((l) => `- ${l.date} ${l.what}（[来源](${l.url})）`), "");
+  return out.join("\n");
 }
 
 /** The agent's claims and match as tables under its report, so each conclusion shows its evidence and limits. */
@@ -216,7 +255,7 @@ export function researchRun(s: Services): WorkflowDef {
         mkdirSync(dir, { recursive: true });
         const path = join(dir, `${now().slice(0, 10)}-${runId}.md`);
         const header = `---\ncompany: ${checkpoint.companyName}\nrun: ${runId}\nrunner: claude\ndate: ${now().slice(0, 10)}\nsummary: ${JSON.stringify(so.summary ?? "")}\n---\n\n`;
-        writeFileSync(path, header + (checkpoint.prefix ? `${checkpoint.prefix}\n` : "") + so.report_markdown + claimsMarkdown(so) + "\n", "utf8");
+        writeFileSync(path, header + (checkpoint.prefix ? `${checkpoint.prefix}\n${staffMarkdown(so, checkpoint.staffCash)}\n` : "") + so.report_markdown + claimsMarkdown(so) + "\n", "utf8");
         const ins = s.domain.db.prepare("insert into evidence(id, subject_type, subject_id, grade, url, title, quote, fetched_at, report_path, run_id) values (?,?,?,?,?,?,?,?,?,?)");
         for (const e of so.evidence ?? []) ins.run(ulid(), "company", checkpoint.companyId, e.grade ?? "推断", e.url ?? "", e.title ?? "", e.quote ?? "", now(), path, runId);
         s.domain.db.prepare("update agent_run set status = 'done', output_path = ?, summary = ?, session_id = ?, cost_usd = ?, finished_at = ? where id = ?")

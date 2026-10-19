@@ -74,7 +74,7 @@ describe("employer.compare over the network's shape, without the network", () =>
   afterEach(() => vi.unstubAllGlobals());
   it("reads the list and one industry's statements once, keeps them, ranks only listed ones", async () => {
     const orgs = [
-      { SECUCODE: "300001.SZ", SECURITY_NAME_ABBR: "甲机器人", ORG_NAME: "甲机器人股份有限公司", BOARD_NAME_LEVEL: "机械设备-自动化设备-机器人", EMP_NUM: 100 },
+      { SECUCODE: "300001.SZ", SECURITY_NAME_ABBR: "甲机器人", ORG_NAME: "甲机器人股份有限公司", BOARD_NAME_LEVEL: "机械设备-自动化设备-机器人", EMP_NUM: 100, INDUSTRYCSRC1: "制造业-通用设备制造业" },
       { SECUCODE: "300002.SZ", SECURITY_NAME_ABBR: "乙装备", ORG_NAME: "乙装备股份有限公司", BOARD_NAME_LEVEL: "机械设备-通用设备-机床工具", EMP_NUM: 200 },
       { SECUCODE: "300003.SZ", SECURITY_NAME_ABBR: "丙新上市", ORG_NAME: "丙新上市股份有限公司", BOARD_NAME_LEVEL: "机械设备-专用设备-其他", EMP_NUM: 50 },
       { SECUCODE: "600001.SH", SECURITY_NAME_ABBR: "丁银行", ORG_NAME: "丁银行股份有限公司", BOARD_NAME_LEVEL: "银行-银行Ⅱ-股份制银行Ⅲ", EMP_NUM: 9 },
@@ -82,21 +82,25 @@ describe("employer.compare over the network's shape, without the network", () =>
     const inc = (code: string, y: number, rev: number, np: number, rd: number) => ({ SECUCODE: code, REPORT_DATE: `${y}-12-31 00:00:00`, TOTAL_OPERATE_INCOME: rev, PARENT_NETPROFIT: np, RESEARCH_EXPENSE: rd, OPERATE_COST: rev / 2 });
     const cash = (code: string, y: number, staff: number) => ({ SECUCODE: code, REPORT_DATE: `${y}-12-31 00:00:00`, PAY_STAFF_CASH: staff, ASSIGN_DIVIDEND_PORFIT: 1, CONSTRUCT_LONG_ASSET: 2 });
     const income = [inc("300001.SZ", 2025, 200, 20, 30), inc("300001.SZ", 2024, 150, 10, 20), inc("300001.SZ", 2022, 100, 5, 10), inc("300002.SZ", 2025, 100, 2, 3), inc("300002.SZ", 2024, 110, 4, 4), inc("300002.SZ", 2022, 120, 6, 5)];
+    const nq = { SECUCODE: "830001.NQ", SECURITY_NAME_ABBR: "戊智能", ORG_NAME: "戊智能科技股份有限公司", BOARD_NAME_LEVEL: "工业-机械设备-通用设备", EMP_NUM: 40, INDUSTRYCSRC1: "制造业-通用设备制造业" };
+    income.push(inc("830001.NQ", 2025, 50, 5, 8), inc("830001.NQ", 2024, 40, 3, 6), inc("830001.NQ", 2022, 20, 1, 3));
     const cashflow = [cash("300001.SZ", 2025, 30), cash("300001.SZ", 2024, 25), cash("300002.SZ", 2025, 20), cash("300002.SZ", 2024, 22)];
     const asked: string[] = [];
     vi.stubGlobal("fetch", async (url: string) => {
       const u = new URL(url), report = u.searchParams.get("reportName")!, filter = u.searchParams.get("filter") ?? "";
       asked.push(report);
+      if (u.hostname.startsWith("search-codetable")) return { json: async () => ({ result: u.searchParams.get("keyword") === "戊智能" ? [{ code: "830001", shortName: "戊智能", securityTypeName: "三板" }] : [] }) } as any;
       const pick = (rows: any[]) => rows.filter((r) => filter.includes(r.SECUCODE));
-      const data = report === "RPT_F10_BASIC_ORGINFO" ? orgs : report === "RPT_F10_FINANCE_GINCOME" ? pick(income) : pick(cashflow);
+      const data = report === "RPT_F10_BASIC_ORGINFO" ? (filter.includes("830001.NQ") ? [nq] : orgs) : report === "RPT_F10_FINANCE_GINCOME" ? pick(income) : pick(cashflow);
       return { json: async () => ({ success: true, result: { pages: 1, data } }), status: 200 } as any;
     });
     const db = openDb(join(mkdtempSync(join(tmpdir(), "zhiro-emp-")), "t.db"));
     const now = Date.parse("2026-10-18T00:00:00Z");
-    const r: any = await compare(db, { companies: ["甲机器人", "300002", "丙新上市", "宇树科技"], weights: { growth: 3, rd: 1 } }, now);
+    const r: any = await compare(db, { companies: ["甲机器人", "300002", "丙新上市", "宇树科技", "戊智能"], weights: { growth: 3, rd: 1 } }, now);
     expect(r.year).toBe(2025);
-    expect(r.data.pools).toEqual({ 机械设备: { at: "2026-10-18T00:00:00.000Z", companies: 2 } }); // 丙 has no 2025 revenue; 丁 is another industry
-    const [a, b, c] = r.companies;
+    expect(r.data.pools).toEqual({ "申万一级「机械设备」": { at: "2026-10-18T00:00:00.000Z", companies: 2 }, "证监会行业「制造业-通用设备制造业」": { at: "2026-10-18T00:00:00.000Z", companies: 1 } }); // 丙 has no 2025 revenue; 丁 is another industry
+    const [a, b, c, e] = r.companies;
+    expect(e).toMatchObject({ name: "戊智能", market: "新三板", peerGroup: "证监会行业「制造业-通用设备制造业」", percentile: { growth: 100, rd: 100, pay: null, profit: 50 } }); // against 甲 alone; no cash-flow rows, so no pay
     expect(a).toMatchObject({ name: "甲机器人", coverage: "4/4", percentile: { growth: 75, rd: 75, pay: 75, profit: 75 }, peers: { growth: 2 }, outdoneBy: [] });
     expect(b.outdoneBy).toEqual(["甲机器人"]);
     expect(b).toMatchObject({ name: "乙装备", percentile: { growth: 25, rd: 25, pay: 25, profit: 25 } });

@@ -158,3 +158,11 @@ entries condense what still holds.
   the money went, whether incentive plans reach technical staff, listing or IPO progress across the three exchanges,
   job signals, and the match with the person, kept apart — and hands back each conclusion with its kind, sources, the
   counter-claims it looked for and its limits, shown as a table under the report.
+  2026-10-19: a 新三板 company is compared too — its own industry scheme is not 申万, so it is measured against the
+  A-share companies of its 证监会 industry, which both carry, and says so. (The first list also left out 北交所: its
+  label is 「北京证券交易所A股」.) The report has a section on people — the person wants to know about layoffs, pay
+  per head and size: the agent hands back year-end headcounts each with its source (annual report 员工情况; for an
+  unlisted company the 社保参保人数 of its public annual filing, or a prospectus) and the layoff, pay-cut and
+  unpaid-wage reports it found; Zhiro divides its own staff cash by those headcounts and states how headcount and pay
+  per head moved. Hong Kong, US and unlisted companies are not placed among peers: no bulk statements, and for Hong
+  Kong no staff cash.

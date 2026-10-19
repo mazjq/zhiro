@@ -1,5 +1,6 @@
 import type { Db } from "../db.js";
 import { normName } from "./intel.js";
+import { resolveNeeq } from "./neeq.js";
 
 /**
  * Comparing employers (D-29): where each listed company stands among the A-share companies of its own 申万一级
@@ -11,11 +12,11 @@ import { normName } from "./intel.js";
  */
 const UA = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/128.0 Safari/537.36";
 const F10 = "https://datacenter.eastmoney.com/securities/api/data/v1/get";
-const A_SHARE = ["深交所主板A股", "上交所主板A股", "深交所创业板A股", "上交所科创板A股", "北交所A股", "深交所风险警示板A股", "上交所风险警示板A股"];
+const A_SHARE = ["深交所主板A股", "上交所主板A股", "深交所创业板A股", "上交所科创板A股", "北京证券交易所A股", "深交所风险警示板A股", "上交所风险警示板A股"];
 const KEEP_DAYS = 30;
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
-export interface Company { code: string; name: string; org: string; industry: string; employees: number | null }
+export interface Company { code: string; name: string; org: string; industry: string; employees: number | null; market?: string; csrc?: string }
 export interface YearRow { revenue: number | null; netProfit: number | null; rd: number | null; opCost: number | null; staffCash: number | null; dividendCash: number | null; capex: number | null }
 export interface PeerRow extends Company { years: Record<string, YearRow> }
 
@@ -47,11 +48,11 @@ const keep = (db: Db, key: string, data: unknown, now: number) =>
 
 /** Every A-share company with its 申万 industry (一级-二级-三级) and latest staff count. */
 export async function universe(db: Db, now = Date.now()): Promise<{ at: string; data: Company[] }> {
-  const hit = cached<Company[]>(db, "universe", now);
+  const hit = cached<Company[]>(db, "universe:3", now); // :2 added 北交所, :3 the 证监会 industry
   if (hit) return hit;
-  const rows = await f10All("RPT_F10_BASIC_ORGINFO", "SECUCODE,SECURITY_NAME_ABBR,ORG_NAME,BOARD_NAME_LEVEL,EMP_NUM", `(SECURITY_TYPE in (${A_SHARE.map((t) => `"${t}"`).join(",")}))`);
-  const data: Company[] = rows.filter((r) => r.BOARD_NAME_LEVEL).map((r) => ({ code: r.SECUCODE, name: r.SECURITY_NAME_ABBR ?? "", org: r.ORG_NAME ?? "", industry: r.BOARD_NAME_LEVEL, employees: Number(r.EMP_NUM) > 0 ? Number(r.EMP_NUM) : null }));
-  keep(db, "universe", data, now);
+  const rows = await f10All("RPT_F10_BASIC_ORGINFO", "SECUCODE,SECURITY_NAME_ABBR,ORG_NAME,BOARD_NAME_LEVEL,EMP_NUM,INDUSTRYCSRC1", `(SECURITY_TYPE in (${A_SHARE.map((t) => `"${t}"`).join(",")}))`);
+  const data: Company[] = rows.filter((r) => r.BOARD_NAME_LEVEL).map((r) => ({ code: r.SECUCODE, name: r.SECURITY_NAME_ABBR ?? "", org: r.ORG_NAME ?? "", industry: r.BOARD_NAME_LEVEL, employees: Number(r.EMP_NUM) > 0 ? Number(r.EMP_NUM) : null, csrc: r.INDUSTRYCSRC1 ?? "" }));
+  keep(db, "universe:3", data, now);
   return { at: new Date(now).toISOString(), data };
 }
 
@@ -61,16 +62,34 @@ export function latestYear(now = Date.now()) {
   return d.getUTCMonth() >= 4 ? d.getUTCFullYear() - 1 : d.getUTCFullYear() - 2;
 }
 export const sector = (industry: string) => industry.split("-")[0];
+/**
+ * Whom a company is measured against: an A-share company, the A-share companies of its 申万一级 industry; a 新三板
+ * company (whose own industry scheme is not 申万), the A-share companies of its 证监会 industry, which both carry.
+ */
+export function peerGroup(c: Company): { key: string; label: string; has: (x: Company) => boolean } {
+  if (c.market === "新三板" && c.csrc) return { key: `csrc:${c.csrc}`, label: `证监会行业「${c.csrc}」`, has: (x) => x.csrc === c.csrc };
+  const top = sector(c.industry);
+  return { key: top, label: `申万一级「${top}」`, has: (x) => sector(x.industry) === top };
+}
 
-/** One 申万一级 industry: each company's statements for `year` and the three years before (for growth). */
-export async function industryPool(db: Db, top: string, year: number, all: Company[], now = Date.now()): Promise<{ at: string; data: PeerRow[] }> {
-  const key = `industry:${top}:${year}`;
+/** One peer group: each company's statements for `year` and the three years before (for growth). */
+export async function industryPool(db: Db, group: ReturnType<typeof peerGroup>, year: number, all: Company[], now = Date.now()): Promise<{ at: string; data: PeerRow[] }> {
+  const key = `industry:${group.key}:${year}`;
   const hit = cached<PeerRow[]>(db, key, now);
   if (hit) return hit;
-  const members = all.filter((c) => sector(c.industry) === top);
-  const years = [year, year - 1, year - 2, year - 3];
-  const dates = years.map((y) => `'${y}-12-31'`).join(",");
+  const members = all.filter(group.has);
   const rows = new Map<string, PeerRow>(members.map((c) => [c.code, { ...c, years: {} }]));
+  await statements(rows, year);
+  // a company without that year's revenue is not in the pool (delisted, or listed after the year)
+  const data = [...rows.values()].filter((r) => (r.years[String(year)]?.revenue ?? 0) > 0);
+  keep(db, key, data, now);
+  return { at: new Date(now).toISOString(), data };
+}
+
+/** Fill each row's statements for `year` and the three years before, 100 companies a request. */
+async function statements(rows: Map<string, PeerRow>, year: number) {
+  const members = [...rows.values()];
+  const dates = [year, year - 1, year - 2, year - 3].map((y) => `'${y}-12-31'`).join(",");
   const row = (code: string, date: string) => {
     const r = rows.get(code)!, y = date.slice(0, 4);
     return (r.years[y] ??= { revenue: null, netProfit: null, rd: null, opCost: null, staffCash: null, dividendCash: null, capex: null });
@@ -89,10 +108,14 @@ export async function industryPool(db: Db, top: string, year: number, all: Compa
     }
     await sleep(300);
   }
-  // a company without that year's revenue is not in the pool (delisted, or listed after the year)
-  const data = [...rows.values()].filter((r) => (r.years[String(year)]?.revenue ?? 0) > 0);
-  keep(db, key, data, now);
-  return { at: new Date(now).toISOString(), data };
+}
+
+/** A 新三板 company by name: the code table finds it, its F10 profile gives the industry and staff count. */
+async function neeqCompany(name: string): Promise<Company | null> {
+  const hit = await resolveNeeq(name, normName(name)).catch(() => null);
+  if (!hit) return null;
+  const r = (await f10("RPT_F10_BASIC_ORGINFO", "SECUCODE,SECURITY_NAME_ABBR,ORG_NAME,BOARD_NAME_LEVEL,EMP_NUM,INDUSTRYCSRC1", `(SECUCODE="${hit.code}.NQ")`)).data[0];
+  return r?.BOARD_NAME_LEVEL ? { code: r.SECUCODE, name: r.SECURITY_NAME_ABBR ?? hit.name, org: r.ORG_NAME ?? "", industry: r.BOARD_NAME_LEVEL, employees: Number(r.EMP_NUM) > 0 ? Number(r.EMP_NUM) : null, market: "新三板", csrc: r.INDUSTRYCSRC1 ?? "" } : null;
 }
 
 // ---------- the measures ----------
@@ -234,17 +257,20 @@ export async function compare(db: Db, q: { companies: string[]; weights?: Partia
   const uni = await universe(db, now);
   const found: Company[] = [], notFound: { query: string; reason: string; candidates?: string[] }[] = [];
   for (const name of q.companies.slice(0, 15)) {
-    const c = findCompany(uni.data, name);
-    if (!c) notFound.push({ query: name, reason: "不是 A 股上市公司（或名字写法不同；港股、美股、新三板和未上市公司不在这张表里，不和上市公司混排）" });
+    const c = findCompany(uni.data, name) ?? (await neeqCompany(name));
+    if (!c) notFound.push({ query: name, reason: "不是 A 股或新三板公司（或名字写法不同）；港股、美股和未上市公司没有可批量比对的财报，不放进这张表" });
     else if ("candidates" in c) notFound.push({ query: name, reason: "有几家名字相近，用股票代码再查", candidates: c.candidates.map((x) => `${x.name} ${x.code}`) });
     else if (!found.some((f) => f.code === c.code)) found.push(c);
   }
   const pools = new Map<string, { at: string; data: PeerRow[] }>();
-  for (const top of new Set(found.map((c) => sector(c.industry)))) pools.set(top, await industryPool(db, top, year, uni.data, now));
+  for (const c of found) { const g = peerGroup(c); if (!pools.has(g.label)) pools.set(g.label, await industryPool(db, g, year, uni.data, now)); }
+  // 新三板 companies are measured with the A-share yardstick of their industry; their own statements are read here
+  const outside = new Map<string, PeerRow>(found.filter((c) => c.market === "新三板").map((c) => [c.code, { ...c, years: {} }]));
+  if (outside.size) await statements(outside, year);
 
   const rows = found.map((c) => {
-    const pool = pools.get(sector(c.industry))!;
-    const me = pool.data.find((r) => r.code === c.code);
+    const pool = pools.get(peerGroup(c).label)!;
+    const me = pool.data.find((r) => r.code === c.code) ?? (outside.get(c.code)?.years[String(year)]?.revenue ? outside.get(c.code) : undefined);
     if (!me) return { company: c, missingYear: true as const };
     const m = measures(me, year);
     const all = pool.data.map((r) => measures(r, year).main);
@@ -268,13 +294,14 @@ export async function compare(db: Db, q: { companies: string[]; weights?: Partia
   const outdone = notOutdone(picks);
 
   return {
-    year, peerGroup: "申万一级行业内的全部 A 股上市公司（当年有营收的）",
+    year, peerGroup: "同一行业的全部 A 股上市公司（当年有营收的）：A 股公司按申万一级，新三板公司按证监会行业",
     data: { universeAt: uni.at, pools: Object.fromEntries([...pools].map(([k, v]) => [k, { at: v.at, companies: v.data.length }])), source: "东方财富 F10：公司概况、利润表、现金流量表（年报）" },
     measures: FACETS,
     companies: rows.map((r) => {
-      if (!("pct" in r)) return { code: r.company.code, name: r.company.name, org: r.company.org, industry: r.company.industry, note: `没有 ${year} 年报数据（可能是当年之后才上市）` };
+      if (!("pct" in r)) return { code: r.company.code, name: r.company.name, org: r.company.org, industry: r.company.industry, market: r.company.market ?? "A股", note: `没有 ${year} 年报数据（可能是当年之后才上市）` };
       return {
-        code: r.company.code, name: r.company.name, org: r.company.org, industry: r.company.industry,
+        code: r.company.code, name: r.company.name, org: r.company.org, industry: r.company.industry, market: r.company.market ?? "A股",
+        peerGroup: peerGroup(r.company).label, ...(r.company.market === "新三板" ? { yardstick: "新三板公司，按同一证监会行业的 A 股上市公司来量" } : {}),
         years: r.years, value: r.value, percentile: r.pct, peers: r.peers, coverage: `${r.coverage}/4`, more: r.more, movedTogether: r.moved, labels: r.labels,
         outdoneBy: outdone.has(r.company.code) ? outdone.get(r.company.code)!.map((c) => ok.find((x) => x.company.code === c)!.company.name) : null,
         under: Object.fromEntries(Object.entries(under).map(([k, v]) => [k, v.places.get(r.company.code)])),
@@ -298,14 +325,14 @@ export function factsMarkdown(c: any, r: { year: number; data: any; peerGroup: s
   if (!c.years) return `## 一、事实（职路取数）\n\n${c.note ?? "不是 A 股上市公司，职路没有它的同行数据。"}\n`;
   const ys = Object.keys(c.years).sort().reverse();
   const row = (label: string, f: (y: YearRow) => string) => `| ${label} | ${ys.map((y) => f(c.years[y])).join(" | ")} |`;
-  const pool = r.data.pools[sector(c.industry)];
+  const pool = r.data.pools[c.peerGroup];
   return [
     `## 一、事实（职路取数，${r.year} 年报口径）`, "",
     `${c.name}（${c.code}）· ${c.industry} · 员工 ${c.more.employees ?? "—"} 人（最新）`, "",
     `| 年份 | ${ys.join(" | ")} |`, `|---|${ys.map(() => "---").join("|")}|`,
     row("营业总收入", (y) => yi(y.revenue)), row("归母净利润", (y) => yi(y.netProfit)), row("研发费用", (y) => yi(y.rd)),
     row("支付给职工的现金", (y) => yi(y.staffCash)), row("分配股利、利润或偿付利息的现金", (y) => yi(y.dividendCash)), row("购建长期资产的现金", (y) => yi(y.capex)), "",
-    `在${sector(c.industry)}行业 ${pool?.companies ?? "?"} 家 A 股公司里的位置（百分位越高越好）：`, "",
+    `在${c.peerGroup} ${pool?.companies ?? "?"} 家 A 股公司里的位置（百分位越高越好）${c.yardstick ? `；${c.yardstick}` : ""}：`, "",
     ...FACETS.map((f) => `- ${f.label}（${f.measure}）：${f.key === "pay" ? (c.value.pay === null ? "—" : `${(c.value.pay / 1e4).toFixed(1)} 万/人`) : pc(c.value[f.key])}，同行第 ${c.percentile[f.key] ?? "—"} 百分位${f.note ? `（${f.note}）` : ""}`),
     `- 毛利率 ${pc(c.more.grossMargin)}；购建长期资产占营收 ${pc(c.more.capexToRevenue)}；分配股利和偿付利息的现金占净利 ${pc(c.more.dividendCashToProfit)}（含利息，不全是分红）`,
     ...(c.movedTogether.length ? [`- ${r.year} 年同期一起发生的：${c.movedTogether.join("；")}`] : []),

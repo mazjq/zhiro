@@ -20,7 +20,7 @@ export default function Compare() {
     <>
       <H1 sub="每家公司在自己行业的全部上市公司里排在哪；再看在你在意的方面下，这几家谁更靠前。不打总分。">比较单位</H1>
       <div className="flex gap-2 mb-3 items-start">
-        <textarea value={text} onChange={(e) => setText(e.target.value)} rows={2} placeholder="公司名或股票代码，用逗号或换行隔开，最多 15 家（只比 A 股上市公司）" className="px-3 py-1.5 border border-line rounded-md bg-paper text-sm flex-1 min-w-0" />
+        <textarea value={text} onChange={(e) => setText(e.target.value)} rows={2} placeholder="公司名或股票代码，用逗号或换行隔开，最多 15 家（A 股和新三板公司）" className="px-3 py-1.5 border border-line rounded-md bg-paper text-sm flex-1 min-w-0" />
         <Button tone="primary" onClick={() => setNames(text.split(/[\n,，、;；]+/).map((s) => s.trim()).filter(Boolean))}>比较</Button>
       </div>
       {names.length ? <CompareResults names={names} /> : <Empty>输入几家公司，比如「汇川技术，埃斯顿，华中数控」。</Empty>}
@@ -92,7 +92,7 @@ function Row({ c, view, aside }: { c: any; view: string; aside?: ReactNode }) {
     <div className="px-4 py-3">
       <div className="flex items-center gap-2 flex-wrap">
         <span className="font-medium">{c.name}</span>
-        <span className="text-xs text-ink-3">{c.industry} · {c.code}</span>
+        <span className="text-xs text-ink-3" title={c.yardstick ?? ""}>{c.market === "新三板" ? "新三板 · " : ""}{c.industry} · {c.code} · 同行：{c.peerGroup}</span>
         {c.labels.map((l: any) => <span key={l.label} title={l.rule}><Chip tone="accent">{l.label}</Chip></span>)}
         <span className="ml-auto text-sm font-medium">{place}</span>
       </div>
