@@ -164,5 +164,8 @@ entries condense what still holds.
   per head and size: the agent hands back year-end headcounts each with its source (annual report 员工情况; for an
   unlisted company the 社保参保人数 of its public annual filing, or a prospectus) and the layoff, pay-cut and
   unpaid-wage reports it found; Zhiro divides its own staff cash by those headcounts and states how headcount and pay
-  per head moved. Hong Kong, US and unlisted companies are not placed among peers: no bulk statements, and for Hong
-  Kong no staff cash.
+  per head moved. A Hong Kong or US listing is placed too, read one company at a time (revenue, profit, gross margin,
+  R&D), against the A-share companies of the 申万一级 industry asked for, or else the one most A-share companies in
+  the comparison are in; neither market reports cash paid to staff, so its pay measure is missing and shown as
+  bounds, and amounts stay in the report's own currency (only ratios are compared). Unlisted companies are not
+  placed: they publish no statements.

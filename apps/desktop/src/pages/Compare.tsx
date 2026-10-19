@@ -16,20 +16,23 @@ const tone = (p: number | null) => (p === null ? "" : p >= 75 ? "good" : p >= 50
 export default function Compare() {
   const [text, setText] = useState("");
   const [names, setNames] = useState<string[]>([]);
+  const [peer, setPeer] = useState("");
+  const [asked, setAsked] = useState("");
   return (
     <>
       <H1 sub="每家公司在自己行业的全部上市公司里排在哪；再看在你在意的方面下，这几家谁更靠前。不打总分。">比较单位</H1>
       <div className="flex gap-2 mb-3 items-start">
-        <textarea value={text} onChange={(e) => setText(e.target.value)} rows={2} placeholder="公司名或股票代码，用逗号或换行隔开，最多 15 家（A 股和新三板公司）" className="px-3 py-1.5 border border-line rounded-md bg-paper text-sm flex-1 min-w-0" />
-        <Button tone="primary" onClick={() => setNames(text.split(/[\n,，、;；]+/).map((s) => s.trim()).filter(Boolean))}>比较</Button>
+        <textarea value={text} onChange={(e) => setText(e.target.value)} rows={2} placeholder="公司名或股票代码，用逗号或换行隔开，最多 15 家（A 股、新三板、港股、美股）" className="px-3 py-1.5 border border-line rounded-md bg-paper text-sm flex-1 min-w-0" />
+        <input value={peer} onChange={(e) => setPeer(e.target.value)} placeholder="港美股按哪个行业比（可空）" title="申万一级行业名，如 机械设备、电子、汽车。空着就按一起比的 A 股公司所在行业" className="px-3 py-1.5 border border-line rounded-md bg-paper text-sm w-48" />
+        <Button tone="primary" onClick={() => { setAsked(peer.trim()); setNames(text.split(/[\n,，、;；]+/).map((s) => s.trim()).filter(Boolean)); }}>比较</Button>
       </div>
-      {names.length ? <CompareResults names={names} /> : <Empty>输入几家公司，比如「汇川技术，埃斯顿，华中数控」。</Empty>}
+      {names.length ? <CompareResults names={names} peerIndustry={asked} /> : <Empty>输入几家公司，比如「汇川技术，埃斯顿，优必选」。</Empty>}
     </>
   );
 }
 
 /** The comparison of `names`; `aside` adds a line under a company (a report shows its posts there). */
-export function CompareResults({ names, aside }: { names: string[]; aside?: (c: any) => ReactNode }) {
+export function CompareResults({ names, aside, peerIndustry }: { names: string[]; aside?: (c: any) => ReactNode; peerIndustry?: string }) {
   const [view, setView] = useState<string>("均衡");
   const [own, setOwn] = useState<Record<Facet, number>>({ growth: 25, rd: 25, pay: 25, profit: 25 });
   const [r, setR] = useState<any>(null);
@@ -37,10 +40,10 @@ export function CompareResults({ names, aside }: { names: string[]; aside?: (c: 
   const [msg, setMsg] = useState("");
   const run = async (scenario: string, weights = own) => {
     setBusy(true); setMsg("");
-    try { setR(await call("employer.compare", { companies: names.slice(0, 15), ...(scenario === "你设的权重" ? { weights } : {}) })); setView(scenario); }
+    try { setR(await call("employer.compare", { companies: names.slice(0, 15), ...(peerIndustry ? { peerIndustry } : {}), ...(scenario === "你设的权重" ? { weights } : {}) })); setView(scenario); }
     catch (e: any) { setMsg(e.message); } finally { setBusy(false); }
   };
-  useEffect(() => { setR(null); if (names.length) run(view === "你设的权重" ? "均衡" : view); }, [names.join("|")]);
+  useEffect(() => { setR(null); if (names.length) run(view === "你设的权重" ? "均衡" : view); }, [names.join("|"), peerIndustry]);
   const rows: any[] = r?.companies ?? [];
   const at = (c: any) => c.under[view]?.place ?? c.under[view]?.byKnown ?? 99;
   const ranked = rows.filter((c) => c.under).sort((a, b) => at(a) - at(b));
@@ -87,12 +90,12 @@ const notFound = (xs: any[]) => [...xs.reduce((m, n) => m.set(n.reason, [...(m.g
 
 function Row({ c, view, aside }: { c: any; view: string; aside?: ReactNode }) {
   const u = c.under?.[view];
-  const place = !u ? "" : u.place !== null ? `第 ${u.place} 名${u.usually[0] !== u.usually[1] ? `（通常 ${u.usually[0]}–${u.usually[1]}）` : ""} · 进前三 ${u.top3Share}%` : `缺${u.missing.length}项：按已知第 ${u.byKnown} 名，最好 ${u.best}、最坏 ${u.worst}`;
+  const place = !u ? "" : u.place !== null ? `第 ${u.place} 名${u.usually[0] !== u.usually[1] ? `（通常 ${u.usually[0]}–${u.usually[1]}）` : ""}${u.top3Share !== null ? ` · 进前三 ${u.top3Share}%` : ""}` : `缺${u.missing.length}项：按已知第 ${u.byKnown} 名，最好 ${u.best}、最坏 ${u.worst}`;
   return (
     <div className="px-4 py-3">
       <div className="flex items-center gap-2 flex-wrap">
         <span className="font-medium">{c.name}</span>
-        <span className="text-xs text-ink-3" title={c.yardstick ?? ""}>{c.market === "新三板" ? "新三板 · " : ""}{c.industry} · {c.code} · 同行：{c.peerGroup}</span>
+        <span className="text-xs text-ink-3">{c.market && c.market !== "A股" ? `${c.market} · ` : ""}{c.industry ? `${c.industry} · ` : ""}{c.code} · 同行：{c.peerGroup}</span>
         {c.labels.map((l: any) => <span key={l.label} title={l.rule}><Chip tone="accent">{l.label}</Chip></span>)}
         <span className="ml-auto text-sm font-medium">{place}</span>
       </div>
@@ -109,6 +112,7 @@ function Row({ c, view, aside }: { c: any; view: string; aside?: ReactNode }) {
         {c.outdoneBy?.length > 0 && <span className="text-ink-3"> 四项都不如{c.outdoneBy.join("、")}。</span>}
         {c.anyWeighting !== null && <span className="text-ink-3"> 不论偏好，进前三的权重占 {c.anyWeighting}%。</span>}
       </div>
+      {c.yardstick && <div className="mt-1 text-xs text-amber">{c.yardstick}</div>}
       {aside && <div className="mt-1 text-xs">{aside}</div>}
     </div>
   );

@@ -1,6 +1,7 @@
 import type { Db } from "../db.js";
 import { normName } from "./intel.js";
 import { resolveNeeq } from "./neeq.js";
+import { companyFinancials } from "./research-data.js";
 
 /**
  * Comparing employers (D-29): where each listed company stands among the A-share companies of its own 申万一级
@@ -16,7 +17,7 @@ const A_SHARE = ["深交所主板A股", "上交所主板A股", "深交所创业�
 const KEEP_DAYS = 30;
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
-export interface Company { code: string; name: string; org: string; industry: string; employees: number | null; market?: string; csrc?: string }
+export interface Company { code: string; name: string; org: string; industry: string; employees: number | null; market?: string; csrc?: string; peerSw?: string; approx?: boolean }
 export interface YearRow { revenue: number | null; netProfit: number | null; rd: number | null; opCost: number | null; staffCash: number | null; dividendCash: number | null; capex: number | null }
 export interface PeerRow extends Company { years: Record<string, YearRow> }
 
@@ -67,6 +68,7 @@ export const sector = (industry: string) => industry.split("-")[0];
  * company (whose own industry scheme is not 申万), the A-share companies of its 证监会 industry, which both carry.
  */
 export function peerGroup(c: Company): { key: string; label: string; has: (x: Company) => boolean } {
+  if (c.peerSw) return { key: c.peerSw, label: `申万一级「${c.peerSw}」`, has: (x) => sector(x.industry) === c.peerSw };
   if (c.market === "新三板" && c.csrc) return { key: `csrc:${c.csrc}`, label: `证监会行业「${c.csrc}」`, has: (x) => x.csrc === c.csrc };
   const top = sector(c.industry);
   return { key: top, label: `申万一级「${top}」`, has: (x) => sector(x.industry) === top };
@@ -116,6 +118,33 @@ async function neeqCompany(name: string): Promise<Company | null> {
   if (!hit) return null;
   const r = (await f10("RPT_F10_BASIC_ORGINFO", "SECUCODE,SECURITY_NAME_ABBR,ORG_NAME,BOARD_NAME_LEVEL,EMP_NUM,INDUSTRYCSRC1", `(SECUCODE="${hit.code}.NQ")`)).data[0];
   return r?.BOARD_NAME_LEVEL ? { code: r.SECUCODE, name: r.SECURITY_NAME_ABBR ?? hit.name, org: r.ORG_NAME ?? "", industry: r.BOARD_NAME_LEVEL, employees: Number(r.EMP_NUM) > 0 ? Number(r.EMP_NUM) : null, market: "新三板", csrc: r.INDUSTRYCSRC1 ?? "" } : null;
+}
+
+/**
+ * A Hong Kong or US listing: found the way company.financials finds it, then its annual reports (revenue, net profit,
+ * gross margin, R&D) read one by one. Neither market reports cash paid to staff, so there is no pay measure.
+ */
+async function overseas(name: string): Promise<PeerRow | null> {
+  const f: any = await companyFinancials({ name }).catch(() => null);
+  const sec = f?.status === "listed" ? f.security : null;
+  if (!sec || (sec.market !== "港股" && sec.market !== "美股")) return null;
+  const hk = sec.market === "港股", code = hk ? `${sec.code}.HK` : sec.code;
+  const main = (await f10(hk ? "RPT_HKF10_FN_MAININDICATOR" : "RPT_USF10_FN_GMAININDICATOR", "ALL", `(SECUCODE="${code}")`)).data;
+  const annual = main.filter((r) => (hk ? /年报/.test(String(r.REPORT_TYPE)) : r.DATE_TYPE === "年报"));
+  await sleep(300);
+  const rd = (await f10(hk ? "RPT_HKF10_FN_INCOME_PC" : "RPT_USF10_FN_INCOME", "ALL", hk ? `(SECUCODE="${code}")(STD_ITEM_NAME="研发费用")(DATE_TYPE_CODE="001")` : `(SECUCODE="${code}")(REPORT_TYPE="年报")(ITEM_NAME="研发费用")`).catch(() => ({ data: [] as any[] }))).data;
+  const rdOn = new Map(rd.map((r) => [String(r.REPORT_DATE).slice(0, 10), Number(r.AMOUNT)]));
+  const years: Record<string, YearRow> = {};
+  for (const r of annual) {
+    const y = String(hk ? r.REPORT_TYPE : r.REPORT_DATA_TYPE).match(/\d{4}/)?.[0]; // a year ending in March is named by the source, as 「2025年年报」
+    if (!y || years[y]) continue;
+    const num = (v: unknown) => (v === null || v === undefined || v === "" || !Number.isFinite(Number(v)) ? null : Number(v));
+    const revenue = num(r.OPERATE_INCOME), gm = num(r.GROSS_PROFIT_RATIO);
+    years[y] = { revenue, netProfit: num(hk ? r.HOLDER_PROFIT : r.PARENT_HOLDER_NETPROFIT), rd: rdOn.get(String(r.REPORT_DATE).slice(0, 10)) ?? null, opCost: revenue !== null && gm !== null ? revenue * (1 - gm / 100) : null, staffCash: null, dividendCash: null, capex: null };
+  }
+  // amounts stay in the report's own currency (东财's CURRENCY names the listing's, not always the report's): only
+  // ratios are compared, and they do not depend on it
+  return { code, name: sec.name, org: sec.name, industry: f.basic?.industry ?? "", employees: f.basic?.employees ?? null, market: sec.market, approx: !!f.approx, years };
 }
 
 // ---------- the measures ----------
@@ -219,7 +248,7 @@ export function placeUnder(picks: Pick[], center: Record<Facet, number>, spread:
   const out = new Map<string, any>();
   complete.forEach((p, i) => {
     const r = ranks.get(p.code)!;
-    out.set(p.code, { place: rankOf(at[i], at.filter((_, j) => j !== i)), usually: [q(r, 0.1), q(r, 0.9)], top3Share: r.length ? Math.round((r.filter((x) => x <= 3).length / r.length) * 20) * 5 : null });
+    out.set(p.code, { place: rankOf(at[i], at.filter((_, j) => j !== i)), usually: [q(r, 0.1), q(r, 0.9)], top3Share: r.length && complete.length > 3 ? Math.round((r.filter((x) => x <= 3).length / r.length) * 20) * 5 : null }); // three or fewer complete: always in the top three, which says nothing
   });
   for (const p of picks.filter((x) => !complete.includes(x))) {
     const known = KEYS.filter((k) => p.pct[k] !== null), wsum = known.reduce((a, k) => a + center[k], 0);
@@ -252,15 +281,28 @@ export function findCompany(all: Company[], query: string): Company | { candidat
   return near.length === 1 ? near[0] : near.length ? { candidates: near.slice(0, 5) } : null;
 }
 
-export async function compare(db: Db, q: { companies: string[]; weights?: Partial<Record<Facet, number>>; spread?: number; year?: number }, now = Date.now()) {
+export async function compare(db: Db, q: { companies: string[]; weights?: Partial<Record<Facet, number>>; spread?: number; year?: number; peerIndustry?: string }, now = Date.now()) {
   const year = q.year ?? latestYear(now);
   const uni = await universe(db, now);
   const found: Company[] = [], notFound: { query: string; reason: string; candidates?: string[] }[] = [];
+  const elsewhere: string[] = [];
   for (const name of q.companies.slice(0, 15)) {
     const c = findCompany(uni.data, name) ?? (await neeqCompany(name));
-    if (!c) notFound.push({ query: name, reason: "不是 A 股或新三板公司（或名字写法不同）；港股、美股和未上市公司没有可批量比对的财报，不放进这张表" });
+    if (!c) elsewhere.push(name);
     else if ("candidates" in c) notFound.push({ query: name, reason: "有几家名字相近，用股票代码再查", candidates: c.candidates.map((x) => `${x.name} ${x.code}`) });
     else if (!found.some((f) => f.code === c.code)) found.push(c);
+  }
+  // 港股 / 美股 have no 申万 industry: they are measured against the one asked for, else the one most of the A-share
+  // companies here are in
+  const tops = found.filter((c) => !c.market).map((c) => sector(c.industry));
+  const peerSw = q.peerIndustry?.trim() || [...new Set(tops)].sort((a, b) => tops.filter((x) => x === b).length - tops.filter((x) => x === a).length)[0];
+  const abroad = new Map<string, PeerRow>();
+  for (const name of elsewhere) {
+    const r = await overseas(name);
+    if (!r) notFound.push({ query: name, reason: "不是 A 股、新三板、港股或美股上市公司（或名字写法不同）；未上市公司没有公开财报，放不进这张表" });
+    else if (!peerSw) notFound.push({ query: name, reason: `${r.market}公司没有申万行业：和 A 股公司一起比，或给出拿哪个申万一级行业当同行（peerIndustry）` });
+    else if (!uni.data.some((c) => sector(c.industry) === peerSw)) notFound.push({ query: name, reason: `没有叫「${peerSw}」的申万一级行业` });
+    else if (!found.some((f) => f.code === r.code)) { r.peerSw = peerSw; abroad.set(r.code, r); found.push(r); }
   }
   const pools = new Map<string, { at: string; data: PeerRow[] }>();
   for (const c of found) { const g = peerGroup(c); if (!pools.has(g.label)) pools.set(g.label, await industryPool(db, g, year, uni.data, now)); }
@@ -270,7 +312,8 @@ export async function compare(db: Db, q: { companies: string[]; weights?: Partia
 
   const rows = found.map((c) => {
     const pool = pools.get(peerGroup(c).label)!;
-    const me = pool.data.find((r) => r.code === c.code) ?? (outside.get(c.code)?.years[String(year)]?.revenue ? outside.get(c.code) : undefined);
+    const other = outside.get(c.code) ?? abroad.get(c.code);
+    const me = pool.data.find((r) => r.code === c.code) ?? (other?.years[String(year)]?.revenue ? other : undefined);
     if (!me) return { company: c, missingYear: true as const };
     const m = measures(me, year);
     const all = pool.data.map((r) => measures(r, year).main);
@@ -302,6 +345,7 @@ export async function compare(db: Db, q: { companies: string[]; weights?: Partia
       return {
         code: r.company.code, name: r.company.name, org: r.company.org, industry: r.company.industry, market: r.company.market ?? "A股",
         peerGroup: peerGroup(r.company).label, ...(r.company.market === "新三板" ? { yardstick: "新三板公司，按同一证监会行业的 A 股上市公司来量" } : {}),
+        ...(r.company.peerSw ? { yardstick: `${r.company.market}公司，按申万一级「${r.company.peerSw}」的 A 股上市公司来量；不披露支付给职工的现金，待遇信号缺；金额是公司财报自己的币种，比较的都是比例，不受币种影响${r.company.approx ? `；「${r.company.name}」是按名字相近认的，请核对是不是你要的那家` : ""}` } : {}),
         years: r.years, value: r.value, percentile: r.pct, peers: r.peers, coverage: `${r.coverage}/4`, more: r.more, movedTogether: r.moved, labels: r.labels,
         outdoneBy: outdone.has(r.company.code) ? outdone.get(r.company.code)!.map((c) => ok.find((x) => x.company.code === c)!.company.name) : null,
         under: Object.fromEntries(Object.entries(under).map(([k, v]) => [k, v.places.get(r.company.code)])),
@@ -323,7 +367,7 @@ const pc = (v: number | null | undefined) => (v === null || v === undefined ? "�
  */
 export function factsMarkdown(c: any, r: { year: number; data: any; peerGroup: string }): string {
   if (!c.years) return `## 一、事实（职路取数）\n\n${c.note ?? "不是 A 股上市公司，职路没有它的同行数据。"}\n`;
-  const ys = Object.keys(c.years).sort().reverse();
+  const ys = Object.keys(c.years).sort().reverse().slice(0, 4);
   const row = (label: string, f: (y: YearRow) => string) => `| ${label} | ${ys.map((y) => f(c.years[y])).join(" | ")} |`;
   const pool = r.data.pools[c.peerGroup];
   return [

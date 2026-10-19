@@ -84,22 +84,35 @@ describe("employer.compare over the network's shape, without the network", () =>
     const income = [inc("300001.SZ", 2025, 200, 20, 30), inc("300001.SZ", 2024, 150, 10, 20), inc("300001.SZ", 2022, 100, 5, 10), inc("300002.SZ", 2025, 100, 2, 3), inc("300002.SZ", 2024, 110, 4, 4), inc("300002.SZ", 2022, 120, 6, 5)];
     const nq = { SECUCODE: "830001.NQ", SECURITY_NAME_ABBR: "戊智能", ORG_NAME: "戊智能科技股份有限公司", BOARD_NAME_LEVEL: "工业-机械设备-通用设备", EMP_NUM: 40, INDUSTRYCSRC1: "制造业-通用设备制造业" };
     income.push(inc("830001.NQ", 2025, 50, 5, 8), inc("830001.NQ", 2024, 40, 3, 6), inc("830001.NQ", 2022, 20, 1, 3));
+    // a Hong Kong listing: annual rows among the interim ones, a year named by the source; R&D on its own line
+    const hk = (y: number, rev: number, np: number) => ({ SECUCODE: "09999.HK", REPORT_TYPE: `${y}年年报`, REPORT_DATE: `${y}-12-31 00:00:00`, OPERATE_INCOME: rev, HOLDER_PROFIT: np, GROSS_PROFIT_RATIO: 40 });
+    const hkMain = [{ ...hk(2026, 60, -5), REPORT_TYPE: "2026年中报", REPORT_DATE: "2026-06-30 00:00:00" }, hk(2025, 100, -10), hk(2024, 80, -12), hk(2022, 40, -9)];
     const cashflow = [cash("300001.SZ", 2025, 30), cash("300001.SZ", 2024, 25), cash("300002.SZ", 2025, 20), cash("300002.SZ", 2024, 22)];
     const asked: string[] = [];
     vi.stubGlobal("fetch", async (url: string) => {
       const u = new URL(url), report = u.searchParams.get("reportName")!, filter = u.searchParams.get("filter") ?? "";
       asked.push(report);
-      if (u.hostname.startsWith("search-codetable")) return { json: async () => ({ result: u.searchParams.get("keyword") === "戊智能" ? [{ code: "830001", shortName: "戊智能", securityTypeName: "三板" }] : [] }) } as any;
+      const reply = (body: unknown) => ({ ok: true, status: 200, json: async () => body, text: async () => JSON.stringify(body) }) as any;
+      const kw = u.searchParams.get("keyword");
+      if (u.hostname.startsWith("search-codetable")) return reply({ result: kw === "戊智能" ? [{ code: "830001", shortName: "戊智能", securityTypeName: "三板" }] : kw === "己机器人" ? [{ code: "09999", shortName: "己机器人", securityTypeName: "港股", market: "116" }] : [] });
       const pick = (rows: any[]) => rows.filter((r) => filter.includes(r.SECUCODE));
-      const data = report === "RPT_F10_BASIC_ORGINFO" ? (filter.includes("830001.NQ") ? [nq] : orgs) : report === "RPT_F10_FINANCE_GINCOME" ? pick(income) : pick(cashflow);
-      return { json: async () => ({ success: true, result: { pages: 1, data } }), status: 200 } as any;
+      const data = report === "RPT_F10_BASIC_ORGINFO" ? (filter.includes("830001.NQ") ? [nq] : orgs) : report === "RPT_F10_FINANCE_GINCOME" ? pick(income) : report === "RPT_F10_FINANCE_GCASHFLOW" ? pick(cashflow)
+        : report === "RPT_HKF10_FN_MAININDICATOR" ? hkMain : report === "RPT_HKF10_FN_INCOME_PC" ? [{ SECUCODE: "09999.HK", REPORT_DATE: "2025-12-31 00:00:00", AMOUNT: 30 }] : [];
+      return reply({ success: true, result: { pages: 1, data } });
     });
     const db = openDb(join(mkdtempSync(join(tmpdir(), "zhiro-emp-")), "t.db"));
     const now = Date.parse("2026-10-18T00:00:00Z");
-    const r: any = await compare(db, { companies: ["甲机器人", "300002", "丙新上市", "宇树科技", "戊智能"], weights: { growth: 3, rd: 1 } }, now);
+    const r: any = await compare(db, { companies: ["甲机器人", "300002", "丙新上市", "宇树科技", "戊智能", "己机器人"], weights: { growth: 3, rd: 1 } }, now);
     expect(r.year).toBe(2025);
     expect(r.data.pools).toEqual({ "申万一级「机械设备」": { at: "2026-10-18T00:00:00.000Z", companies: 2 }, "证监会行业「制造业-通用设备制造业」": { at: "2026-10-18T00:00:00.000Z", companies: 1 } }); // 丙 has no 2025 revenue; 丁 is another industry
-    const [a, b, c, e] = r.companies;
+    const [a, b, c, e, f] = r.companies;
+    expect(f).toMatchObject({ name: "己机器人", market: "港股", peerGroup: "申万一级「机械设备」", percentile: { growth: 100, rd: 100, pay: null, profit: 0 }, coverage: "3/4" });
+    expect(f.yardstick).toMatch(/按申万一级「机械设备」的 A 股上市公司来量；不披露支付给职工的现金/);
+    expect(Object.keys(f.years)).toEqual(["2022", "2024", "2025"]); // the interim is not a year
+    expect(f.under.均衡).toMatchObject({ place: null, missing: ["pay"] });
+    const alone: any = await compare(db, { companies: ["己机器人"] }, now);
+    expect(alone.notFound[0].reason).toMatch(/peerIndustry/);
+    expect((await compare(db, { companies: ["己机器人"], peerIndustry: "机械设备" }, now) as any).companies[0]).toMatchObject({ name: "己机器人", percentile: { rd: 100 } });
     expect(e).toMatchObject({ name: "戊智能", market: "新三板", peerGroup: "证监会行业「制造业-通用设备制造业」", percentile: { growth: 100, rd: 100, pay: null, profit: 50 } }); // against 甲 alone; no cash-flow rows, so no pay
     expect(a).toMatchObject({ name: "甲机器人", coverage: "4/4", percentile: { growth: 75, rd: 75, pay: 75, profit: 75 }, peers: { growth: 2 }, outdoneBy: [] });
     expect(b.outdoneBy).toEqual(["甲机器人"]);
@@ -108,7 +121,7 @@ describe("employer.compare over the network's shape, without the network", () =>
     expect(c).toMatchObject({ name: "丙新上市", note: expect.stringContaining("2025") });
     expect(Object.keys(a.under)).toEqual(["成长研发优先", "均衡", "稳定回报优先", "你设的权重"]);
     expect(r.scenarios.你设的权重.weights).toEqual({ growth: 0.75, rd: 0.25, pay: 0, profit: 0 });
-    expect(a.under.均衡).toMatchObject({ place: 1, top3Share: 100 });
+    expect(a.under.均衡).toMatchObject({ place: 1, top3Share: null }); // two complete: the top three says nothing
     expect(r.notFound).toEqual([expect.objectContaining({ query: "宇树科技" })]);
     const calls = asked.length;
     await compare(db, { companies: ["甲机器人"] }, now + 86400_000);
