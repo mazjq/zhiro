@@ -87,7 +87,7 @@ ${GRADE_RULES}
 export const EMPLOYER_SCHEMA = {
   type: "object",
   additionalProperties: false,
-  required: ["summary", "report_markdown", "evidence", "claims", "match", "staff", "layoffs"],
+  required: ["summary", "report_markdown", "evidence", "claims", "staff", "layoffs"],
   properties: {
     summary: { type: "string", description: "3 句以内：这家公司作为雇主的要点，不打分" },
     report_markdown: { type: "string", description: "中文 Markdown，从「## 二、人员：规模、人均薪资、裁员」写起：二、人员 / 三、利润为什么变 / 四、钱去了哪 / 五、激励和技术人员 / 六、上市与资本 / 七、求职信号 / 八、和你的匹配 / 九、证据清单" },
@@ -106,10 +106,6 @@ export const EMPLOYER_SCHEMA = {
         type: "object", additionalProperties: false, required: ["text", "type", "urls", "counter", "limits"],
         properties: { text: { type: "string" }, type: { type: "string", enum: ["事实", "解读", "推断"] }, urls: { type: "array", items: { type: "string" } }, counter: { type: "string", description: "找过的反面说法；没找到就写「没找到」" }, limits: { type: "string", description: "这条结论的限制" } },
       },
-    },
-    match: {
-      type: "object", additionalProperties: false, required: ["strengths", "risks", "unknowns"],
-      properties: { strengths: { type: "array", items: { type: "string" } }, risks: { type: "array", items: { type: "string" } }, unknowns: { type: "array", items: { type: "string" } } },
     },
   },
 } as const;
@@ -167,7 +163,7 @@ ${profile || "（画像是空的）"}
 五、激励和技术人员：近三年的股权激励、员工持股计划，读公告原文，摘出激励对象（核心技术人员几人、占员工比例）、授予价格、考核条件；写明有没有覆盖技术人员。研发人员占比、技术岗在公司里的分量。
 六、上市与资本：已上市的写板块和近期再融资、减持；未上市的查深交所、上交所、北交所的 IPO 项目库和证监会辅导备案，写「截至今天，以哪些名称在哪些库里没检出」，或者给出所处阶段和日期。
 七、求职信号：在招什么方向、口碑与风险（裁员、欠薪、诉讼、减持等新闻，注明日期和来源）。
-八、和这位求职者的匹配：优势、风险、未知各几条，单列，不并入对公司本身的判断。也放进 match 字段。
+八、和这位求职者的匹配：优势、风险、未知各几条，单列，不并入对公司本身的判断。
 
 规则：
 - 每条定性结论放进 claims：类型（事实 / 解读 / 推断）、证据 URL、找过的反面说法（没找到写「没找到」）、限制。
@@ -212,15 +208,11 @@ export function staffMarkdown(so: any, staffCash: Record<string, number | null> 
   return out.join("\n");
 }
 
-/** The agent's claims and match as tables under its report, so each conclusion shows its evidence and limits. */
+/** The agent's claims as a table under its report, so each conclusion shows its evidence, counter-claims and limits. */
 export function claimsMarkdown(so: any): string {
   const cell = (x: string) => String(x ?? "").replace(/\|/g, "/").replace(/\s*\n\s*/g, " ");
   const claims = (so.claims ?? []) as any[];
-  const m = so.match;
-  return [
-    ...(claims.length ? ["", "## 结论核对", "", "| 结论 | 类型 | 证据 | 反面说法 | 限制 |", "|---|---|---|---|---|", ...claims.map((c) => `| ${cell(c.text)} | ${cell(c.type)} | ${(c.urls ?? []).map((u: string, i: number) => `[${i + 1}](${u})`).join(" ") || "无"} | ${cell(c.counter)} | ${cell(c.limits)} |`)] : []),
-    ...(m ? ["", "## 和你的匹配（单列）", "", ...(["strengths", "risks", "unknowns"] as const).map((k) => `**${({ strengths: "优势", risks: "风险", unknowns: "未知" })[k]}**：${(m[k] ?? []).join("；") || "—"}`)] : []),
-  ].join("\n");
+  return claims.length ? ["", "", "## 结论核对", "", "| 结论 | 类型 | 证据 | 反面说法 | 限制 |", "|---|---|---|---|---|", ...claims.map((c) => `| ${cell(c.text)} | ${cell(c.type)} | ${(c.urls ?? []).map((u: string, i: number) => `[${i + 1}](${u})`).join(" ") || "无"} | ${cell(c.counter)} | ${cell(c.limits)} |`)].join("\n") : "";
 }
 
 /** Tool entry: create workflow that spawns the worker and collects the result. Returns ids immediately. */

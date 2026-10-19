@@ -46,7 +46,6 @@ describe("就业评估 report (D-29): Zhiro's facts on top, the agent's reading 
       report_markdown: "## 二、利润为什么变\n营收增长带动。",
       evidence: [{ url: "https://e.com/ar", title: "2025 年报", grade: "官方", quote: "营业收入同比增长" }],
       claims: [{ text: "利润增长来自营收 | 不是减员", type: "解读", urls: ["https://e.com/ar"], counter: "没找到", limits: "只看了\n一年" }],
-      match: { strengths: ["方向对口"], risks: [], unknowns: ["待遇"] },
       staff: [{ year: 2024, employees: 1250, source: "2024 年报", url: "https://e.com/ar24" }, { year: 2025, employees: 1000, source: "2025 年报", url: "https://e.com/ar" }],
       layoffs: [{ date: "2025-06", what: "传出裁撤海外销售团队约百人", url: "https://e.com/news" }],
     } }));
@@ -63,7 +62,7 @@ describe("就业评估 report (D-29): Zhiro's facts on top, the agent's reading 
     expect(md).toContain("2024→2025：人数 1250→1000（-20%）；人均 20.0 万→30.0 万（+50%）");
     expect(md).toContain("- 2025-06 传出裁撤海外销售团队约百人（[来源](https://e.com/news)）");
     expect(md).toContain("| 利润增长来自营收 / 不是减员 | 解读 | [1](https://e.com/ar) | 没找到 | 只看了 一年 |");
-    expect(md).toContain("**未知**：待遇");
+    expect(md).not.toContain("和你的匹配（单列）"); // the agent writes that section itself
     expect(s.domain.db.prepare("select count(*) n from evidence where run_id = 'run1'").get()).toEqual({ n: 1 });
   });
 
