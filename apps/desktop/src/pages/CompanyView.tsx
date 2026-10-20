@@ -148,6 +148,12 @@ function Intel({ c }: { c: any }) {
   const [researchMsg, setResearchMsg] = useState("");
   // the worker's brief lives in the daemon (INTEL_QUESTION); the card only names the subject
   const research = async () => { setResearching(true); try { const r = await call("research.company", { companyName: c.companyName, question: "企业情况" }); setResearchMsg(`已派发联网调研（消耗 Claude Code 额度，约几分钟），结果在「求职资料 → 调研」和 vault/research/。运行 ${r.runId.slice(-6)}`); } catch (e: any) { setResearchMsg(e.message); setResearching(false); } };
+  const [assessing, setAssessing] = useState(false);
+  const assess = async () => {
+    setAssessing(true);
+    try { const r = await call("research.company", { companyName: c.companyName, question: "就业评估" }); setResearchMsg(`已交给你的 AI 助手写就业评估报告（约十几分钟），写好在「找岗位 → 调研」里。运行 ${r.runId.slice(-6)}`); }
+    catch (e: any) { setResearchMsg(e.message); setAssessing(false); }
+  };
   return (
     <div className="mb-3 text-sm">
       <div className="flex items-center gap-2 mb-1">
@@ -194,6 +200,12 @@ function Intel({ c }: { c: any }) {
         <div className="text-xs text-ink-3 py-1 border-t border-line flex items-center gap-2">
           <span className="flex-1">非上市{x.sme?.matches.length === 0 ? `，不在本地专精特新名录（${x.sme?.rosterSize ?? 0} 家）` : ""}。融资、参股、政策、口碑要联网调研。</span>
           <Button onClick={research} disabled={researching}>{researching ? "已派发" : "联网调研"}</Button>
+        </div>
+      )}
+      {x?.listing && (
+        <div className="text-xs text-ink-3 py-1 border-t border-line flex items-center gap-2">
+          <span className="flex-1">就业评估报告：利润为什么变、钱去了哪、技术人员有没有激励、上市进展、和你的匹配。数字由职路取，解读由你的 AI 助手写，不打分。</span>
+          <Button onClick={assess} disabled={assessing}>{assessing ? "已派发" : "写一份"}</Button>
         </div>
       )}
       {researchMsg && <div className="text-xs text-ink-3">{researchMsg}</div>}

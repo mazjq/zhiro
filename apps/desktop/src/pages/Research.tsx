@@ -4,6 +4,7 @@ import { useLatest, useOnDataChange } from "../refresh";
 import { H1, Card, Chip, Button, Empty } from "../ui";
 import { applyLink } from "./CompanyView";
 import { JOBS_QUERY_KEY } from "./Jobs";
+import { CompareResults } from "./Compare";
 
 /**
  * 调研: a direction looked into (an industry, a kind of job), and what the report's companies have in the pool right now.
@@ -150,10 +151,19 @@ function Company({ c, pending, onChanged }: { c: any; pending: boolean; onChange
   );
 }
 
+/** Under a company in the comparison: its posts in the pool that suit the person — the other line, not mixed in. */
+function PostsOf({ x, companies }: { x: any; companies: any[] }) {
+  const c = companies.find((c) => [c.companyName, c.name].some((n: string) => n && (n === x.org || n === x.name || n.includes(x.name))));
+  if (!c || c.status !== "in") return <span className="text-ink-3">岗位库里还没有它的岗位</span>;
+  if (!c.suitableTotal) return <span className="text-ink-3">库里在招 {c.openPosts} 个，和你的资料相关的还没有</span>;
+  return <span className="text-ink-2">和你的资料相关的在招岗位 {c.suitableTotal} 个：{c.suitable.map((p: any) => p.title).join("、")}{c.suitableTotal > c.suitable.length ? " 等" : ""}</span>;
+}
+
 export default function Research() {
   const [items, setItems] = useState<any[] | null>(null); // null = not answered yet
   const [open, setOpen] = useState<string>(() => localStorage.getItem(OPEN_KEY) ?? "");
   const [report, setReport] = useState<any>(null);
+  const [rank, setRank] = useState(false); // the comparison is fetched only when opened
   const [topic, setTopic] = useState("");
   const [region, setRegion] = useState("");
   const [armed, setArmed] = useState(false);
@@ -225,6 +235,12 @@ export default function Research() {
               </div>
             ) : null;
           })}
+          {report.status === "done" && report.companies.length > 0 && (
+            <details className="mt-2 mb-2" onToggle={(e) => setRank((e.target as HTMLDetailsElement).open)}>
+              <summary className="text-sm text-accent cursor-pointer">把报告里的上市公司作为雇主比一比（不打分）</summary>
+              {rank && <div className="mt-2"><CompareResults names={[...report.companies].sort((a: any, b: any) => Number(b.status === "in") - Number(a.status === "in")).map((c: any) => c.companyName || c.name)} aside={(x) => <PostsOf x={x} companies={report.companies} />} /></div>}
+            </details>
+          )}
           {report.status === "done" && (
             <details className="mt-2">
               <summary className="text-sm text-accent cursor-pointer">这次取了哪些数据 · {report.data?.items?.length ? ["研报", "财报", "板块", "美国劳工统计"].map((k) => [k, report.data.items.filter((d: any) => d.kind === k).length] as const).filter(([, n]) => n > 0).map(([k, n]) => `${k} ${n}`).join("，") : "没有"}{report.data?.failed?.length ? `，${report.data.failed.length} 次没取成` : ""}</summary>

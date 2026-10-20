@@ -138,3 +138,34 @@ entries condense what still holds.
   6 sessions a day, 10 search screens and 20 job pages a session (half for the first 3 days), the person's call. Tried on
   2026-10-18: two screens (30 posts) in 26 s, one job page in 5 s, no check. Approach from open-source BOSS readers that
   attach to a logged-in browser (e.g. boss-zhipin-scraper, MIT); no code taken.
+- **D-29 · 2026-10-18 · Comparing employers: places in the industry and under preferences, no total score.** The
+  person asked which employers are most worth joining and for sound methods. Each listed company is placed among all
+  A-share companies of its 申万一级 industry (a dated snapshot of 东方财富 F10 company list, income and cash-flow
+  statements, kept 30 days in `peer_snapshot`) on four measures, one per aspect: growth (three-year revenue CAGR), R&D
+  (R&D ÷ revenue), a pay signal (cash paid to staff ÷ latest staff count; rough) and profit (net margin). Among the
+  companies asked about, places are given under three open preferences (成长研发优先 / 均衡 / 稳定回报优先) or the
+  person's own weights, with the usual range (10th–90th) and the share of top-three places over weights drawn evenly
+  within ±0.1 of them (fixed seed), plus the share over every weighting. A company that does no better than another on
+  all four is named as such; that is a screen, not a tier. A missing measure is not filled in: the company gets its
+  place by what is known and the best and worst it could be. What changed together in the year is said as that, never
+  as a cause. Labels are plain rules on the percentiles. Hong Kong, US, 新三板 and unlisted companies are not ranked
+  with them. Left out after review (Codex, 2026-10-18): AHP (the person would compare pairs of abstract aspects),
+  grey relational analysis and TOPSIS (unstable with a handful of companies), Ward clustering, fuzzy evaluation, and a
+  model playing the expert.
+  An employer report (`research.company` with question 就业评估) starts with a fact table Zhiro writes from the same
+  snapshot (four years of revenue, profit, R&D, staff cash, dividend-and-interest cash, capex; the four places); the
+  person's agent writes the rest — why profit moved (a cause only where the annual report or a notice says it), where
+  the money went, whether incentive plans reach technical staff, listing or IPO progress across the three exchanges,
+  job signals, and the match with the person, kept apart — and hands back each conclusion with its kind, sources, the
+  counter-claims it looked for and its limits, shown as a table under the report.
+  2026-10-19: a 新三板 company is compared too — its own industry scheme is not 申万, so it is measured against the
+  A-share companies of its 证监会 industry, which both carry, and says so. (The first list also left out 北交所: its
+  label is 「北京证券交易所A股」.) The report has a section on people — the person wants to know about layoffs, pay
+  per head and size: the agent hands back year-end headcounts each with its source (annual report 员工情况; for an
+  unlisted company the 社保参保人数 of its public annual filing, or a prospectus) and the layoff, pay-cut and
+  unpaid-wage reports it found; Zhiro divides its own staff cash by those headcounts and states how headcount and pay
+  per head moved. A Hong Kong or US listing is placed too, read one company at a time (revenue, profit, gross margin,
+  R&D), against the A-share companies of the 申万一级 industry asked for, or else the one most A-share companies in
+  the comparison are in; neither market reports cash paid to staff, so its pay measure is missing and shown as
+  bounds, and amounts stay in the report's own currency (only ratios are compared). Unlisted companies are not
+  placed: they publish no statements.

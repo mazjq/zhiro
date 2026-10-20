@@ -8,6 +8,7 @@ import Jobs from "./pages/Jobs";
 import Internships from "./pages/Internships";
 import Gaps from "./pages/Gaps";
 import Research from "./pages/Research";
+import Compare from "./pages/Compare";
 import Pipeline from "./pages/Pipeline";
 import Profile from "./pages/Profile";
 import InboxPage from "./pages/Inbox";
@@ -66,7 +67,7 @@ function KeyBox({ onDone }: { onDone: () => void }) {
 }
 
 // "profile" and "resumes" are the two tabs of 求职资料; settings sits behind the gear, the assistant in a drawer
-type Page = "today" | "jobs" | "interns" | "gaps" | "research" | "pipeline" | "inbox" | "profile" | "resumes" | "settings";
+type Page = "today" | "jobs" | "interns" | "gaps" | "research" | "compare" | "pipeline" | "inbox" | "profile" | "resumes" | "settings";
 
 const NAV: { id: Page; label: string; icon: React.ComponentType<{ size?: number }> }[] = [
   { id: "today", label: "今日", icon: CalendarClock },
@@ -127,7 +128,7 @@ export default function App() {
         <nav className="px-2 flex-1">
           {NAV.map(({ id, label, icon: Icon }) => (
             <button key={id} onClick={() => setPage(id)}
-              className={`w-full flex items-center gap-2.5 px-3 py-2 rounded-md text-left mb-0.5 ${page === id || (id === "profile" && page === "resumes") || (id === "jobs" && (page === "gaps" || page === "research")) ? "bg-accent-soft text-accent font-medium" : "text-ink-2 hover:bg-ground"}`}>
+              className={`w-full flex items-center gap-2.5 px-3 py-2 rounded-md text-left mb-0.5 ${page === id || (id === "profile" && page === "resumes") || (id === "jobs" && (page === "gaps" || page === "research" || page === "compare")) ? "bg-accent-soft text-accent font-medium" : "text-ink-2 hover:bg-ground"}`}>
               <Icon size={16} />{label}
             </button>
           ))}
@@ -141,15 +142,16 @@ export default function App() {
       <main className="flex-1 min-w-0 overflow-auto">
         <div className="max-w-6xl mx-auto px-8 py-7">
           {page === "today" && <Today go={setPage} />}
-          {(page === "jobs" || page === "gaps" || page === "research") && (
+          {(page === "jobs" || page === "gaps" || page === "research" || page === "compare") && (
             <div className="flex border border-line rounded-md overflow-hidden w-fit mb-4">
-              {([["jobs", "找岗位"], ["gaps", "机会缺口"], ["research", "调研"]] as const).map(([id, label]) => <button key={id} onClick={() => setPage(id)} className={`px-4 py-1.5 text-sm ${page === id ? "bg-accent-soft text-accent" : "bg-paper text-ink-2"}`}>{label}</button>)}
+              {([["jobs", "找岗位"], ["gaps", "机会缺口"], ["research", "调研"], ["compare", "比较单位"]] as const).map(([id, label]) => <button key={id} onClick={() => setPage(id)} className={`px-4 py-1.5 text-sm ${page === id ? "bg-accent-soft text-accent" : "bg-paper text-ink-2"}`}>{label}</button>)}
             </div>
           )}
           {page === "jobs" && <Jobs go={setPage} />}
           {page === "interns" && <Internships />}
           {page === "gaps" && <Gaps />}
           {page === "research" && <Research />}
+          {page === "compare" && <Compare />}
           {page === "pipeline" && <Pipeline go={setPage} />}
           {page === "inbox" && <InboxPage />}
           {(page === "profile" || page === "resumes") && (
