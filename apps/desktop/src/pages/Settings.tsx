@@ -267,7 +267,8 @@ function BossCard() {
       </div>
       {!st.browser?.running && <div className="text-xs text-ink-3 mb-1">第一次打开要在里面扫码登录 BOSS，以后就一直登着。这个窗口别关，最小化即可。</div>}
       <div className="text-sm text-ink-2">
-        今天：会话 {t.sessions}/{l.sessionsPerDay} · 搜索页 {t.search} · 详情页 {t.detail}（每次会话最多搜索 {l.perSession.search}、详情 {l.perSession.detail}）
+        今天：会话 {t.sessions}{l.sessionsPerDay !== null && `/${l.sessionsPerDay}`} · 搜索页 {t.search} · 详情页 {t.detail}
+        {l.sessionsPerDay === null && l.perSession.search === null && l.perSession.detail === null ? <span className="text-ink-3">（不限次数；遇到验证就停 24 小时）</span> : <span className="text-ink-3">（每次会话最多搜索 {l.perSession.search ?? "不限"}、详情 {l.perSession.detail ?? "不限"}）</span>}
         {st.halfWhileNew && <span className="text-ink-3"> · 刚开始用，前几天只开一半额度</span>}
       </div>
       {st.stop && (

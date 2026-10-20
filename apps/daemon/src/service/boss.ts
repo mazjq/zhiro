@@ -15,9 +15,19 @@ import { ingest, type Listing } from "../data/index.js";
  */
 
 export type BossKind = "home" | "search" | "detail";
-export interface BossLimits { sessionsPerDay: number; perSession: Record<BossKind, number>; rampDays: number }
-export type BossConfig = { sessionsPerDay?: number; perSession?: Partial<Record<BossKind, number>>; rampDays?: number };
-export const DEFAULT_LIMITS: BossLimits = { sessionsPerDay: 6, perSession: { home: 1, search: 10, detail: 20 }, rampDays: 3 };
+/** A cap of null is no cap. */
+export interface BossLimits { sessionsPerDay: number | null; perSession: Record<BossKind, number | null>; rampDays: number }
+export type BossConfig = { sessionsPerDay?: number | null; perSession?: Partial<Record<BossKind, number | null>>; rampDays?: number };
+/**
+ * No caps by default (the person's call, 2026-10-20): what guards the account is a person's pace and stopping at the
+ * first check BOSS shows. Caps can still be set in jobos.yaml (boss); with caps, rampDays halves them after a start
+ * or a stop.
+ */
+export const DEFAULT_LIMITS: BossLimits = { sessionsPerDay: null, perSession: { home: null, search: null, detail: null }, rampDays: 0 };
+/** Used up: a cap is set and reached. */
+export const full = (used: number, cap: number | null) => cap !== null && used >= cap;
+/** What is left under a cap; null when there is no cap. */
+export const leftUnder = (cap: number | null, used: number) => (cap === null ? null : cap - used);
 
 const SESSION_IDLE_MS = 30 * 60_000;
 const PERMIT_TTL_MS = 5 * 60_000;
@@ -156,7 +166,7 @@ function ramped(db: Db, now: number, lim: BossLimits): boolean {
 
 export function status(db: Db, cfg: BossConfig | undefined, now = Date.now()) {
   const lim = limitsOf(cfg), half = ramped(db, now, lim);
-  const cap = (n: number) => (half ? Math.max(1, Math.ceil(n / 2)) : n);
+  const cap = (n: number | null) => (n === null ? null : half ? Math.max(1, Math.ceil(n / 2)) : n);
   const day = localDay(now);
   const rows = (db.prepare("select * from boss_visit where kind != 'resume' and requested_at >= ? order by requested_at").all(iso(now - 2 * 86400_000)) as unknown as Row[]).filter((r) => localDay(ms(r.requested_at)) === day);
   const live = (r: Row) => r.consumed_at || ms(r.expires_at) > now; // an unused permit that ran out costs nothing
@@ -169,7 +179,7 @@ export function status(db: Db, cfg: BossConfig | undefined, now = Date.now()) {
   const sessions = new Set(rows.filter(live).map((r) => r.session_id)).size;
   return {
     limits: { sessionsPerDay: cap(lim.sessionsPerDay), perSession: { home: cap(lim.perSession.home), search: cap(lim.perSession.search), detail: cap(lim.perSession.detail) } },
-    halfWhileNew: half, today: { sessions, ...used }, session, inSession, last, lastAt, stop: stopOf(db, now),
+    halfWhileNew: half && lim.sessionsPerDay !== null, today: { sessions, ...used }, session, inSession, last, lastAt, stop: stopOf(db, now),
   };
 }
 
@@ -183,14 +193,14 @@ export function permit(db: Db, cfg: BossConfig | undefined, url: string, now = D
     if (open) throw new BossError("OPEN_PERMIT", "上一张通行证还没交回：先把那一页交给 boss.page，或等它过期", { permitId: open.id, target: open.target, expiresAt: open.expires_at });
     let session = st.session, notBefore = now;
     if (!session) {
-      if (st.today.sessions >= st.limits.sessionsPerDay) throw new BossError("BUDGET", `今天的 ${st.limits.sessionsPerDay} 次会话已经用完，明天再来`);
+      if (full(st.today.sessions, st.limits.sessionsPerDay)) throw new BossError("BUDGET", `今天的 ${st.limits.sessionsPerDay} 次会话已经用完，明天再来`);
       if (c.kind !== "home") throw new BossError("HOME_FIRST", "每次会话先打开城市首页（如 https://www.zhipin.com/wuhan/），再搜");
       session = ulid();
       if (st.lastAt) notBefore = Math.max(now, st.lastAt + between(rnd, 20, 60) * 60_000); // a person comes back after a while
     } else {
       const done = st.inSession.filter((r) => r.consumed_at);
       const n = st.inSession.filter((r) => r.kind === c.kind).length;
-      if (n >= st.limits.perSession[c.kind]) throw new BossError("BUDGET", `这次会话的${c.kind === "home" ? "首页" : c.kind === "search" ? "搜索页" : "详情页"}额度（${st.limits.perSession[c.kind]}）用完了；歇至少半小时再开新会话`);
+      if (full(n, st.limits.perSession[c.kind])) throw new BossError("BUDGET", `这次会话的${c.kind === "home" ? "首页" : c.kind === "search" ? "搜索页" : "详情页"}额度（${st.limits.perSession[c.kind]}）用完了；歇至少半小时再开新会话`);
       if (c.kind === "detail" && !done.some((r) => r.kind === "search")) throw new BossError("SEARCH_FIRST", "先打开搜索页，再从结果里点详情");
       const prev = done[done.length - 1];
       notBefore = Math.max(now, (prev ? ms(prev.consumed_at!) : now) + pause((prev?.kind as BossKind) ?? null, c.kind, rnd) * 1000);
@@ -200,7 +210,7 @@ export function permit(db: Db, cfg: BossConfig | undefined, url: string, now = D
       .run(id, session, iso(now), iso(notBefore), iso(notBefore + PERMIT_TTL_MS), c.target, c.kind);
     const after = status(db, cfg, now);
     return { permitId: id, kind: c.kind, target: c.target, notBefore: iso(notBefore), waitSeconds: Math.max(0, Math.ceil((notBefore - now) / 1000)), expiresAt: iso(notBefore + PERMIT_TTL_MS),
-      left: { sessionsToday: after.limits.sessionsPerDay - after.today.sessions, thisSession: { search: after.limits.perSession.search - after.inSession.filter((r) => r.kind === "search").length, detail: after.limits.perSession.detail - after.inSession.filter((r) => r.kind === "detail").length } },
+      left: { sessionsToday: leftUnder(after.limits.sessionsPerDay, after.today.sessions), thisSession: { search: leftUnder(after.limits.perSession.search, after.inSession.filter((r) => r.kind === "search").length), detail: leftUnder(after.limits.perSession.detail, after.inSession.filter((r) => r.kind === "detail").length) } },
       halfWhileNew: after.halfWhileNew };
   });
 }

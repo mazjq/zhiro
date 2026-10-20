@@ -146,7 +146,7 @@ describe("BOSS 直聘 (D-27)", () => {
     expect(pause("detail", "detail", fixed(0.99))).toBe(45);
   });
 
-  it("holds each session and each day to the budget, and starts at half while new", () => {
+  it("holds each session and each day to a budget when one is set; by default there is none", () => {
     const { db } = setup();
     const cfg = { rampDays: 0, sessionsPerDay: 1, perSession: { home: 1, search: 1, detail: 1 } };
     let t = T0;
@@ -157,10 +157,10 @@ describe("BOSS 直聘 (D-27)", () => {
     visit("https://www.zhipin.com/job_detail/j1.html");
     expect(() => permit(db, cfg, "https://www.zhipin.com/job_detail/j2.html", t, fixed(0.5))).toThrow(/额度/);
     expect(() => permit(db, cfg, "https://www.zhipin.com/wuhan/", t + 40 * 60_000, fixed(0.5))).toThrow(/会话已经用完/); // a new session the same day
-    const fresh = setup().db; // a new library: half of 4 sessions and of 5 searches
+    const fresh = setup().db; // no caps unless the person sets them (2026-10-20)
     const st = status(fresh, {}, T0);
-    expect(st.halfWhileNew).toBe(true);
-    expect(st.limits).toMatchObject({ sessionsPerDay: 3, perSession: { home: 1, search: 5, detail: 10 } });
+    expect(st).toMatchObject({ halfWhileNew: false, limits: { sessionsPerDay: null, perSession: { home: null, search: null, detail: null } } });
+    expect(status(fresh, { rampDays: 3, sessionsPerDay: 6, perSession: { search: 10 } }, T0)).toMatchObject({ halfWhileNew: true, limits: { sessionsPerDay: 3, perSession: { search: 5, detail: null } } });
   });
 
   it("a check stops visits for a day; the person can lift it", () => {
