@@ -254,15 +254,18 @@ function BossCard() {
   useEffect(() => { load(); }, []);
   useOnDataChange(load);
   const lift = async () => { try { setSt(await call("boss.resume")); } catch (e: any) { setErr(e.message); } };
+  const openBrowser = async () => { setErr(""); try { await call("boss.browser"); load(); } catch (e: any) { setErr(e.message); } };
   if (!st) return err ? null : <Card className="p-5 mb-4 text-sm text-ink-3">BOSS 直聘：读取中…</Card>;
   const l = st.limits, t = st.today;
   return (
     <Card className="p-5 mb-4">
       <div className="flex items-center gap-2 mb-1">
         <div className="font-bold">BOSS 直聘</div>
-        <span className="text-xs text-ink-3">你的 AI 助手在你自己的浏览器里按需搜；职路记次数、控节奏，遇到验证就暂停</span>
-        {st.stop ? <Chip tone="bad">已暂停</Chip> : <Chip tone="good">可用</Chip>}
+        <span className="text-xs text-ink-3">在一个专用的 Chrome 里搜；职路像人一样翻页，记次数，遇到验证就暂停</span>
+        {st.stop ? <Chip tone="bad">已暂停</Chip> : st.browser?.running ? <Chip tone="good">浏览器已开</Chip> : <Chip tone="amber">浏览器没开</Chip>}
+        <span className="ml-auto">{!st.browser?.running && <Button onClick={openBrowser}>打开 BOSS 专用浏览器</Button>}</span>
       </div>
+      {!st.browser?.running && <div className="text-xs text-ink-3 mb-1">第一次打开要在里面扫码登录 BOSS，以后就一直登着。这个窗口别关，最小化即可。</div>}
       <div className="text-sm text-ink-2">
         今天：会话 {t.sessions}/{l.sessionsPerDay} · 搜索页 {t.search} · 详情页 {t.detail}（每次会话最多搜索 {l.perSession.search}、详情 {l.perSession.detail}）
         {st.halfWhileNew && <span className="text-ink-3"> · 刚开始用，前几天只开一半额度</span>}

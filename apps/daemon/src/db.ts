@@ -406,6 +406,17 @@ export const MIGRATIONS: string[] = [
   create index boss_visit_at on boss_visit(requested_at);
   create index boss_visit_session on boss_visit(session_id);
   `,
+  // v38: D-28 — BOSS posts seen on a search page, kept as candidates until their job page is read (then position_id)
+  `
+  create table boss_candidate (
+    job_id text primary key, url text not null, title text not null, salary text not null default '', city text not null default '',
+    district text not null default '', experience text not null default '', degree text not null default '', days text not null default '',
+    months text not null default '', brand text not null default '', scale text not null default '', stage text not null default '',
+    industry text not null default '', skills text not null default '[]', labels text not null default '[]', query text not null default '',
+    city_code text not null default '', first_seen text not null, last_seen text not null, position_id text, detail_at text
+  );
+  create index boss_candidate_seen on boss_candidate(last_seen);
+  `,
 ];
 
 /**

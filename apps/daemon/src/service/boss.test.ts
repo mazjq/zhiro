@@ -160,7 +160,7 @@ describe("BOSS 直聘 (D-27)", () => {
     const fresh = setup().db; // a new library: half of 4 sessions and of 5 searches
     const st = status(fresh, {}, T0);
     expect(st.halfWhileNew).toBe(true);
-    expect(st.limits).toMatchObject({ sessionsPerDay: 2, perSession: { home: 1, search: 3, detail: 8 } });
+    expect(st.limits).toMatchObject({ sessionsPerDay: 3, perSession: { home: 1, search: 5, detail: 10 } });
   });
 
   it("a check stops visits for a day; the person can lift it", () => {
