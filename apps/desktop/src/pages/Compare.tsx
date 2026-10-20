@@ -14,6 +14,8 @@ const pct = (v: number | null) => (v === null ? "—" : `${(v * 100).toFixed(1)}
 const show: Record<Facet, (v: number | null) => string> = { growth: pct, rd: pct, profit: pct, pay: (v) => (v === null ? "—" : `${(v / 10000).toFixed(1)} 万/人`) };
 const tone = (p: number | null) => (p === null ? "" : p >= 75 ? "good" : p >= 50 ? "accent" : p >= 25 ? "" : "amber");
 const input = "px-3 py-1.5 border border-line rounded-md bg-paper text-sm";
+/** Answers already had on this page, by what was asked: shown at once when asked again, then refreshed quietly. */
+const answered = new Map<string, any>();
 
 /** The names typed in, compared. Used by 调研 as its second entry. */
 export function CompareBox() {
@@ -56,11 +58,14 @@ export function CompareResults({ names, aside, peerIndustry, nameOf }: { names: 
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState("");
   const run = async (scenario: string, weights = own) => {
-    setBusy(true); setMsg("");
-    try { setR(await call("employer.compare", { companies: names.slice(0, 15), ...(peerIndustry ? { peerIndustry } : {}), ...(scenario === "你设的权重" ? { weights } : {}) })); setView(scenario); }
-    catch (e: any) { setMsg(e.message); } finally { setBusy(false); }
+    const ask = { companies: names.slice(0, 15), ...(peerIndustry ? { peerIndustry } : {}), ...(scenario === "你设的权重" ? { weights } : {}) };
+    const key = JSON.stringify(ask), had = answered.get(key);
+    if (had) { setR(had); setView(scenario); } // seen before: shown at once, refreshed below
+    setBusy(!had); setMsg("");
+    try { const fresh = await call("employer.compare", ask); answered.set(key, fresh); setR(fresh); setView(scenario); }
+    catch (e: any) { if (!had) setMsg(e.message); } finally { setBusy(false); }
   };
-  useEffect(() => { setR(null); if (names.length) run(view === "你设的权重" ? "均衡" : view); }, [names.join("|"), peerIndustry]);
+  useEffect(() => { if (names.length) run(view === "你设的权重" ? "均衡" : view); }, [names.join("|"), peerIndustry]);
   const rows: any[] = r?.companies ?? [];
   const at = (c: any) => c.under[view]?.place ?? c.under[view]?.byKnown ?? 99;
   const ranked = rows.filter((c) => c.under).sort((a, b) => at(a) - at(b));
@@ -68,7 +73,7 @@ export function CompareResults({ names, aside, peerIndustry, nameOf }: { names: 
   // everything that could not be placed, each as a row with why: no annual report yet, not listed, a name to pin down
   const unplaced = [
     ...rows.filter((c) => !c.under).map((c) => ({ key: c.code, name: c.name, org: c.org, why: c.note })),
-    ...(r?.notFound ?? []).map((n: any) => ({ key: n.query, name: n.query, org: undefined, why: n.reason + (n.candidates ? `：${n.candidates.join("、")}` : "") })),
+    ...(r?.notFound ?? []).map((n: any) => ({ key: n.query, name: n.query, org: undefined, why: n.reason + (n.candidates ? `：${n.candidates.join("、")}` : ""), known: n.known })),
   ];
   return (
     <>
@@ -103,6 +108,7 @@ export function CompareResults({ names, aside, peerIndustry, nameOf }: { names: 
                 <Chip>不参与排名</Chip>
                 <span className="ml-auto"><AssessButton companyName={reportName(u)} /></span>
               </div>
+              {u.known && <Known k={u.known} />}
               <div className="text-xs text-ink-3 mt-1">{u.why}</div>
               {aside && <div className="mt-1 text-xs">{aside(u)}</div>}
             </div>
@@ -118,6 +124,16 @@ export function CompareResults({ names, aside, peerIndustry, nameOf }: { names: 
       )}
     </>
   );
+}
+
+/** What is known of a company with no listing: funding stage, size and industry as BOSS showed them, 专精特新, a listing review. */
+function Known({ k }: { k: any }) {
+  const bits = [
+    k.boss && [k.boss.stage, k.boss.scale, k.boss.industry].filter(Boolean).length ? `BOSS 直聘：${[k.boss.stage, k.boss.scale, k.boss.industry].filter(Boolean).join(" · ")}（${k.boss.seen} 见到）` : "",
+    k.sme ? `专精特新：${k.sme}` : "",
+    k.ipo ? `${k.ipo.board}项目库：${k.ipo.stage}${k.ipo.date ? `（${k.ipo.date}）` : ""}` : "",
+  ].filter(Boolean);
+  return bits.length ? <div className="text-xs text-ink-2 mt-1 flex flex-wrap gap-1.5">{bits.map((b) => <Chip key={b}>{b}</Chip>)}</div> : <div className="text-xs text-ink-3 mt-1">职路手上还没有它的融资和规模信息：BOSS 上搜到过它就会有；更全的（融资轮次、投资方、上市计划）在就业评估报告里。</div>;
 }
 
 function Row({ c, view, aside, assess }: { c: any; view: string; aside?: ReactNode; assess: string }) {

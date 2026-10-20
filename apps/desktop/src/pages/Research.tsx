@@ -171,7 +171,8 @@ export default function Research() {
   const [open, setOpen] = useState<string>(() => localStorage.getItem(OPEN_KEY) ?? "");
   const [report, setReport] = useState<any>(null);
   const [mode, setMode] = useState<"topic" | "compare">(() => (localStorage.getItem(MODE_KEY) === "compare" ? "compare" : "topic"));
-  const [companiesView, setCompaniesView] = useState<"pool" | "compare">("pool"); // the comparison is fetched only when picked
+  const [companiesView, setCompaniesView] = useState<"pool" | "compare">("pool");
+  const [compared, setCompared] = useState(""); // the report whose comparison was opened: kept while switching views
   const [reading, setReading] = useState(false);
   const [topic, setTopic] = useState("");
   const [region, setRegion] = useState("");
@@ -250,7 +251,7 @@ export default function Research() {
                 <div className="font-bold">报告里的公司 · {report.companies.length} 家</div>
                 <div className="flex border border-line rounded-md overflow-hidden">
                   <button className={tab(companiesView === "pool")} onClick={() => setCompaniesView("pool")}>名单与岗位</button>
-                  <button className={tab(companiesView === "compare")} onClick={() => setCompaniesView("compare")}>比一比（不打分）</button>
+                  <button className={tab(companiesView === "compare")} onClick={() => { setCompaniesView("compare"); setCompared(report.runId); }}>比一比</button>
                 </div>
               </div>
               {companiesView === "pool" && groups.map(([status, label]) => {
@@ -262,12 +263,12 @@ export default function Research() {
                   </div>
                 ) : null;
               })}
-              {companiesView === "compare" && (
-                <CompareResults
+              {compared === report.runId && (
+                <div className={companiesView === "compare" ? "" : "hidden"}><CompareResults
                   names={report.companies.map((c: any) => c.name)}
                   aside={(x) => <PostsOf x={x} companies={report.companies} />}
                   nameOf={(x) => reportCompany(report.companies, x)?.companyName || ""}
-                />
+                /></div>
               )}
             </div>
           )}

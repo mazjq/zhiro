@@ -125,6 +125,17 @@ describe("employer.compare over the network's shape, without the network", () =>
     expect(r.scenarios.你设的权重.weights).toEqual({ growth: 0.75, rd: 0.25, pay: 0, profit: 0 });
     expect(a.under.均衡).toMatchObject({ place: 1, top3Share: null }); // two complete: the top three says nothing
     expect(r.notFound).toEqual([expect.objectContaining({ query: "宇树科技" })]);
+    // a name on no board is looked up once a week, not on every comparison; what BOSS showed of it is on its row
+    db.prepare("insert into boss_candidate(job_id, url, title, brand, stage, scale, industry, first_seen, last_seen) values ('j1','u','运动控制实习生','鳍源科技','B轮','100-499人','智能硬件','2026-10-17T00:00:00Z','2026-10-17T00:00:00Z')").run();
+    const lookups = () => asked.filter((x) => x === undefined || x === null).length; // the code table carries no reportName
+    const before = lookups();
+    const u1: any = await compare(db, { companies: ["鳍源科技"] }, now);
+    const mid = lookups();
+    const u2: any = await compare(db, { companies: ["鳍源科技"] }, now + 3600_000);
+    expect(mid).toBeGreaterThan(before);
+    expect(lookups()).toBe(mid);
+    expect(u2.notFound[0]).toMatchObject({ query: "鳍源科技", known: { boss: { stage: "B轮", scale: "100-499人", industry: "智能硬件", seen: "2026-10-17" } } });
+    expect(u1.notFound[0].known.boss.stage).toBe("B轮");
     const calls = asked.length;
     await compare(db, { companies: ["甲机器人"] }, now + 86400_000);
     expect(asked.length).toBe(calls); // the same data for 30 days
