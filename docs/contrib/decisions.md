@@ -125,3 +125,16 @@ entries condense what still holds.
   may complete with values found on that same page. An agent's `listing.capture` of a BOSS link is refused. What
   Zhiro cannot see — whether the agent waited and which browser it used — stays a rule of the skill, and the page says
   so. Advised by Codex (2026-10-18); the budget is the person's call (the review advised less).
+- **D-28 · 2026-10-18 · BOSS: Zhiro drives a dedicated Chrome and listens to the page's own job data.** D-27 had the
+  agent open every page and hand its text back; it cost tokens per page and was slower than a person. Now the person
+  starts a normal Chrome with its own profile (`<vault>/boss-chrome`; Chrome 136+ will not open the everyday profile
+  for debugging) and a debugging port (9333), and logs in to BOSS once. Zhiro attaches over CDP, opens the home page at
+  the start of a session, then the search URL, scrolls down the list in uneven steps (now and then back up) and waits
+  for the page's own `joblist.json` (a POST; query, city and page are in its body). It never sends a request of its own
+  (a scripted request is what BOSS flags, code 37). Search results are kept as candidates (`boss_candidate`), not
+  posts; `boss.detail` opens a picked job page, reads the server-rendered blocks (description, pay, address, the
+  registered name under 工商信息) and files it as a 聚合 post under its BOSS job id. A check or login page, or a
+  code-37 / 异常 / 验证 answer, stops visits for 24 hours as in D-27; the person-only lift stays. The default budget is
+  6 sessions a day, 10 search screens and 20 job pages a session (half for the first 3 days), the person's call. Tried on
+  2026-10-18: two screens (30 posts) in 26 s, one job page in 5 s, no check. Approach from open-source BOSS readers that
+  attach to a logged-in browser (e.g. boss-zhipin-scraper, MIT); no code taken.

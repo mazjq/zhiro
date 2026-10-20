@@ -5,6 +5,8 @@ import type { Domain } from "./service/domain.js";
 import { DomainError, NotFound, genericCompany } from "./service/domain.js";
 import { importCsv } from "./service/import-csv.js";
 import { capture, providerOf } from "./service/capture.js";
+import { attach as bossAttach, openBrowser as bossOpen, browserState as bossBrowser } from "./service/boss-cdp.js";
+import { BossFail, search as bossSearch, detail as bossDetail, candidates as bossCandidates } from "./service/boss-search.js";
 import { BossError, permit as bossPermit, handlePage as bossPage, status as bossStatus, resume as bossResume } from "./service/boss.js";
 import { runBackup } from "./service/backup.js";
 import { locationInfo, requestMove, cancelMove } from "./move.js";
@@ -129,7 +131,15 @@ function externalWritesRecently(s: Services): number {
 function bossCall<T>(fn: () => T): T {
   try { return fn(); } catch (e) { if (e instanceof BossError) throw new ToolError(e.code, Object.keys(e.extra).length ? `${e.message}（${JSON.stringify(e.extra)}）` : e.message); throw e; }
 }
-const bossView = (s: Services) => { const st = bossStatus(s.domain.db, s.config.boss); return { limits: st.limits, today: st.today, halfWhileNew: st.halfWhileNew, stop: st.stop, note: "只算经职路的访问，不含你自己在网页或 App 上的操作" }; };
+const bossView = async (s: Services) => { const st = bossStatus(s.domain.db, s.config.boss); return { limits: st.limits, today: st.today, halfWhileNew: st.halfWhileNew, stop: st.stop, browser: await bossBrowser(), note: "只算经职路的访问，不含你自己在网页或 App 上的操作" }; };
+/** Attach to the dedicated browser for one call; BossFail → ToolError with its code. */
+async function bossRun<T>(s: Services, fn: (d: any) => Promise<T>): Promise<T> {
+  let cdp: Awaited<ReturnType<typeof bossAttach>>;
+  try { cdp = await bossAttach(); } catch (e: any) { throw new ToolError(e.code ?? "BROWSER_DOWN", e.message); }
+  try { return await fn({ db: s.domain.db, cfg: s.config.boss, cdp, vault: s.config.vault, listPositions: (q: any) => s.domain.listPositions(q) }); }
+  catch (e) { if (e instanceof BossFail) throw new ToolError(e.code, e.message); throw e; }
+  finally { cdp.close(); }
+}
 
 export class ToolError extends Error {
   constructor(public code: string, message?: string) {
@@ -268,13 +278,18 @@ const handlers: { [N in ToolName]: Handler<N> } = {
   },
   "import.csv": (i, _a, s) => { const r = importCsv(s.domain, i.path); s.onDataChanged?.(); return r; },
   // D-27: BOSS 直聘 through the person's own agent — a one-time permit per page, the page handed back with what it says
+  // D-28: Zhiro opens BOSS pages in the dedicated browser itself and listens to the page's own job data
+  "boss.browser": async (_i, _a, s) => { try { return await bossOpen(s.config.vault); } catch (e: any) { throw new ToolError(e.code ?? "NO_CHROME", e.message); } },
+  "boss.search": (i, _a, s) => bossRun(s, (d) => bossSearch(d, s.domain, i)),
+  "boss.detail": (i, _a, s) => bossRun(s, (d) => bossDetail(d, i.refs)),
+  "boss.candidates": (i, _a, s) => ({ items: bossCandidates(s.domain.db, i) }),
   "boss.permit": (i, _a, s) => bossCall(() => bossPermit(s.domain.db, s.config.boss, i.url)),
   "boss.page": (i, _a, s) => bossCall(() => bossPage(s.domain, s.config.vault, i)),
   "boss.status": (_i, _a, s) => bossView(s),
   "boss.resume": (_i, a, s) => { humanOnly(a); bossResume(s.domain.db); return bossView(s); },
   "listing.capture": async (i, a, s) => {
     // an agent's BOSS page goes through boss.page: counted, paced, stopped on a check (D-27); the person's bookmark is theirs
-    if (a.kind === "agent" && providerOf(i.url).provider === "boss") throw new ToolError("USE_BOSS_PAGE", "BOSS 直聘的页面请用 boss.permit → boss.page（会计数、控节奏、遇到验证会暂停）");
+    if (a.kind === "agent" && providerOf(i.url).provider === "boss") throw new ToolError("USE_BOSS_PAGE", "BOSS 直聘的岗位请用 boss.search 搜、boss.detail 收（职路在专用浏览器里取数据，会计数、控节奏、遇到风控会暂停）");
     // A bookmarked Moka/北森 tenant page is better served by the pull source: register it (once) and scan now.
     const pull = sourceFor(i.url);
     if (pull?.fetch) {

@@ -59,19 +59,15 @@ Zhiro 是本机的校招系统（岗位库、截止、申请、画像、调研�
 
 交回的报告只是存档，不会改动岗位库。
 
-## BOSS 直聘：在用户自己的浏览器里按需搜
+## BOSS 直聘：Zhiro 在专用浏览器里搜，你只给词和挑岗
 
-Zhiro 不爬 BOSS。用户说「去 BOSS 搜一下……」时，由你在**用户本人已登录 BOSS 的那个有窗口的浏览器**里打开页面（如 Claude in Chrome 这类操作用户真实 Chrome 的工具）。无头浏览器、新开的自动化浏览器配置第一次搜索就会被 BOSS 风控。没有这样的浏览器工具，就请用户自己逛 BOSS、用 Zhiro 的捕获书签收。
+用户说「去 BOSS 搜一下……」时，用 Zhiro 的 BOSS 工具，不要自己开浏览器读 BOSS 页面（D-28）。Zhiro 连着用户电脑上一个专用的 Chrome（单独的配置，用户在里面扫码登录过），自己打开页面、像人一样停顿和滚动，旁听页面本身请求到的岗位数据；你拿到的是结构化结果，几乎不花 token。
 
-次数、节奏和暂停由 Zhiro 管（D-27），你照着这四步走，不要绕开：
-
-1. **每打开一页之前** `boss.permit` `{ "url": "<要打开的地址>" }` → 拿到 `permitId` 和 `waitSeconds`。等够 `waitSeconds` 秒再在浏览器里打开这一页。会话第一页必须是城市首页（如 `https://www.zhipin.com/wuhan/`），然后才能搜索页 `https://www.zhipin.com/web/geek/jobs?query=<关键词>&city=<城市代码>`（武汉 `101200100`，要实习就把「实习」写进关键词），详情页 `https://www.zhipin.com/job_detail/<id>.html` 要在搜索之后。
-2. **读完交回** `boss.page` `{ "permitId", "url": "<同一个地址>", "text": "<页面文字>", "finalUrl": "<浏览器最后停在的地址>" }`。
-   - `stopped`：BOSS 拦了。**马上停**，不刷新、不重试，告诉用户；Zhiro 会暂停 24 小时，只有用户能在设置页解除。
-   - 搜索页：返回解析出的岗位，`maybeInPool` 是库里可能相同的（只供参考）。把列表给用户挑，**只为挑中的打开详情**。
-   - 详情页：`filed` 就是已收进库（只存岗位本身，用户自己的信息不存）；`preview` 说缺什么，从同一页读出来，用 `fields` 带上、同一个 `permitId` 15 分钟内再交一次，值必须在页面文字里找得到。
-3. **被拒绝时照 code 办**：`BUDGET`（额度用完，告诉用户）、`HOME_FIRST` / `SEARCH_FIRST`（先开该开的页）、`OPEN_PERMIT`（上一张还没交回）、`STOPPED`（暂停中，别再开 BOSS）。`boss.status` 看今天用了多少。
-4. **绝不做**：「立即沟通」「感兴趣」、打招呼、投递、上传简历、改求职期望，以及任何验证码。BOSS 的岗位不要用 `listing.capture` 收（会被拒绝）。
+1. **搜** `boss.search` `{ "query": "运动控制 实习", "city": "武汉", "pages": 2 }`。要实习就把「实习」写进 query。返回的 `items` 是「候选」：岗位名、明文薪资、学历/天数/月数、公司简称，`maybeInPool` 是库里可能相同的（只供参考）。候选还不是正式岗位。
+2. **挑** 把候选按用户的方向和条件筛给用户看，或按用户说的标准自己挑。
+3. **补详情** `boss.detail` `{ "refs": ["<ref>", …] }`（一次最多 5 个）：Zhiro 打开职位页，读职位描述、工商注册名、地址，收进库成为正式岗位，之后就能在「找实习」「找岗位」里看到、关注、调研。没挑的留在候选里，`boss.candidates` 随时能再看（14 天内）。
+4. **停下来的情况**：`stopped.code` 为 `RISK_BLOCKED` 时 BOSS 拦了，访问已暂停 24 小时，**马上停**，告诉用户，只有用户能在设置页解除；`AUTH_REQUIRED` 请用户在专用浏览器里重新扫码；`BROWSER_DOWN` 请用户在设置页点「打开 BOSS 专用浏览器」（或你调 `boss.browser`）；`BUDGET` 额度用完；`CAPTURE_TIMEOUT` / `SCHEMA_CHANGED` 照实说只拿到了几屏。`boss.status` 看今天用了多少。
+5. **绝不做**：「立即沟通」「感兴趣」、打招呼、投递、上传简历、改求职期望，以及任何验证码。BOSS 的岗位不要用 `listing.capture` 收（会被拒绝）。旧的 `boss.permit` / `boss.page` 还在，只在专用浏览器用不了时才用。
 
 额度和是否暂停只算经 Zhiro 的访问，不含用户自己在网页和 App 上的操作。
 
