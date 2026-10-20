@@ -614,7 +614,7 @@ export const tools = {
   "research.company": defineTool({
     name: "research.company",
     description: "派发一次公司调研：由系统侧 Claude Code worker（有联网搜索）在隔离 run 目录中检索官网/招聘系统/就业网/公众号/牛客，产出带证据等级的中文报告，落 vault/research/。异步，返回 runId；用 research.get 查看。",
-    input: Type.Object({ companyName: Type.String(), question: Type.Optional(Type.String({ description: "具体想知道什么；默认 2027 届校招全貌" })) }),
+    input: Type.Object({ companyName: Type.String(), question: Type.Optional(Type.String({ description: "具体想知道什么；默认 2027 届校招全貌。「企业情况」= 经营情况；「就业评估」= 就业评估报告（D-29：职路先放同行百分位和历年财务，再由调研员写利润为什么变、钱去了哪、激励是否覆盖技术人员、上市进展、和用户的匹配，每条结论带证据、反面说法和限制，不打分）" })) }),
     output: Type.Object({ runId: Id, workflowId: Id }),
     effects: EGRESS,
     execution: "job",
@@ -669,6 +669,24 @@ export const tools = {
     effects: READ,
     execution: "sync",
     errors: ["MISSING_FIELD", "BAD_RUN"],
+  }),
+  "employer.compare": defineTool({
+    name: "employer.compare",
+    description: "比较几家上市公司作为雇主的位置（D-29，不打总分，不花模型额度）。每家在自己行业的全部 A 股公司里（A 股按申万一级，新三板按证监会行业，港股美股按 peerIndustry 或一起比的 A 股公司最多的那个申万一级；港美股不披露职工现金，待遇信号缺；yardstick 说明怎么量的，要转述给用户），按四项各算百分位：成长（营收三年复合增速）、研发（研发费用占营收）、待遇信号（每名员工对应的职工现金支出，粗指标）、盈利（净利率）；再在三种偏好（成长研发优先 / 均衡 / 稳定回报优先，可另给 weights）下排这几家的名次。under 里每种偏好给：place（按该权重的名次）、usually（权重上下浮动时名次的通常范围）、top3Share（进前三的权重占比，是偏好情景的比例，不是现实概率）；缺指标的不估值，给 byKnown / best / worst。outdoneBy 列出在四项上都不差且至少一项更好的公司（不叫梯队）。movedTogether 只说同期一起发生了什么，不是原因，原因要读年报或公告核实。labels 带着规则。未上市公司在 notFound 里，不和上市公司混排。第一次查一个行业约 20–30 秒，之后 30 天内用同一份数据（data 里有取数时间）。",
+    input: Type.Object({
+      companies: Type.Array(Type.String({ description: "公司名、简称或 6 位股票代码" }), { minItems: 1, maxItems: 15 }),
+      weights: Type.Optional(Type.Object({ growth: Type.Optional(Type.Number()), rd: Type.Optional(Type.Number()), pay: Type.Optional(Type.Number()), profit: Type.Optional(Type.Number()) }, { description: "用户自己的偏好权重（相对大小即可，会归一）" })),
+      spread: Type.Optional(Type.Number({ description: "权重上下浮动多少（0.02–1，默认 0.1）" })),
+      year: Type.Optional(Type.Number({ description: "用哪一年的年报，默认最近一个已全部披露的年份" })),
+      peerIndustry: Type.Optional(Type.String({ description: "港股、美股公司拿哪个申万一级行业的 A 股公司当同行（如 机械设备、电子、汽车）；不给就用一起比的 A 股公司最多的那个行业" })),
+    }),
+    output: Type.Object({
+      year: Type.Number(), peerGroup: Type.String(), data: Type.Unknown(), measures: Type.Array(Type.Unknown()), companies: Type.Array(Type.Unknown()),
+      scenarios: Type.Unknown(), spread: Type.Number(), notFound: Type.Array(Type.Unknown()), method: Type.String(),
+    }),
+    effects: READ,
+    execution: "sync",
+    errors: ["MISSING_FIELD"],
   }),
   "labor.us": defineTool({
     name: "labor.us",
