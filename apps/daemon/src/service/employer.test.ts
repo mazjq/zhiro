@@ -77,6 +77,7 @@ describe("employer.compare over the network's shape, without the network", () =>
       { SECUCODE: "300001.SZ", SECURITY_NAME_ABBR: "甲机器人", ORG_NAME: "甲机器人股份有限公司", BOARD_NAME_LEVEL: "机械设备-自动化设备-机器人", EMP_NUM: 100, INDUSTRYCSRC1: "制造业-通用设备制造业" },
       { SECUCODE: "300002.SZ", SECURITY_NAME_ABBR: "乙装备", ORG_NAME: "乙装备股份有限公司", BOARD_NAME_LEVEL: "机械设备-通用设备-机床工具", EMP_NUM: 200 },
       { SECUCODE: "300003.SZ", SECURITY_NAME_ABBR: "丙新上市", ORG_NAME: "丙新上市股份有限公司", BOARD_NAME_LEVEL: "机械设备-专用设备-其他", EMP_NUM: 50 },
+      { SECUCODE: "A25300.SH", SECURITY_NAME_ABBR: "庚申报", ORG_NAME: "庚申报科技股份有限公司", BOARD_NAME_LEVEL: "机械设备-专用设备-其他", EMP_NUM: 80 },
       { SECUCODE: "600001.SH", SECURITY_NAME_ABBR: "丁银行", ORG_NAME: "丁银行股份有限公司", BOARD_NAME_LEVEL: "银行-银行Ⅱ-股份制银行Ⅲ", EMP_NUM: 9 },
     ];
     const inc = (code: string, y: number, rev: number, np: number, rd: number) => ({ SECUCODE: code, REPORT_DATE: `${y}-12-31 00:00:00`, TOTAL_OPERATE_INCOME: rev, PARENT_NETPROFIT: np, RESEARCH_EXPENSE: rd, OPERATE_COST: rev / 2 });
@@ -102,10 +103,10 @@ describe("employer.compare over the network's shape, without the network", () =>
     });
     const db = openDb(join(mkdtempSync(join(tmpdir(), "zhiro-emp-")), "t.db"));
     const now = Date.parse("2026-10-18T00:00:00Z");
-    const r: any = await compare(db, { companies: ["甲机器人", "300002", "丙新上市", "宇树科技", "戊智能", "己机器人"], weights: { growth: 3, rd: 1 } }, now);
+    const r: any = await compare(db, { companies: ["甲机器人", "300002", "丙新上市", "宇树科技", "戊智能", "己机器人", "庚申报"], weights: { growth: 3, rd: 1 } }, now);
     expect(r.year).toBe(2025);
     expect(r.data.pools).toEqual({ "申万一级「机械设备」": { at: "2026-10-18T00:00:00.000Z", companies: 2 }, "证监会行业「制造业-通用设备制造业」": { at: "2026-10-18T00:00:00.000Z", companies: 1 } }); // 丙 has no 2025 revenue; 丁 is another industry
-    const [a, b, c, e, f] = r.companies;
+    const [a, b, c] = r.companies, by = (n: string) => r.companies.find((x: any) => x.name === n), e = by("戊智能"), f = by("己机器人");
     expect(f).toMatchObject({ name: "己机器人", market: "港股", peerGroup: "申万一级「机械设备」", percentile: { growth: 100, rd: 100, pay: null, profit: 0 }, coverage: "3/4" });
     expect(f.yardstick).toMatch(/按申万一级「机械设备」的 A 股上市公司来量；不披露支付给职工的现金/);
     expect(Object.keys(f.years)).toEqual(["2022", "2024", "2025"]); // the interim is not a year
@@ -119,10 +120,22 @@ describe("employer.compare over the network's shape, without the network", () =>
     expect(b).toMatchObject({ name: "乙装备", percentile: { growth: 25, rd: 25, pay: 25, profit: 25 } });
     expect(b.movedTogether).toEqual(["营收和利润同时下降"]);
     expect(c).toMatchObject({ name: "丙新上市", note: expect.stringContaining("2025") });
+    expect(r.companies.find((x: any) => x.name === "庚申报")).toMatchObject({ note: "在申报上市（申报代码 A25300.SH），还没有公开的年报" }); // a listing under review
     expect(Object.keys(a.under)).toEqual(["成长研发优先", "均衡", "稳定回报优先", "你设的权重"]);
     expect(r.scenarios.你设的权重.weights).toEqual({ growth: 0.75, rd: 0.25, pay: 0, profit: 0 });
     expect(a.under.均衡).toMatchObject({ place: 1, top3Share: null }); // two complete: the top three says nothing
     expect(r.notFound).toEqual([expect.objectContaining({ query: "宇树科技" })]);
+    // a name on no board is looked up once a week, not on every comparison; what BOSS showed of it is on its row
+    db.prepare("insert into boss_candidate(job_id, url, title, brand, stage, scale, industry, first_seen, last_seen) values ('j1','u','运动控制实习生','鳍源科技','B轮','100-499人','智能硬件','2026-10-17T00:00:00Z','2026-10-17T00:00:00Z')").run();
+    const lookups = () => asked.filter((x) => x === undefined || x === null).length; // the code table carries no reportName
+    const before = lookups();
+    const u1: any = await compare(db, { companies: ["鳍源科技"] }, now);
+    const mid = lookups();
+    const u2: any = await compare(db, { companies: ["鳍源科技"] }, now + 3600_000);
+    expect(mid).toBeGreaterThan(before);
+    expect(lookups()).toBe(mid);
+    expect(u2.notFound[0]).toMatchObject({ query: "鳍源科技", known: { boss: { stage: "B轮", scale: "100-499人", industry: "智能硬件", seen: "2026-10-17" } } });
+    expect(u1.notFound[0].known.boss.stage).toBe("B轮");
     const calls = asked.length;
     await compare(db, { companies: ["甲机器人"] }, now + 86400_000);
     expect(asked.length).toBe(calls); // the same data for 30 days

@@ -1,7 +1,7 @@
 import type { Db } from "../db.js";
-import { normName } from "./intel.js";
 import { resolveNeeq } from "./neeq.js";
 import { companyFinancials } from "./research-data.js";
+import { normName, smeMatch } from "./intel.js";
 
 /**
  * Comparing employers (D-29): where each listed company stands among the A-share companies of its own 申万一级
@@ -46,6 +46,17 @@ function cached<T>(db: Db, key: string, now: number): { at: string; data: T } | 
 }
 const keep = (db: Db, key: string, data: unknown, now: number) =>
   db.prepare("insert or replace into peer_snapshot(key, fetched_at, data_json) values (?,?,?)").run(key, new Date(now).toISOString(), JSON.stringify(data));
+/**
+ * A name looked up on the other boards (新三板, 港股, 美股) is remembered for a week, found or not: an unlisted company
+ * took a second of lookups on every comparison (2026-10-20). A lookup that failed is not remembered.
+ */
+async function remembered<T>(db: Db, key: string, now: number, look: () => Promise<T>): Promise<T> {
+  const r = db.prepare("select fetched_at, data_json from peer_snapshot where key = ?").get(key) as { fetched_at: string; data_json: string } | undefined;
+  if (r && now - Date.parse(r.fetched_at) <= 7 * 86400_000) return JSON.parse(r.data_json).v as T;
+  const v = await look();
+  keep(db, key, { v }, now);
+  return v;
+}
 
 /** Every A-share company with its 申万 industry (一级-二级-三级) and latest staff count. */
 export async function universe(db: Db, now = Date.now()): Promise<{ at: string; data: Company[] }> {
@@ -114,7 +125,7 @@ async function statements(rows: Map<string, PeerRow>, year: number) {
 
 /** A 新三板 company by name: the code table finds it, its F10 profile gives the industry and staff count. */
 async function neeqCompany(name: string): Promise<Company | null> {
-  const hit = await resolveNeeq(name, normName(name)).catch(() => null);
+  const hit = await resolveNeeq(name, normName(name));
   if (!hit) return null;
   const r = (await f10("RPT_F10_BASIC_ORGINFO", "SECUCODE,SECURITY_NAME_ABBR,ORG_NAME,BOARD_NAME_LEVEL,EMP_NUM,INDUSTRYCSRC1", `(SECUCODE="${hit.code}.NQ")`)).data[0];
   return r?.BOARD_NAME_LEVEL ? { code: r.SECUCODE, name: r.SECURITY_NAME_ABBR ?? hit.name, org: r.ORG_NAME ?? "", industry: r.BOARD_NAME_LEVEL, employees: Number(r.EMP_NUM) > 0 ? Number(r.EMP_NUM) : null, market: "新三板", csrc: r.INDUSTRYCSRC1 ?? "" } : null;
@@ -125,8 +136,9 @@ async function neeqCompany(name: string): Promise<Company | null> {
  * gross margin, R&D) read one by one. Neither market reports cash paid to staff, so there is no pay measure.
  */
 async function overseas(name: string): Promise<PeerRow | null> {
-  const f: any = await companyFinancials({ name }).catch(() => null);
-  const sec = f?.status === "listed" ? f.security : null;
+  const f: any = await companyFinancials({ name });
+  if (f.status === "failed") throw new Error(`${name}：认出了上市公司但数据没取成`);
+  const sec = f.status === "listed" ? f.security : null;
   if (!sec || (sec.market !== "港股" && sec.market !== "美股")) return null;
   const hk = sec.market === "港股", code = hk ? `${sec.code}.HK` : sec.code;
   const main = (await f10(hk ? "RPT_HKF10_FN_MAININDICATOR" : "RPT_USF10_FN_GMAININDICATOR", "ALL", `(SECUCODE="${code}")`)).data;
@@ -145,6 +157,26 @@ async function overseas(name: string): Promise<PeerRow | null> {
   // amounts stay in the report's own currency (东财's CURRENCY names the listing's, not always the report's): only
   // ratios are compared, and they do not depend on it
   return { code, name: sec.name, org: sec.name, industry: f.basic?.industry ?? "", employees: f.basic?.employees ?? null, market: sec.market, approx: !!f.approx, years };
+}
+
+/**
+ * What Zhiro already holds about a company with no listing, without going out: its funding stage, size and industry as
+ * BOSS 直聘 showed them on a search page (the company's own entry there), the 专精特新 roster, and a listing review
+ * recorded on its company card. The employer report goes further (funding rounds, investors, filings).
+ */
+export function unlistedFacts(db: Db, name: string) {
+  const n = normName(name);
+  const boss = n.length >= 2 ? (db.prepare("select brand, stage, scale, industry, last_seen from boss_candidate order by last_seen desc limit 2000").all() as any[])
+    .find((b) => b.brand && b.brand.length >= 2 && (normName(b.brand) === n || n.includes(normName(b.brand)) || normName(b.brand).includes(n))) : undefined;
+  const sme = smeMatch(db, name).matches[0];
+  const co = db.prepare("select id from company where name = ? or norm = ?").get(name, n) as { id: string } | undefined;
+  const ipo = co ? (db.prepare("select data_json, fetched_at from company_intel where company_id = ? and kind = 'ipo'").get(co.id) as any) : undefined;
+  const szse = ipo ? JSON.parse(ipo.data_json)?.szse : null;
+  return {
+    ...(boss ? { boss: { stage: boss.stage, scale: boss.scale, industry: boss.industry, seen: String(boss.last_seen).slice(0, 10) } } : {}),
+    ...(sme ? { sme: sme.level } : {}),
+    ...(szse ? { ipo: { board: "深交所", stage: szse.stage, date: szse.date ?? "" } } : {}),
+  };
 }
 
 // ---------- the measures ----------
@@ -284,10 +316,10 @@ export function findCompany(all: Company[], query: string): Company | { candidat
 export async function compare(db: Db, q: { companies: string[]; weights?: Partial<Record<Facet, number>>; spread?: number; year?: number; peerIndustry?: string }, now = Date.now()) {
   const year = q.year ?? latestYear(now);
   const uni = await universe(db, now);
-  const found: Company[] = [], notFound: { query: string; reason: string; candidates?: string[] }[] = [];
+  const found: Company[] = [], notFound: { query: string; reason: string; candidates?: string[]; known?: ReturnType<typeof unlistedFacts> }[] = [];
   const elsewhere: string[] = [];
   for (const name of q.companies.slice(0, 15)) {
-    const c = findCompany(uni.data, name) ?? (await neeqCompany(name));
+    const c = findCompany(uni.data, name) ?? (await remembered(db, `neeq:${name}`, now, () => neeqCompany(name)).catch(() => null));
     if (!c) elsewhere.push(name);
     else if ("candidates" in c) notFound.push({ query: name, reason: "有几家名字相近，用股票代码再查", candidates: c.candidates.map((x) => `${x.name} ${x.code}`) });
     else if (!found.some((f) => f.code === c.code)) found.push(c);
@@ -298,8 +330,8 @@ export async function compare(db: Db, q: { companies: string[]; weights?: Partia
   const peerSw = q.peerIndustry?.trim() || [...new Set(tops)].sort((a, b) => tops.filter((x) => x === b).length - tops.filter((x) => x === a).length)[0];
   const abroad = new Map<string, PeerRow>();
   for (const name of elsewhere) {
-    const r = await overseas(name);
-    if (!r) notFound.push({ query: name, reason: "不是 A 股、新三板、港股或美股上市公司（或名字写法不同）；未上市公司没有公开财报，放不进这张表" });
+    const r = await remembered(db, `abroad:${name}`, now, () => overseas(name)).catch(() => null);
+    if (!r) notFound.push({ query: name, reason: "不是 A 股、新三板、港股或美股上市公司（或名字写法不同）；未上市公司没有公开财报，放不进这张表", known: unlistedFacts(db, name) });
     else if (!peerSw) notFound.push({ query: name, reason: `${r.market}公司没有申万行业：和 A 股公司一起比，或给出拿哪个申万一级行业当同行（peerIndustry）` });
     else if (!uni.data.some((c) => sector(c.industry) === peerSw)) notFound.push({ query: name, reason: `没有叫「${peerSw}」的申万一级行业` });
     else if (!found.some((f) => f.code === r.code)) { r.peerSw = peerSw; abroad.set(r.code, r); found.push(r); }
@@ -341,10 +373,11 @@ export async function compare(db: Db, q: { companies: string[]; weights?: Partia
     data: { universeAt: uni.at, pools: Object.fromEntries([...pools].map(([k, v]) => [k, { at: v.at, companies: v.data.length }])), source: "东方财富 F10：公司概况、利润表、现金流量表（年报）" },
     measures: FACETS,
     companies: rows.map((r) => {
-      if (!("pct" in r)) return { code: r.company.code, name: r.company.name, org: r.company.org, industry: r.company.industry, market: r.company.market ?? "A股", note: `没有 ${year} 年报数据（可能是当年之后才上市）` };
+      if (!("pct" in r)) return { code: r.company.code, name: r.company.name, org: r.company.org, industry: r.company.industry, market: r.company.market ?? "A股", note: /^[A-Z]/.test(r.company.code) ? `在申报上市（申报代码 ${r.company.code}），还没有公开的年报` : `没有 ${year} 年报数据（可能是当年之后才上市）` };
       return {
         code: r.company.code, name: r.company.name, org: r.company.org, industry: r.company.industry, market: r.company.market ?? "A股",
         peerGroup: peerGroup(r.company).label, ...(r.company.market === "新三板" ? { yardstick: "新三板公司，按同一证监会行业的 A 股上市公司来量" } : {}),
+        ...(/^[A-Z]/.test(r.company.code) ? { yardstick: `在申报上市（申报代码 ${r.company.code}），财务数据来自申报材料，按同行业 A 股上市公司来量` } : {}),
         ...(r.company.peerSw ? { yardstick: `${r.company.market}公司，按申万一级「${r.company.peerSw}」的 A 股上市公司来量；不披露支付给职工的现金，待遇信号缺；金额是公司财报自己的币种，比较的都是比例，不受币种影响${r.company.approx ? `；「${r.company.name}」是按名字相近认的，请核对是不是你要的那家` : ""}` } : {}),
         years: r.years, value: r.value, percentile: r.pct, peers: r.peers, coverage: `${r.coverage}/4`, more: r.more, movedTogether: r.moved, labels: r.labels,
         outdoneBy: outdone.has(r.company.code) ? outdone.get(r.company.code)!.map((c) => ok.find((x) => x.company.code === c)!.company.name) : null,
