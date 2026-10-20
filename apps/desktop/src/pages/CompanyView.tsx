@@ -144,10 +144,7 @@ function Intel({ c }: { c: any }) {
   const age = (r: any) => (r ? <span className="text-xs text-ink-3 ml-2" title={r.fetchedAt}>{r.ageDays === 0 ? "今天" : `${r.ageDays} 天前`}{r.ageDays > 30 ? " · 过期" : ""}</span> : null);
   const basic = row("basic"), fin = row("finance"), div = row("dividends"), ann = row("announcements"), news = row("news"), ipo = row("ipo"), holders = row("holders"), sectors = row("sectors"), forecast = row("forecast"), reports = row("reports"), irm = row("irm");
   const listed = x?.listing && !x.listing.none;
-  const [researching, setResearching] = useState(false);
   const [researchMsg, setResearchMsg] = useState("");
-  // the worker's brief lives in the daemon (INTEL_QUESTION); the card only names the subject
-  const research = async () => { setResearching(true); try { const r = await call("research.company", { companyName: c.companyName, question: "企业情况" }); setResearchMsg(`已派发联网调研（消耗 Claude Code 额度，约几分钟），结果在「求职资料 → 调研」和 vault/research/。运行 ${r.runId.slice(-6)}`); } catch (e: any) { setResearchMsg(e.message); setResearching(false); } };
   const [assessing, setAssessing] = useState(false);
   const assess = async () => {
     setAssessing(true);
@@ -198,8 +195,7 @@ function Intel({ c }: { c: any }) {
       )}
       {x?.listing && !listed && (
         <div className="text-xs text-ink-3 py-1 border-t border-line flex items-center gap-2">
-          <span className="flex-1">非上市{x.sme?.matches.length === 0 ? `，不在本地专精特新名录（${x.sme?.rosterSize ?? 0} 家）` : ""}。融资、参股、政策、口碑要联网调研。</span>
-          <Button onClick={research} disabled={researching}>{researching ? "已派发" : "联网调研"}</Button>
+          <span className="flex-1">非上市{x.sme?.matches.length === 0 ? `，不在本地专精特新名录（${x.sme?.rosterSize ?? 0} 家）` : ""}。融资、人员、上市进展、口碑写在下面的就业评估报告里。</span>
         </div>
       )}
       {x?.listing && (

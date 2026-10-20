@@ -3,6 +3,7 @@ import { call } from "../api";
 import { useLatest, useOnDataChange } from "../refresh";
 import { H1, Card, Chip, Button, Empty } from "../ui";
 import { CompanyRow, CompanyDetail } from "./CompanyView";
+import { Reader } from "../Reader";
 
 const input = "px-3 py-1.5 border border-line rounded-md bg-paper text-sm";
 const split = (s: string) => s.split(/[\/、,，;；|\s]+/).filter(Boolean);
@@ -76,10 +77,14 @@ function Research({ companyName }: { companyName: string }) {
         </div>
       ))}
       {report && (
-        <div className="mt-3 border-t border-line pt-3">
-          <div className="text-xs text-ink-3 font-mono mb-1">{report.reportPath} · 证据 {report.evidence.length} 条</div>
-          <pre className="whitespace-pre-wrap text-xs bg-ground rounded p-3 max-h-[480px] overflow-auto font-sans">{report.markdown}</pre>
-        </div>
+        <Reader title={`${companyName} · 调研报告`} sub={`${(report.startedAt ?? "").slice(0, 10)} · 证据 ${report.evidence.length} 条`} markdown={report.markdown} onClose={() => setReport(null)}>
+          {report.evidence.length > 0 && (
+            <div className="mt-6 pt-3 border-t border-line text-xs text-ink-2 space-y-1">
+              <div className="font-bold text-sm text-ink mb-1">证据</div>
+              {report.evidence.map((e: any, i: number) => <div key={i}><Chip>{e.grade}</Chip> <a className="text-accent" href={e.url} target="_blank" rel="noreferrer">{e.title || e.url}</a>{e.quote && <span className="text-ink-3"> — {e.quote}</span>}</div>)}
+            </div>
+          )}
+        </Reader>
       )}
     </div>
   );
