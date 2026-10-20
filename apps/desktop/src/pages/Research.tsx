@@ -4,14 +4,17 @@ import { useLatest, useOnDataChange } from "../refresh";
 import { H1, Card, Chip, Button, Empty } from "../ui";
 import { applyLink } from "./CompanyView";
 import { JOBS_QUERY_KEY } from "./Jobs";
-import { CompareResults } from "./Compare";
+import { CompareBox, CompareResults } from "./Compare";
+import { Reader } from "../Reader";
 
 /**
- * 调研: a direction looked into (an industry, a kind of job), and what the report's companies have in the pool right now.
+ * 调研: a direction looked into (an industry, a kind of job), and what the report's companies have in the pool right now;
+ * or a few companies compared as employers (比较几家公司, D-29) — one line from a direction to a short list to one company.
  * The report itself changes nothing in the pool; a company gets in only when the person sends the system to find its
  * careers page, one company at a time.
  */
 const OPEN_KEY = "jobos.research.open";
+const MODE_KEY = "zhiro.research.mode";
 const STATUS: Record<string, { label: string; tone: "good" | "bad" | "amber" }> = { done: { label: "完成", tone: "good" }, failed: { label: "没做成", tone: "bad" }, running: { label: "进行中", tone: "amber" } };
 const input = "px-3 py-1.5 border border-line rounded-md bg-paper text-sm";
 /** An amount as a person reads it (12.3 亿), in the currency the filing is in. */
@@ -151,9 +154,13 @@ function Company({ c, pending, onChanged }: { c: any; pending: boolean; onChange
   );
 }
 
+/** The report's company a compared row is, by the report's name, the pool's name or the listing's names. */
+const reportCompany = (companies: any[], x: { name: string; org?: string }) =>
+  companies.find((c) => [c.companyName, c.name].some((n: string) => n && (n === x.org || n === x.name || n.includes(x.name) || x.name.includes(n))));
+
 /** Under a company in the comparison: its posts in the pool that suit the person — the other line, not mixed in. */
 function PostsOf({ x, companies }: { x: any; companies: any[] }) {
-  const c = companies.find((c) => [c.companyName, c.name].some((n: string) => n && (n === x.org || n === x.name || n.includes(x.name))));
+  const c = reportCompany(companies, x);
   if (!c || c.status !== "in") return <span className="text-ink-3">岗位库里还没有它的岗位</span>;
   if (!c.suitableTotal) return <span className="text-ink-3">库里在招 {c.openPosts} 个，和你的资料相关的还没有</span>;
   return <span className="text-ink-2">和你的资料相关的在招岗位 {c.suitableTotal} 个：{c.suitable.map((p: any) => p.title).join("、")}{c.suitableTotal > c.suitable.length ? " 等" : ""}</span>;
@@ -163,7 +170,9 @@ export default function Research() {
   const [items, setItems] = useState<any[] | null>(null); // null = not answered yet
   const [open, setOpen] = useState<string>(() => localStorage.getItem(OPEN_KEY) ?? "");
   const [report, setReport] = useState<any>(null);
-  const [rank, setRank] = useState(false); // the comparison is fetched only when opened
+  const [mode, setMode] = useState<"topic" | "compare">(() => (localStorage.getItem(MODE_KEY) === "compare" ? "compare" : "topic"));
+  const [companiesView, setCompaniesView] = useState<"pool" | "compare">("pool"); // the comparison is fetched only when picked
+  const [reading, setReading] = useState(false);
   const [topic, setTopic] = useState("");
   const [region, setRegion] = useState("");
   const [armed, setArmed] = useState(false);
@@ -192,9 +201,17 @@ export default function Research() {
     catch (e: any) { setMsg(`没发起成：${e.message}`); } finally { setStarting(false); }
   };
   const groups: [string, string][] = [["in", "已在岗位库"], ["maybe", "可能在库"], ["out", "不在岗位库"]];
+  const pick = (m: "topic" | "compare") => { setMode(m); localStorage.setItem(MODE_KEY, m); };
+  const tab = (on: boolean) => `px-4 py-1.5 text-sm ${on ? "bg-accent text-white" : "bg-paper text-ink-2 hover:bg-ground"}`;
   return (
     <>
-      <H1 sub="先看方向，再看公司和岗位。报告只存档，不改岗位库。">调研</H1>
+      <H1 sub="先调研一个方向，找出公司；再把几家公司比一比；挑中的一家写就业评估报告。报告只存档，不改岗位库。">调研</H1>
+      <div className="flex border border-line rounded-md overflow-hidden w-fit mb-3">
+        <button className={tab(mode === "topic")} onClick={() => pick("topic")}>调研一个方向</button>
+        <button className={tab(mode === "compare")} onClick={() => pick("compare")}>比较几家公司</button>
+      </div>
+      {mode === "compare" && <Card className="p-5 mb-4"><CompareBox /></Card>}
+      {mode === "topic" && (<>
       <Card className="p-5 mb-4">
         <div className="flex gap-2">
           <input value={topic} onChange={(e) => { setTopic(e.target.value); setArmed(false); }} placeholder="想了解的行业或方向，如 人形机器人、工业软件" className={`${input} flex-1`} />
@@ -219,27 +236,40 @@ export default function Research() {
       {open && list.some((r) => r.runId === open) && !(report && report.runId === open) && <Card className="p-5 text-sm text-ink-3">正在读取报告…</Card>}
       {report && report.runId === open && (
         <Card className="p-5">
-          <div className="flex items-baseline gap-2 mb-1">
+          <div className="flex items-center gap-2 mb-1">
             <div className="font-bold">{report.topic}{report.region && <span className="text-ink-3 font-normal"> · {report.region}</span>}</div>
             <span className="text-xs text-ink-3">{report.status === "running" ? "还在查…" : report.status === "failed" ? `没做成：${report.error}` : `信源 ${report.sources.length} 条`}</span>
+            {report.markdown && <span className="ml-auto"><Button tone="primary" onClick={() => setReading(true)}>阅读正文</Button></span>}
           </div>
           {report.summary && <div className="text-sm mb-3">{report.summary}</div>}
           {report.status === "done" && (report.keyPoints?.length > 0 ? <KeyPoints points={report.keyPoints} /> : <div className="text-xs text-amber mb-3">这份报告没有给出可核对的要点：下面的结论哪些有数据依据，看不出来。</div>)}
           {report.roles?.length > 0 && <div className="text-sm mb-3"><span className="text-ink-3">报告认为合适的岗位类型：</span>{report.roles.map((r: any) => <span key={r.title} className="mr-2" title={r.why}><Chip>{r.title}</Chip></span>)}</div>}
-          {groups.map(([status, label]) => {
-            const cs = report.companies.filter((c: any) => c.status === status);
-            return cs.length ? (
-              <div key={status} className="mb-3">
-                <div className="text-xs text-ink-3">{label} · {cs.length} 家{status === "out" ? "（要它们的岗位：逐家去找招聘入口）" : ""}</div>
-                {cs.map((c: any) => <Company key={c.name} c={c} pending={report.data?.pending > 0} onChanged={() => show(report.runId)} />)}
+          {report.companies.length > 0 && (
+            <div className="mt-4 mb-3">
+              <div className="flex items-center gap-3 mb-2">
+                <div className="font-bold">报告里的公司 · {report.companies.length} 家</div>
+                <div className="flex border border-line rounded-md overflow-hidden">
+                  <button className={tab(companiesView === "pool")} onClick={() => setCompaniesView("pool")}>名单与岗位</button>
+                  <button className={tab(companiesView === "compare")} onClick={() => setCompaniesView("compare")}>比一比（不打分）</button>
+                </div>
               </div>
-            ) : null;
-          })}
-          {report.status === "done" && report.companies.length > 0 && (
-            <details className="mt-2 mb-2" onToggle={(e) => setRank((e.target as HTMLDetailsElement).open)}>
-              <summary className="text-sm text-accent cursor-pointer">把报告里的上市公司作为雇主比一比（不打分）</summary>
-              {rank && <div className="mt-2"><CompareResults names={[...report.companies].sort((a: any, b: any) => Number(b.status === "in") - Number(a.status === "in")).map((c: any) => c.companyName || c.name)} aside={(x) => <PostsOf x={x} companies={report.companies} />} /></div>}
-            </details>
+              {companiesView === "pool" && groups.map(([status, label]) => {
+                const cs = report.companies.filter((c: any) => c.status === status);
+                return cs.length ? (
+                  <div key={status} className="mb-3">
+                    <div className="text-xs text-ink-3">{label} · {cs.length} 家{status === "out" ? "（要它们的岗位：逐家去找招聘入口）" : ""}</div>
+                    {cs.map((c: any) => <Company key={c.name} c={c} pending={report.data?.pending > 0} onChanged={() => show(report.runId)} />)}
+                  </div>
+                ) : null;
+              })}
+              {companiesView === "compare" && (
+                <CompareResults
+                  names={report.companies.map((c: any) => c.name)}
+                  aside={(x) => <PostsOf x={x} companies={report.companies} />}
+                  nameOf={(x) => reportCompany(report.companies, x)?.companyName || ""}
+                />
+              )}
+            </div>
           )}
           {report.status === "done" && (
             <details className="mt-2">
@@ -251,15 +281,19 @@ export default function Research() {
               </div>
             </details>
           )}
-          {report.markdown && (
-            <details className="mt-2" open={!report.companies.length}>
-              <summary className="text-sm text-accent cursor-pointer">报告正文</summary>
-              <pre className="whitespace-pre-wrap text-xs bg-ground rounded p-3 mt-2 max-h-[560px] overflow-auto font-sans">{report.markdown}</pre>
-              {report.sources.length > 0 && <div className="text-xs text-ink-2 mt-2 space-y-0.5">{report.sources.map((e: any) => <div key={e.url}><Chip>{e.grade}</Chip> <a className="text-accent" href={e.url} target="_blank" rel="noreferrer">{e.title || e.url}</a>{e.quote && <span className="text-ink-3"> — {e.quote}</span>}</div>)}</div>}
-            </details>
+          {reading && report.markdown && (
+            <Reader title={report.topic} sub={`${report.region ? `${report.region} · ` : ""}信源 ${report.sources.length} 条`} markdown={report.markdown} onClose={() => setReading(false)}>
+              {report.sources.length > 0 && (
+                <div className="mt-6 pt-3 border-t border-line text-xs text-ink-2 space-y-1">
+                  <div className="font-bold text-sm text-ink mb-1">信源</div>
+                  {report.sources.map((e: any) => <div key={e.url}><Chip>{e.grade}</Chip> <a className="text-accent" href={e.url} target="_blank" rel="noreferrer">{e.title || e.url}</a>{e.quote && <span className="text-ink-3"> — {e.quote}</span>}</div>)}
+                </div>
+              )}
+            </Reader>
           )}
         </Card>
       )}
+      </>)}
     </>
   );
 }

@@ -341,10 +341,11 @@ export async function compare(db: Db, q: { companies: string[]; weights?: Partia
     data: { universeAt: uni.at, pools: Object.fromEntries([...pools].map(([k, v]) => [k, { at: v.at, companies: v.data.length }])), source: "东方财富 F10：公司概况、利润表、现金流量表（年报）" },
     measures: FACETS,
     companies: rows.map((r) => {
-      if (!("pct" in r)) return { code: r.company.code, name: r.company.name, org: r.company.org, industry: r.company.industry, market: r.company.market ?? "A股", note: `没有 ${year} 年报数据（可能是当年之后才上市）` };
+      if (!("pct" in r)) return { code: r.company.code, name: r.company.name, org: r.company.org, industry: r.company.industry, market: r.company.market ?? "A股", note: /^[A-Z]/.test(r.company.code) ? `在申报上市（申报代码 ${r.company.code}），还没有公开的年报` : `没有 ${year} 年报数据（可能是当年之后才上市）` };
       return {
         code: r.company.code, name: r.company.name, org: r.company.org, industry: r.company.industry, market: r.company.market ?? "A股",
         peerGroup: peerGroup(r.company).label, ...(r.company.market === "新三板" ? { yardstick: "新三板公司，按同一证监会行业的 A 股上市公司来量" } : {}),
+        ...(/^[A-Z]/.test(r.company.code) ? { yardstick: `在申报上市（申报代码 ${r.company.code}），财务数据来自申报材料，按同行业 A 股上市公司来量` } : {}),
         ...(r.company.peerSw ? { yardstick: `${r.company.market}公司，按申万一级「${r.company.peerSw}」的 A 股上市公司来量；不披露支付给职工的现金，待遇信号缺；金额是公司财报自己的币种，比较的都是比例，不受币种影响${r.company.approx ? `；「${r.company.name}」是按名字相近认的，请核对是不是你要的那家` : ""}` } : {}),
         years: r.years, value: r.value, percentile: r.pct, peers: r.peers, coverage: `${r.coverage}/4`, more: r.more, movedTogether: r.moved, labels: r.labels,
         outdoneBy: outdone.has(r.company.code) ? outdone.get(r.company.code)!.map((c) => ok.find((x) => x.company.code === c)!.company.name) : null,
