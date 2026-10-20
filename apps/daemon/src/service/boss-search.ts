@@ -2,7 +2,7 @@ import { ulid } from "ulid";
 import type { Db } from "../db.js";
 import { tx } from "../db.js";
 import { ingest } from "../data/index.js";
-import { status, stopOf, toListing, type BossConfig, type BossKind, type BossPost } from "./boss.js";
+import { status, stopOf, toListing, full, leftUnder, type BossConfig, type BossKind, type BossPost } from "./boss.js";
 import type { Cdp } from "./boss-cdp.js";
 
 /**
@@ -69,10 +69,11 @@ function session(db: Db, cfg: BossConfig | undefined, want: Partial<Record<BossK
   const st = status(db, cfg, now);
   if (st.stop) throw new BossFail("STOPPED", `BOSS 访问已暂停到 ${st.stop.until}：${st.stop.reason}。用户确认 BOSS 正常后可在设置页解除`);
   const id = st.session ?? ulid(), fresh = !st.session;
-  if (fresh && st.today.sessions >= st.limits.sessionsPerDay) throw new BossFail("BUDGET", `今天的 ${st.limits.sessionsPerDay} 次会话用完了，明天再来`);
+  if (fresh && full(st.today.sessions, st.limits.sessionsPerDay)) throw new BossFail("BUDGET", `今天的 ${st.limits.sessionsPerDay} 次会话用完了，明天再来`);
   for (const [k, n] of Object.entries(want) as [BossKind, number][]) {
     const used = fresh ? 0 : st.inSession.filter((r) => r.kind === k).length;
-    if (used + n > st.limits.perSession[k]) throw new BossFail("BUDGET", `这次会话的${k === "search" ? "搜索页" : "详情页"}额度还剩 ${Math.max(0, st.limits.perSession[k] - used)}，不够 ${n}；歇半小时再开新会话，或少要一点`);
+    const cap = st.limits.perSession[k];
+    if (cap !== null && used + n > cap) throw new BossFail("BUDGET", `这次会话的${k === "search" ? "搜索页" : "详情页"}额度还剩 ${Math.max(0, cap - used)}，不够 ${n}；歇半小时再开新会话，或少要一点`);
   }
   return { id, fresh };
 }
@@ -242,7 +243,7 @@ export function candidates(db: Db, q: { internOnly?: boolean; query?: string; li
 function leftOf(db: Db, cfg: BossConfig | undefined, now: number) {
   const st = status(db, cfg, now);
   const inS = (k: BossKind) => st.inSession.filter((r) => r.kind === k).length;
-  return { sessionsToday: st.limits.sessionsPerDay - st.today.sessions, thisSession: { search: st.limits.perSession.search - inS("search"), detail: st.limits.perSession.detail - inS("detail") }, stopped: stopOf(db, now) };
+  return { sessionsToday: leftUnder(st.limits.sessionsPerDay, st.today.sessions), thisSession: { search: leftUnder(st.limits.perSession.search, inS("search")), detail: leftUnder(st.limits.perSession.detail, inS("detail")) }, stopped: stopOf(db, now) };
 }
 
 function lookAlikes(domain: { listPositions: (q: any) => { items: any[] } }, title: string, brand: string): string[] {

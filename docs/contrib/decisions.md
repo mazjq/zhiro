@@ -169,3 +169,5 @@ entries condense what still holds.
   the comparison are in; neither market reports cash paid to staff, so its pay measure is missing and shown as
   bounds, and amounts stay in the report's own currency (only ratios are compared). Unlisted companies are not
   placed: they publish no statements.
+  2026-10-20: no caps by default — the person's call. A person's pace and the 24-hour stop at the first check stay;
+  caps (and halving them after a start or a stop) are there for whoever sets them in `jobos.yaml` → `boss`.
