@@ -148,7 +148,7 @@ function Intel({ c }: { c: any }) {
   const [assessing, setAssessing] = useState(false);
   const assess = async () => {
     setAssessing(true);
-    try { const r = await call("research.company", { companyName: c.companyName, question: "就业评估" }); setResearchMsg(`已交给你的 AI 助手写就业评估报告（约十几分钟），写好在「找岗位 → 调研」里。运行 ${r.runId.slice(-6)}`); }
+    try { const r = await call("research.company", { companyName: c.companyName, question: "就业评估" }); setResearchMsg(`已交给你的 AI 助手写就业评估报告（约十几分钟），写好在这张公司卡下方的「调研」里，点「看报告」。运行 ${r.runId.slice(-6)}`); }
     catch (e: any) { setResearchMsg(e.message); setAssessing(false); }
   };
   return (
@@ -198,12 +198,11 @@ function Intel({ c }: { c: any }) {
           <span className="flex-1">非上市{x.sme?.matches.length === 0 ? `，不在本地专精特新名录（${x.sme?.rosterSize ?? 0} 家）` : ""}。融资、人员、上市进展、口碑写在下面的就业评估报告里。</span>
         </div>
       )}
-      {x?.listing && (
-        <div className="text-xs text-ink-3 py-1 border-t border-line flex items-center gap-2">
-          <span className="flex-1">就业评估报告：利润为什么变、钱去了哪、技术人员有没有激励、上市进展、和你的匹配。数字由职路取，解读由你的 AI 助手写，不打分。</span>
-          <Button onClick={assess} disabled={assessing}>{assessing ? "已派发" : "写一份"}</Button>
-        </div>
-      )}
+      {/* not behind 「生成」: the report fetches its own facts (a video session looked for this button, 2026-10-21) */}
+      <div className="text-xs text-ink-3 py-1 border-t border-line flex items-center gap-2">
+        <span className="flex-1">就业评估报告：利润为什么变、人员和人均、钱去了哪、技术人员有没有激励、融资和上市进展、和你的匹配。数字由职路取，解读由你的 AI 助手写，不打分。</span>
+        <Button onClick={assess} disabled={assessing}>{assessing ? "已派发" : "写一份"}</Button>
+      </div>
       {researchMsg && <div className="text-xs text-ink-3">{researchMsg}</div>}
     </div>
   );
