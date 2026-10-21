@@ -138,6 +138,8 @@ describe("employer.compare over the network's shape, without the network", () =>
     expect(u1.notFound[0].known.boss.stage).toBe("B轮");
     const calls = asked.length;
     await compare(db, { companies: ["甲机器人"] }, now + 86400_000);
-    expect(asked.length).toBe(calls); // the same data for 30 days
+    expect(asked.length).toBe(calls); // the same data within a week
+    await compare(db, { companies: ["甲机器人"] }, now + 8 * 86400_000);
+    expect(asked.length).toBeGreaterThan(calls); // fetched again after a week
   });
 });

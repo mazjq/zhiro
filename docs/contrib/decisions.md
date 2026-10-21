@@ -141,7 +141,7 @@ entries condense what still holds.
 - **D-29 · 2026-10-18 · Comparing employers: places in the industry and under preferences, no total score.** The
   person asked which employers are most worth joining and for sound methods. Each listed company is placed among all
   A-share companies of its 申万一级 industry (a dated snapshot of 东方财富 F10 company list, income and cash-flow
-  statements, kept 30 days in `peer_snapshot`) on four measures, one per aspect: growth (three-year revenue CAGR), R&D
+  statements, kept a week in `peer_snapshot`, like a name looked up on the other boards) on four measures, one per aspect: growth (three-year revenue CAGR), R&D
   (R&D ÷ revenue), a pay signal (cash paid to staff ÷ latest staff count; rough) and profit (net margin). Among the
   companies asked about, places are given under three open preferences (成长研发优先 / 均衡 / 稳定回报优先) or the
   person's own weights, with the usual range (10th–90th) and the share of top-three places over weights drawn evenly
