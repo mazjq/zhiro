@@ -41,7 +41,7 @@ export function Empty({ children }: { children: ReactNode }) {
  * Words the daemon keeps as keys, shown in the person's words (2026-10-21: no 「画像」 on screen; 「待补资料」 means the
  * post's own information is thin, not that the person has to add something).
  */
-export const plain = (text: string) => text.replace(/待补资料/g, "岗位信息不全").replace(/画像/g, "资料");
+export const plain = (text: string) => text.replace(/待补资料/g, "岗位信息不全").replace(/优先考虑/g, "很对口").replace(/可迁移/g, "部分对口").replace(/画像/g, "资料");
 
 /** Application states as the user reads them. 待投 = picked but not applied yet; nothing is "已投" until the user says so. */
 export const STATE_LABEL: Record<string, string> = { draft: "准备申请", submitted: "已投递", in_process: "流程中", closed: "已结束", cancelled: "已取消" };

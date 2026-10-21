@@ -216,8 +216,8 @@ export default function Jobs({ go }: { go: (p: any) => void }) {
             <Button onClick={() => setEditing(currentPreset ?? null)}>{currentPreset ? "编辑搜索模式" : "＋ 搜索模式"}</Button>
           </>
         )}
-        <select value={tier} onChange={(e) => { setTier(e.target.value); setSel(null); }} className={input} title="按资料逐条对照岗位要求：优先考虑（职责相关、核心要求都有证据）/ 可迁移（相关，部分要求待核实或只能迁移）/ 岗位信息不全（只有岗位名或类别）/ 明显缺口（你确认没做过的核心要求）/ 低相关">
-          <option value="">适配度：全部</option><option value="优先考虑">只看优先考虑</option><option value="可迁移">可迁移及以上</option>
+        <select value={tier} onChange={(e) => { setTier(e.target.value); setSel(null); }} className={input} title="按资料逐条对照岗位要求：很对口（职责相关、核心要求都有证据）/ 部分对口（相关，部分要求待核实或只能迁移）/ 岗位信息不全（只有岗位名或类别）/ 明显缺口（你确认没做过的核心要求）/ 低相关">
+          <option value="">适配度：全部</option><option value="优先考虑">只看很对口</option><option value="可迁移">部分对口及以上</option>
         </select>
         <select value={coType} onChange={(e) => { setCoType(e.target.value); setSel(null); }} className={input} title="按企业类型筛选">
           <option value="">企业类型：全部</option><option value="央国企">央国企</option><option value="民企">民企</option><option value="外企">外企 / 合资</option><option value="事业单位">事业单位 / 研究院所</option><option value="银行">银行</option>

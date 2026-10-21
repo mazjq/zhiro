@@ -228,10 +228,10 @@ export function CompanyRow({ c, selected, onClick }: { c: any; selected: boolean
         {c.applied && <Chip tone="good">已投递</Chip>}
         {c.positions.some((p: any) => p.watched && !p.applicationState) && <Chip tone="accent">已关注</Chip>}
         {c.newPositions > 0 && <Chip tone="amber">新 {c.newPositions}</Chip>}
-        <span className="ml-auto text-xs text-ink-3 tabular">{c.score ? <Chip tone={tierTone(tierOf(c.score))}>{tierOf(c.score)}</Chip> : <Chip tone={gradeTone(c.grade)}>{c.grade}</Chip>}</span>
+        <span className="ml-auto text-xs text-ink-3 tabular">{c.score ? <Chip tone={tierTone(tierOf(c.score))}>{plain(tierOf(c.score))}</Chip> : <Chip tone={gradeTone(c.grade)}>{c.grade}</Chip>}</span>
       </div>
       <div className="flex gap-1.5 mt-1.5 items-center flex-wrap">
-        {c.tags.map((t: any) => <Chip key={t.tag} tone="accent">{t.tag}</Chip>)}
+        {c.tags.map((t: any) => <Chip key={t.tag} tone="accent">{plain(t.tag)}</Chip>)}
         <span className="text-xs text-ink-3">{matched ? `${matched} 个匹配岗位 · ` : ""}{c.positions.length} 个岗位{c.sources.length > 1 ? ` · ${c.sources.length} 个项目` : ""}</span>
         <span className="ml-auto">{c.expired ? <Chip>已截止</Chip> : c.closesAt ? <Chip tone={deadlineTone(dl)}>{c.closesAt}{dl != null ? ` · ${dl} 天` : ""}</Chip> : <Chip>{c.deadline?.asap ? "招满即止 · 宜尽早" : c.deadline?.unverified ? "截止待核实" : c.deadlineText || "截止未知"}</Chip>}</span>
       </div>
@@ -286,7 +286,7 @@ export function PostDetails({ p, always }: { p: any; always?: boolean }) {
   if (!open) return null;
   if (!d) return <div className="text-xs text-ink-3">读取中…</div>;
   const a = d.assessment;
-  const st: Record<string, string> = { supported: "有证据", transferable: "可迁移", unknown: "待核实", gap: "缺口" };
+  const st: Record<string, string> = { supported: "有证据", transferable: "部分对口", unknown: "待核实", gap: "缺口" };
   return (
     <div className="text-xs text-ink-2 mb-1.5 border border-line rounded-md bg-ground/50 p-2.5 space-y-1.5">
       <div className="flex gap-3 flex-wrap text-ink-3">{d.position.degreeReq && <span>学历 {d.position.degreeReq}</span>}{d.majorReq && <span>专业 {d.majorReq}</span>}{d.deadline?.say ? <span className={d.deadline.status === "verified" ? "" : "text-amber"}>{d.deadline.say}</span> : d.closesAt && <span>截止 {d.closesAt}</span>}<span>来源 {d.sourceKind}</span>{d.applyUrl && <a className="text-accent" href={d.applyUrl} target="_blank" rel="noreferrer">投递页</a>}</div>
@@ -309,7 +309,7 @@ export function CompanyDetail({ c, reload, onWatch, children }: { c: any; reload
       <div className="flex gap-1.5 flex-wrap my-2 items-center">
         <span title="重点公司：推荐排最前，探索线永不代投"><Button tone={has("重点") ? "primary" : ""} onClick={() => mark("重点")}>重点</Button></span>
         <span title="不投：推荐、探索、线索补全都跳过；「含不符合期望的」里还能看到"><Button tone={has("不投") ? "danger" : ""} onClick={() => mark("不投")}>不投</Button></span>
-        {c.tags.filter((t: any) => t.tag !== "重点" && t.tag !== "不投").map((t: any) => <span key={t.tag} title={t.reason}><Chip tone="accent">{t.tag}{t.mode === "manual" && <button className="ml-1" onClick={() => untag(t.tag)}>×</button>}</Chip></span>)}
+        {c.tags.filter((t: any) => t.tag !== "重点" && t.tag !== "不投").map((t: any) => <span key={t.tag} title={plain(t.reason ?? "")}><Chip tone="accent">{plain(t.tag)}{t.mode === "manual" && <button className="ml-1" onClick={() => untag(t.tag)}>×</button>}</Chip></span>)}
         {newTag === null ? <button className="text-xs text-ink-3" onClick={() => setNewTag("")}>＋标签</button>
           : <input autoFocus value={newTag} onChange={(e) => setNewTag(e.target.value)} onBlur={addTag} onKeyDown={(e) => { if (e.key === "Enter") addTag(); if (e.key === "Escape") setNewTag(null); }} placeholder="标签，回车保存" className="px-2 py-0.5 border border-line rounded-md bg-paper text-xs w-32" />}
       </div>
