@@ -172,7 +172,7 @@ async function overseas(name: string): Promise<PeerRow | null> {
 export function unlistedFacts(db: Db, name: string) {
   const n = normName(name);
   const boss = n.length >= 2 ? (db.prepare("select brand, stage, scale, industry, last_seen from boss_candidate order by last_seen desc limit 2000").all() as any[])
-    .find((b) => b.brand && b.brand.length >= 2 && (normName(b.brand) === n || n.includes(normName(b.brand)) || normName(b.brand).includes(n))) : undefined;
+    .find((b) => b.brand && normName(b.brand) === n) : undefined; // the same name only: one name inside another is often another company
   const sme = smeMatch(db, name).matches[0];
   const co = db.prepare("select id from company where name = ? or norm = ?").get(name, n) as { id: string } | undefined;
   const ipo = co ? (db.prepare("select data_json, fetched_at from company_intel where company_id = ? and kind = 'ipo'").get(co.id) as any) : undefined;
@@ -180,7 +180,7 @@ export function unlistedFacts(db: Db, name: string) {
   return {
     ...(boss ? { boss: { stage: boss.stage, scale: boss.scale, industry: boss.industry, seen: String(boss.last_seen).slice(0, 10) } } : {}),
     ...(sme ? { sme: sme.level } : {}),
-    ...(szse ? { ipo: { board: "深交所", stage: szse.stage, date: szse.date ?? "" } } : {}),
+    ...(szse ? { ipo: { board: "深交所", stage: szse.stage, date: szse.updatedAt || szse.acceptedAt || "" } } : {}),
   };
 }
 
