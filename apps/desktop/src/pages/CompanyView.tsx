@@ -127,7 +127,7 @@ const pct = (v: any) => (v == null || Number.isNaN(Number(v)) ? "" : `${Number(v
 const KIND_LABEL: Record<string, string> = { listing: "上市信息", basic: "基本盘", finance: "财报", dividends: "分红", announcements: "公告", holders: "股东", irm: "投资者问答", sectors: "板块", reports: "研报", forecast: "业绩预告", news: "新闻", ipo: "上市审核进度" };
 
 /** 企业情况 (ADR-029): one card, each kind of fact with the date it was fetched; refresh is one click or the assistant's call. */
-function Intel({ c }: { c: any }) {
+export function Intel({ c }: { c: any }) {
   const [x, setX] = useState<any>(null);
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState("");

@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { call } from "../api";
 import { useLatest, useOnDataChange } from "../refresh";
 import { H1, Card, Chip, Button, Empty, plain } from "../ui";
-import { CompanyRow, CompanyDetail } from "./CompanyView";
+import { CompanyRow, CompanyDetail, Intel } from "./CompanyView";
 import { Reader } from "../Reader";
 
 const input = "px-3 py-1.5 border border-line rounded-md bg-paper text-sm";
@@ -95,6 +95,9 @@ function NotInPool({ name, onAdded }: { name: string; onAdded: () => void }) {
   const [finding, setFinding] = useState<{ runId: string; status: string; text: string } | null>(null);
   const [url, setUrl] = useState("");
   const [msg, setMsg] = useState("");
+  // a company with no open posts can still be in the library — researched, compared, its 企业情况 fetched: show that
+  const [known, setKnown] = useState<{ companyId: string; companyName: string } | null>(null);
+  useEffect(() => { call("company.search", { query: name, limit: 3 }).then((r) => setKnown(r.items.find((x: any) => x.companyName === name || x.matchedBy) ?? null)).catch(() => setKnown(null)); }, [name]);
   useEffect(() => {
     if (finding?.status !== "running") return;
     const t = setInterval(() => call("research.get", { runId: finding.runId }).then((r) => {
@@ -111,7 +114,15 @@ function NotInPool({ name, onAdded }: { name: string; onAdded: () => void }) {
   const capture = async () => { setMsg("抓取中…"); try { const r = await call("listing.capture", { url }); setMsg(r.note); setUrl(""); onAdded(); } catch (e: any) { setMsg(e.message); } };
   return (
     <Card className="p-5 text-sm">
-      <div className="mb-3">岗位库里没有「{name}」</div>
+      {known && (
+        <div className="mb-5">
+          <div className="text-lg font-bold">{known.companyName}</div>
+          <div className="text-xs text-ink-3 mb-3">现在没有它在招的岗位；下面是为它取过的企业情况和写过的调研。</div>
+          <Intel c={known} />
+          <Research companyName={known.companyName} />
+        </div>
+      )}
+      <div className="mb-3">{known ? `要「${known.companyName}」的岗位：` : `岗位库里没有「${name}」`}</div>
       {finding ? <div className="flex items-center gap-2"><Chip tone={finding.status === "running" ? "amber" : finding.status === "done" ? "good" : "bad"}>{finding.status === "running" ? "正在找…" : finding.status === "done" ? "已加入" : "没找到"}</Chip><span className="text-xs text-ink-2 whitespace-pre-wrap">{finding.status === "running" ? "通常 2–8 分钟" : finding.text}</span></div>
         : <Button tone="primary" onClick={find}>让系统去找它的校招入口</Button>}
       <div className="flex gap-2 mt-3"><input value={url} onChange={(e) => setUrl(e.target.value)} placeholder="或粘贴它的招聘简章 / 岗位页链接" className={`${input} flex-1`} onKeyDown={(e) => e.key === "Enter" && url && capture()} /><Button onClick={capture} disabled={!url}>抓取</Button></div>
