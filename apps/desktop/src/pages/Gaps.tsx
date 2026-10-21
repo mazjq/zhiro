@@ -9,7 +9,7 @@ import { H1, Card, Chip, Empty } from "../ui";
  * 没做过 (a confirmed gap, the matcher's only negative). Counts are posts and distinct companies.
  */
 const STATUS: Record<string, { label: string; tone: "" | "amber" | "accent"; hint: string }> = {
-  unknown: { label: "待核实", tone: "amber", hint: "画像里没提到，不代表不会：答一下就能定" },
+  unknown: { label: "待核实", tone: "amber", hint: "你的资料里没写到，不代表不会：答一下就能定" },
   transferable: { label: "有相关经历，但不完全对口", tone: "accent", hint: "比如你在海洋平台上做过动力学建模，岗位要的是机器人的；或岗位要「有项目经验」而你只有技能卡" },
   gap: { label: "已确认没做过", tone: "", hint: "你确认过的缺口；补上经历后点撤回" },
 };
@@ -38,7 +38,7 @@ export default function Gaps() {
   const groups = ["unknown", "transferable", "gap"].map((st) => [st, d.items.filter((x: any) => x.status === st)] as const);
   return (
     <>
-      <H1 sub={`和你工作相关的 ${d.related} 个岗位里，规则没能确认的要求，按「作为核心要求出现的次数」排序；答一下「我会 / 没做过」，相关岗位会重算。点错了：「我会」记的是画像里的一张技能卡，去 求职资料 → 画像 删掉即可；「没做过」可直接撤回`}>机会缺口</H1>
+      <H1 sub={`和你工作相关的 ${d.related} 个岗位里，规则没能确认的要求，按「作为核心要求出现的次数」排序；答一下「我会 / 没做过」，相关岗位会重算。点错了：「我会」记的是资料里的一张技能卡，去 求职资料 → 资料 删掉即可；「没做过」可直接撤回`}>机会缺口</H1>
       {note && <div className="text-xs bg-amber-soft text-amber rounded px-3 py-2 mb-3">{note}</div>}
       {d.items.length === 0 ? <Empty>还没有可统计的缺口：等推荐重算后再看</Empty> : groups.map(([st, rows]) => rows.length > 0 && (
         <div key={st} className="mb-5">
@@ -50,7 +50,7 @@ export default function Gaps() {
                   <span className="font-medium">{r.label}</span>
                   <span className="text-xs text-ink-3">{r.positions} 个岗位 · {r.companies} 家公司{r.core ? ` · ${r.core} 次为核心要求` : ""}</span>
                   <span className="ml-auto flex gap-3 text-xs">
-                    {st !== "gap" && <button className="text-accent" disabled={busy === r.conceptId} onClick={() => say(r, "know")} title="记一张技能卡，之后按有证据算">我会</button>}
+                    {st !== "gap" && <button className="text-accent" disabled={busy === r.conceptId} onClick={() => say(r, "know")} title="记成你资料里的一项技能，之后按有证据算">我会</button>}
                     {st !== "gap" && <button className="text-ink-2" disabled={busy === r.conceptId} onClick={() => say(r, "no")} title="只记「没做过」：不影响别的能力">没做过</button>}
                     {st === "gap" && <button className="text-accent" disabled={busy === r.conceptId} onClick={() => say(r, "clear")}>撤回</button>}
                   </span>

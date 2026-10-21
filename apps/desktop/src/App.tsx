@@ -26,12 +26,12 @@ function FirstRun({ onClose }: { onClose: (goProfile: boolean) => void }) {
   return (
     <div className="fixed inset-0 z-30 bg-black/30 flex items-center justify-center">
       <Card className="p-6 w-[44rem] shadow-xl">
-        <div className="text-lg font-bold">先建一份你的画像</div>
+        <div className="text-lg font-bold">先建一份你的资料</div>
         <div className="text-sm text-ink-2 mt-1 mb-4">选一份简历，和/或一个放着论文、专利、开题报告、奖状的文件夹。系统从里面抽出带来源的事实卡，推荐、选简历、网申填写都用它。两样都可以跳过。</div>
         <ImportPanel compact onChanged={() => setImported(true)} />
         <div className="flex items-center gap-2 mt-4">
-          <span className="text-xs text-ink-3 flex-1">{imported ? "已开始抽取，可以去「画像」页看进度并逐张确认。" : "简历和材料都不选的话，无法自动建档；之后可以在「画像」页手填，或随时回来导入。"}</span>
-          {imported ? <Button tone="primary" onClick={() => onClose(true)}>去画像页</Button> : <Button onClick={skip}>跳过</Button>}
+          <span className="text-xs text-ink-3 flex-1">{imported ? "已开始抽取，可以去「资料」页看进度并逐张确认。" : "简历和材料都不选的话，无法自动建档；之后可以在「资料」页手填，或随时回来导入。"}</span>
+          {imported ? <Button tone="primary" onClick={() => onClose(true)}>去资料页</Button> : <Button onClick={skip}>跳过</Button>}
         </div>
       </Card>
     </div>
@@ -154,7 +154,7 @@ export default function App() {
           {page === "inbox" && <InboxPage />}
           {(page === "profile" || page === "resumes") && (
             <div className="flex border border-line rounded-md overflow-hidden w-fit mb-4">
-              {([["profile", "画像"], ["resumes", "简历"]] as const).map(([id, label]) => <button key={id} onClick={() => setPage(id)} className={`px-4 py-1.5 text-sm ${page === id ? "bg-accent-soft text-accent" : "bg-paper text-ink-2"}`}>{label}</button>)}
+              {([["profile", "资料"], ["resumes", "简历"]] as const).map(([id, label]) => <button key={id} onClick={() => setPage(id)} className={`px-4 py-1.5 text-sm ${page === id ? "bg-accent-soft text-accent" : "bg-paper text-ink-2"}`}>{label}</button>)}
             </div>
           )}
           {page === "resumes" && <Resumes />}

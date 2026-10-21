@@ -182,7 +182,7 @@ export default function Profile() {
   return (
     <>
       <div className="flex items-start">
-        <div className="flex-1"><H1 sub="推荐、选简历、网申都从这里取值">画像</H1></div>
+        <div className="flex-1"><H1 sub="推荐、选简历、网申都从这里取值">资料</H1></div>
         <button onClick={() => setDrawer(true)} className="mt-1 flex items-center gap-1.5 px-3 py-1.5 rounded-md text-sm border border-line bg-paper text-ink-2 hover:bg-ground" title="找回最近删掉的卡"><Trash2 size={15} />最近删除{trash.length > 0 && <span className="text-ink-3">· {trash.length}</span>}</button>
       </div>
       <ImportPanel onChanged={load} />

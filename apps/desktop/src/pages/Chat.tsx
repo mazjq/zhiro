@@ -10,7 +10,7 @@ type Entry = { role: "user" | "agent"; text: string; actions?: any[]; proposals?
 const DOING: Record<string, string> = {
   "pool.list": "查岗位库", "position.list": "查岗位", "campaign.list": "查招聘项目", "campaign.get": "看项目详情", "company.search": "找公司", "pool.facets": "看筛选项",
   "position.watch": "关注岗位", "application.create": "准备申请", "application.update": "更新申请", "application.list": "查申请", "application.timeline": "看申请时间线",
-  "stage.add": "记进展", "stage.update": "更新环节", "fact.list": "看画像", "fact.upsert": "改画像", "profile.gaps": "查画像缺口", "recommend.tag": "打标签", "recommend.suggest": "想搜索词",
+  "stage.add": "记进展", "stage.update": "更新环节", "fact.list": "看资料", "fact.upsert": "改资料", "profile.gaps": "查资料缺口", "recommend.tag": "打标签", "recommend.suggest": "想搜索词",
   "preset.list": "看搜索模式", "preset.save": "存搜索模式", "resume.list": "看简历库", "resume.pick": "选简历", "resume.analyze": "分析简历", "inbox.list": "看收件箱", "inbox.get": "读邮件",
   "today.summary": "看今日", "proposal.list": "看待确认", "usage.summary": "看用量", "history.list": "看操作记录",
 };

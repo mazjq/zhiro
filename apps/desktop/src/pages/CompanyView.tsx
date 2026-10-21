@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import { call, daysLeft } from "../api";
 import { useLatest, useOnDataChange } from "../refresh";
-import { Card, Chip, Button, gradeTone, deadlineTone, deadlineShort, STATE_LABEL } from "../ui";
+import { Card, Chip, Button, gradeTone, deadlineTone, deadlineShort, STATE_LABEL, plain } from "../ui";
 
 /** A 公众号 article is a poster, not a place to apply — whichever column the sheet put it in. */
 const isPoster = (u: string) => u.includes("mp.weixin.qq.com");
@@ -127,7 +127,7 @@ const pct = (v: any) => (v == null || Number.isNaN(Number(v)) ? "" : `${Number(v
 const KIND_LABEL: Record<string, string> = { listing: "上市信息", basic: "基本盘", finance: "财报", dividends: "分红", announcements: "公告", holders: "股东", irm: "投资者问答", sectors: "板块", reports: "研报", forecast: "业绩预告", news: "新闻", ipo: "上市审核进度" };
 
 /** 企业情况 (ADR-029): one card, each kind of fact with the date it was fetched; refresh is one click or the assistant's call. */
-function Intel({ c }: { c: any }) {
+export function Intel({ c }: { c: any }) {
   const [x, setX] = useState<any>(null);
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState("");
@@ -215,7 +215,7 @@ function Intel({ c }: { c: any }) {
 }
 
 /** 岗位适配度 (ADR-035): the score bands the daemon uses — 优先考虑 200+, 可迁移 100+, 待补资料 50+; a search preset's score is its own. */
-const tierOf = (score: number) => (score >= 200 ? "优先考虑" : score >= 100 ? "可迁移" : score >= 50 ? "待补资料" : `${score} 分`);
+const tierOf = (score: number) => (score >= 200 ? "优先考虑" : score >= 100 ? "可迁移" : score >= 50 ? "岗位信息不全" : `${score} 分`);
 const tierTone = (t: string) => (t === "优先考虑" ? "good" : t === "可迁移" ? "accent" : t === "明显缺口" ? "amber" : "");
 
 export function CompanyRow({ c, selected, onClick }: { c: any; selected: boolean; onClick: () => void }) {
@@ -228,10 +228,10 @@ export function CompanyRow({ c, selected, onClick }: { c: any; selected: boolean
         {c.applied && <Chip tone="good">已投递</Chip>}
         {c.positions.some((p: any) => p.watched && !p.applicationState) && <Chip tone="accent">已关注</Chip>}
         {c.newPositions > 0 && <Chip tone="amber">新 {c.newPositions}</Chip>}
-        <span className="ml-auto text-xs text-ink-3 tabular">{c.score ? <Chip tone={tierTone(tierOf(c.score))}>{tierOf(c.score)}</Chip> : <Chip tone={gradeTone(c.grade)}>{c.grade}</Chip>}</span>
+        <span className="ml-auto text-xs text-ink-3 tabular">{c.score ? <Chip tone={tierTone(tierOf(c.score))}>{plain(tierOf(c.score))}</Chip> : <Chip tone={gradeTone(c.grade)}>{c.grade}</Chip>}</span>
       </div>
       <div className="flex gap-1.5 mt-1.5 items-center flex-wrap">
-        {c.tags.map((t: any) => <Chip key={t.tag} tone="accent">{t.tag}</Chip>)}
+        {c.tags.map((t: any) => <Chip key={t.tag} tone="accent">{plain(t.tag)}</Chip>)}
         <span className="text-xs text-ink-3">{matched ? `${matched} 个匹配岗位 · ` : ""}{c.positions.length} 个岗位{c.sources.length > 1 ? ` · ${c.sources.length} 个项目` : ""}</span>
         <span className="ml-auto">{c.expired ? <Chip>已截止</Chip> : c.closesAt ? <Chip tone={deadlineTone(dl)}>{c.closesAt}{dl != null ? ` · ${dl} 天` : ""}</Chip> : <Chip>{c.deadline?.asap ? "招满即止 · 宜尽早" : c.deadline?.unverified ? "截止待核实" : c.deadlineText || "截止未知"}</Chip>}</span>
       </div>
@@ -253,7 +253,7 @@ function DeepFit({ c, reload }: { c: any; reload: () => void }) {
   }, [left > 0, c.companyId]);
   if (left) return <span className="text-xs text-ink-3">模型正在逐条比对…还剩 {left} 个</span>;
   if (!ids.length) return null;
-  return <button className="text-xs text-accent" title="让模型逐条对照岗位要求和你的画像，给出分数、满足项和缺口；每个岗位约 1–2k token" onClick={async () => { const r = await call("fit.deep", { positionIds: ids }); setLeft(r.pending || 0); }}>深度匹配 {ids.length} 个</button>;
+  return <button className="text-xs text-accent" title="让模型逐条对照岗位要求和你的资料，给出分数、满足项和缺口；每个岗位约 1–2k token" onClick={async () => { const r = await call("fit.deep", { positionIds: ids }); setLeft(r.pending || 0); }}>深度匹配 {ids.length} 个</button>;
 }
 
 /** The model's verdict on one post; meets and gaps on hover (fetched once). */
@@ -264,7 +264,7 @@ function FitLine({ p, companyId }: { p: any; companyId: string }) {
   useOnDataChange(() => d && fetch()); // fetched once on hover; after that kept current
   const tone = p.fit.score >= 80 ? "good" : p.fit.score >= 55 ? "accent" : "amber";
   return (
-    <div className="text-xs text-ink-2 mt-0.5" onMouseEnter={load} title={d?.meets ? `满足：${d.meets.join("；") || "—"}\n缺口：${d.gaps.join("；") || "—"}${d.stale ? "\n（画像之后改过，可重新深度匹配）" : ""}` : "悬停查看满足项与缺口"}>
+    <div className="text-xs text-ink-2 mt-0.5" onMouseEnter={load} title={d?.meets ? `满足：${d.meets.join("；") || "—"}\n缺口：${d.gaps.join("；") || "—"}${d.stale ? "\n（资料之后改过，可重新深度匹配）" : ""}` : "悬停查看满足项与缺口"}>
       <Chip tone={tone}>模型 {p.fit.score}</Chip> {p.fit.verdict}
     </div>
   );
@@ -286,7 +286,7 @@ export function PostDetails({ p, always }: { p: any; always?: boolean }) {
   if (!open) return null;
   if (!d) return <div className="text-xs text-ink-3">读取中…</div>;
   const a = d.assessment;
-  const st: Record<string, string> = { supported: "有证据", transferable: "可迁移", unknown: "待核实", gap: "缺口" };
+  const st: Record<string, string> = { supported: "有证据", transferable: "部分对口", unknown: "待核实", gap: "缺口" };
   return (
     <div className="text-xs text-ink-2 mb-1.5 border border-line rounded-md bg-ground/50 p-2.5 space-y-1.5">
       <div className="flex gap-3 flex-wrap text-ink-3">{d.position.degreeReq && <span>学历 {d.position.degreeReq}</span>}{d.majorReq && <span>专业 {d.majorReq}</span>}{d.deadline?.say ? <span className={d.deadline.status === "verified" ? "" : "text-amber"}>{d.deadline.say}</span> : d.closesAt && <span>截止 {d.closesAt}</span>}<span>来源 {d.sourceKind}</span>{d.applyUrl && <a className="text-accent" href={d.applyUrl} target="_blank" rel="noreferrer">投递页</a>}</div>
@@ -309,7 +309,7 @@ export function CompanyDetail({ c, reload, onWatch, children }: { c: any; reload
       <div className="flex gap-1.5 flex-wrap my-2 items-center">
         <span title="重点公司：推荐排最前，探索线永不代投"><Button tone={has("重点") ? "primary" : ""} onClick={() => mark("重点")}>重点</Button></span>
         <span title="不投：推荐、探索、线索补全都跳过；「含不符合期望的」里还能看到"><Button tone={has("不投") ? "danger" : ""} onClick={() => mark("不投")}>不投</Button></span>
-        {c.tags.filter((t: any) => t.tag !== "重点" && t.tag !== "不投").map((t: any) => <span key={t.tag} title={t.reason}><Chip tone="accent">{t.tag}{t.mode === "manual" && <button className="ml-1" onClick={() => untag(t.tag)}>×</button>}</Chip></span>)}
+        {c.tags.filter((t: any) => t.tag !== "重点" && t.tag !== "不投").map((t: any) => <span key={t.tag} title={plain(t.reason ?? "")}><Chip tone="accent">{plain(t.tag)}{t.mode === "manual" && <button className="ml-1" onClick={() => untag(t.tag)}>×</button>}</Chip></span>)}
         {newTag === null ? <button className="text-xs text-ink-3" onClick={() => setNewTag("")}>＋标签</button>
           : <input autoFocus value={newTag} onChange={(e) => setNewTag(e.target.value)} onBlur={addTag} onKeyDown={(e) => { if (e.key === "Enter") addTag(); if (e.key === "Escape") setNewTag(null); }} placeholder="标签，回车保存" className="px-2 py-0.5 border border-line rounded-md bg-paper text-xs w-32" />}
       </div>
@@ -330,7 +330,7 @@ export function CompanyDetail({ c, reload, onWatch, children }: { c: any; reload
                 : <Button tone={p.watched ? "" : p.match ? "primary" : ""} onClick={() => onWatch(p)}>{p.watched ? "已关注 ✓" : "关注"}</Button>}
             </div>
             {p.fit && <FitLine p={p} companyId={c.companyId} />}
-            {p.match && <div className="text-xs text-ink-3 mt-0.5">{(() => { const [t, ...why] = p.match.reason.split(" · "); return why.length ? <><Chip tone={tierTone(t)}>{t}</Chip> {why.join(" · ")}</> : p.match.reason; })()}</div>}
+            {p.match && <div className="text-xs text-ink-3 mt-0.5">{(() => { const [t, ...why] = p.match.reason.split(" · "); return why.length ? <><Chip tone={tierTone(t)}>{plain(t)}</Chip> {plain(why.join(" · "))}</> : plain(p.match.reason); })()}</div>}
           </div>
         ))}
       </div>

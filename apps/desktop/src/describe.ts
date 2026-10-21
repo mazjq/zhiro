@@ -23,7 +23,7 @@ export function describeProposal(p: any, app: (id?: string) => string = () => "�
   if (p.kind === "feishu.notify") return `发一条飞书通知：${x.title ?? ""}`;
   if (p.kind === "company.find") return `联网去找「${x.companyName ?? x.name ?? ""}」的校招入口（会消耗模型额度）`;
   if (p.kind === "research.company") return `联网调研「${x.companyName ?? ""}」（会消耗模型额度）`;
-  if (p.kind === "research.topic") return `联网调研主题「${x.topic ?? ""}」${x.region ? `（${x.region}）` : ""}：几分钟，会消耗联网 worker 的额度；画像摘要会发给它用来判断合不合适`;
+  if (p.kind === "research.topic") return `联网调研主题「${x.topic ?? ""}」${x.region ? `（${x.region}）` : ""}：几分钟，会消耗联网 worker 的额度；资料摘要会发给它用来判断合不合适`;
   if (p.kind === "import.csv") return `导入 CSV：${x.path ?? ""}`;
   if (p.kind === "company.alias") return `把「${x.alias ?? ""}」记为一家公司的别名（之后这个名字就指它）`;
   if (p.kind === "source.add") return `把这张表接成每天自动更新的数据源：${x.url ?? ""}`;
