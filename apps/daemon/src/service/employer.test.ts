@@ -3,6 +3,7 @@ import { mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { openDb } from "../db.js";
+import { unlistedFacts } from "./employer.js";
 import { compare, percentile, measures, moved, labels, placeUnder, notOutdone, sampleWeights, findCompany, latestYear, type PeerRow } from "./employer.js";
 
 const yr = (revenue: number, netProfit: number, rd: number, staffCash: number) => ({ revenue, netProfit, rd, opCost: revenue * 0.7, staffCash, dividendCash: null, capex: null });
@@ -67,6 +68,20 @@ describe("comparing employers: measures, places and how they move (D-29)", () =>
     expect(findCompany(all, "宇树")).toBeNull();
     expect(latestYear(Date.parse("2026-04-30T16:00:00Z"))).toBe(2025); // 1 May in Beijing
     expect(latestYear(Date.parse("2026-04-30T12:00:00Z"))).toBe(2024);
+  });
+});
+
+describe("what is known of an unlisted company, from Zhiro's own tables", () => {
+  it("takes BOSS's entry only under the same name, and a listing review's date as the exchange gives it", () => {
+    const db = openDb(join(mkdtempSync(join(tmpdir(), "zhiro-uf-")), "t.db"));
+    const boss = db.prepare("insert into boss_candidate(job_id, url, title, brand, stage, scale, industry, first_seen, last_seen) values (?,?,?,?,?,?,?,?,?)");
+    boss.run("j1", "u", "t", "鳍源", "天使轮", "0-20人", "x", "2026-10-01T00:00:00Z", "2026-10-01T00:00:00Z"); // another company whose name is inside
+    boss.run("j2", "u", "t", "鳍源科技", "B轮", "100-499人", "智能硬件", "2026-10-02T00:00:00Z", "2026-10-02T00:00:00Z");
+    expect(unlistedFacts(db, "深圳鳍源科技有限公司").boss).toMatchObject({ stage: "B轮", scale: "100-499人" });
+    expect(unlistedFacts(db, "鳍源海洋").boss).toBeUndefined();
+    db.prepare("insert into company(id, name, norm, created_at) values ('c1', '庚科技股份有限公司', '庚科技', '2026-01-01')").run();
+    db.prepare("insert into company_intel(company_id, kind, data_json, source, fetched_at) values ('c1', 'ipo', ?, 'szse', '2026-10-01T00:00:00Z')").run(JSON.stringify({ szse: { exchange: "深交所", stage: "已问询", updatedAt: "2026-09-30", acceptedAt: "2026-06-01" } }));
+    expect(unlistedFacts(db, "庚科技股份有限公司").ipo).toEqual({ board: "深交所", stage: "已问询", date: "2026-09-30" });
   });
 });
 
