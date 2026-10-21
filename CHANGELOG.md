@@ -1,5 +1,26 @@
 # Changelog
 
+## [0.2.0](https://github.com/mazjq/zhiro/compare/v0.1.2...v0.2.0) (2026-10-21)
+
+
+### Features
+
+* **intel:** each kind of 企业情况 on its own period, fetched behind the card (D-30) ([#17](https://github.com/mazjq/zhiro/issues/17)) ([37b473f](https://github.com/mazjq/zhiro/commit/37b473fcb3adecab8c7d89295d7bd5b22f6667ee))
+* pick the harness model from the installed harness's own list ([#4](https://github.com/mazjq/zhiro/issues/4)) ([8f696b2](https://github.com/mazjq/zhiro/commit/8f696b23f529b6adeb822e8d02c8af7b157a2497))
+* subscribe to a 高校人才网 column — research institutes, labs, university teams and small firms that never post on a hiring system ([#6](https://github.com/mazjq/zhiro/issues/6)) ([9e2d1c3](https://github.com/mazjq/zhiro/commit/9e2d1c3cdedbfdbdfa1d80437fa92b9150653c36))
+* 就业评估报告 — Zhiro writes the facts (statements, places among peers, headcount and pay per head), the person's agent writes why profit moved, where the money went, incentives, listing and fit, each conclusion with its evidence and limits (D-29) ([e03d2af](https://github.com/mazjq/zhiro/commit/e03d2afffd57f4604decad767017f605711e5168))
+* 找实习 — every open internship in one list, its own page in the sidebar ([#7](https://github.com/mazjq/zhiro/issues/7)) ([078fd4f](https://github.com/mazjq/zhiro/commit/078fd4f459edf58d2b0758eacb82b3655e6244ca))
+* 找实习 leads with the internships most related to the profile, each with its fit ([#9](https://github.com/mazjq/zhiro/issues/9)) ([2769fc2](https://github.com/mazjq/zhiro/commit/2769fc23d2e23ab89760b818f056d6ad5a461ac2))
+* 比较单位 — where each employer stands among the listed companies of its industry, and its place under the preferences the person picks, with how far it moves; no total score (D-29) ([e03d2af](https://github.com/mazjq/zhiro/commit/e03d2afffd57f4604decad767017f605711e5168))
+* 调研 → 比较 → 就业评估 in one line; reports open in a reading pane ([#13](https://github.com/mazjq/zhiro/issues/13)) ([307ba6e](https://github.com/mazjq/zhiro/commit/307ba6e92ba3c8483b7d1aea1b97da7f75b7dc24))
+
+
+### Bug Fixes
+
+* **company card:** 写一份 always shown; no IPO lookup for A-share; plain note when a kind is not fetched ([#15](https://github.com/mazjq/zhiro/issues/15)) ([12e58de](https://github.com/mazjq/zhiro/commit/12e58dea576e1abc16ade2bdcc498893186b12eb))
+* **employer:** an unlisted company's BOSS entry under its own name only; its listing review keeps its date ([#16](https://github.com/mazjq/zhiro/issues/16)) ([388d473](https://github.com/mazjq/zhiro/commit/388d4737fac06dad330b4fe908a5bbf7fb45e3f2))
+* **employer:** one refresh period — everything for comparing employers is used for a week (D-29) ([#14](https://github.com/mazjq/zhiro/issues/14)) ([5a08ba0](https://github.com/mazjq/zhiro/commit/5a08ba0309ff550ee2e9cbdf3972fca1ed86272d))
+
 ## [0.1.2](https://github.com/mazjq/zhiro/compare/v0.1.1...v0.1.2) (2026-10-15)
 
 
