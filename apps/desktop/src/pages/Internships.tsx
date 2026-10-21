@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { call } from "../api";
 import { useLatest, useOnDataChange } from "../refresh";
-import { H1, Card, Button, Chip, Empty, STATE_LABEL, deadlineTone } from "../ui";
+import { H1, Card, Button, Chip, Empty, STATE_LABEL, deadlineTone, plain } from "../ui";
 
 /**
  * 找实习: every open internship in the pool, one post per row — a post whose name says 实习 / intern, or whose source
@@ -71,7 +71,7 @@ function Row({ p, open, onToggle, onWatch }: { p: any; open: boolean; onToggle: 
           <span className="text-ink-2 ml-2">{p.companyName}</span>
           <span className="text-xs text-ink-3 ml-2">{(p.cities ?? []).slice(0, 3).join("、")}{p.degreeReq ? ` · ${p.degreeReq}` : ""}</span>
         </button>
-        {p.fit && <span title={`和你资料的相关度 ${p.fit.score}/100`}><Chip tone={FIT_TONE[p.fit.tier] ?? ""}>{p.fit.tier}</Chip></span>}
+        {p.fit && <span title={`和你资料的相关度 ${p.fit.score}/100`}><Chip tone={FIT_TONE[p.fit.tier] ?? ""}>{plain(p.fit.tier)}</Chip></span>}
         {p.applicationState && <Chip tone="good">{STATE_LABEL[p.applicationState] ?? p.applicationState}</Chip>}
         <span title={dl.say ?? ""}><Chip tone={deadlineTone(left)}>{when}</Chip></span>
         <Button onClick={onWatch}>{p.watchPriority ? "已关注" : "关注"}</Button>

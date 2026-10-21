@@ -70,7 +70,7 @@ function RunPanel({ a, canStart, onSubmitted }: { a: any; canStart: boolean; onS
           ))}
         </div>
       )}
-      {mine && mine.learned.length > 0 && <div className="text-xs text-ink-3">已写回画像：{mine.learned.join("、")}</div>}
+      {mine && mine.learned.length > 0 && <div className="text-xs text-ink-3">已写回资料：{mine.learned.join("、")}</div>}
     </div>
   );
 }

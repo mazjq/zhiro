@@ -1,8 +1,8 @@
 import { useEffect, useRef, useState } from "react";
 import { call } from "../api";
 import { useLatest, useOnDataChange } from "../refresh";
-import { H1, Card, Chip, Button, Empty } from "../ui";
-import { CompanyRow, CompanyDetail } from "./CompanyView";
+import { H1, Card, Chip, Button, Empty, plain } from "../ui";
+import { CompanyRow, CompanyDetail, Intel } from "./CompanyView";
 import { Reader } from "../Reader";
 
 const input = "px-3 py-1.5 border border-line rounded-md bg-paper text-sm";
@@ -95,6 +95,9 @@ function NotInPool({ name, onAdded }: { name: string; onAdded: () => void }) {
   const [finding, setFinding] = useState<{ runId: string; status: string; text: string } | null>(null);
   const [url, setUrl] = useState("");
   const [msg, setMsg] = useState("");
+  // a company with no open posts can still be in the library — researched, compared, its 企业情况 fetched: show that
+  const [known, setKnown] = useState<{ companyId: string; companyName: string } | null>(null);
+  useEffect(() => { call("company.search", { query: name, limit: 3 }).then((r) => setKnown(r.items.find((x: any) => x.companyName === name || x.matchedBy) ?? null)).catch(() => setKnown(null)); }, [name]);
   useEffect(() => {
     if (finding?.status !== "running") return;
     const t = setInterval(() => call("research.get", { runId: finding.runId }).then((r) => {
@@ -111,7 +114,15 @@ function NotInPool({ name, onAdded }: { name: string; onAdded: () => void }) {
   const capture = async () => { setMsg("抓取中…"); try { const r = await call("listing.capture", { url }); setMsg(r.note); setUrl(""); onAdded(); } catch (e: any) { setMsg(e.message); } };
   return (
     <Card className="p-5 text-sm">
-      <div className="mb-3">岗位库里没有「{name}」</div>
+      {known && (
+        <div className="mb-5">
+          <div className="text-lg font-bold">{known.companyName}</div>
+          <div className="text-xs text-ink-3 mb-3">现在没有它在招的岗位；下面是为它取过的企业情况和写过的调研。</div>
+          <Intel c={known} />
+          <Research companyName={known.companyName} />
+        </div>
+      )}
+      <div className="mb-3">{known ? `要「${known.companyName}」的岗位：` : `岗位库里没有「${name}」`}</div>
       {finding ? <div className="flex items-center gap-2"><Chip tone={finding.status === "running" ? "amber" : finding.status === "done" ? "good" : "bad"}>{finding.status === "running" ? "正在找…" : finding.status === "done" ? "已加入" : "没找到"}</Chip><span className="text-xs text-ink-2 whitespace-pre-wrap">{finding.status === "running" ? "通常 2–8 分钟" : finding.text}</span></div>
         : <Button tone="primary" onClick={find}>让系统去找它的校招入口</Button>}
       <div className="flex gap-2 mt-3"><input value={url} onChange={(e) => setUrl(e.target.value)} placeholder="或粘贴它的招聘简章 / 岗位页链接" className={`${input} flex-1`} onKeyDown={(e) => e.key === "Enter" && url && capture()} /><Button onClick={capture} disabled={!url}>抓取</Button></div>
@@ -211,13 +222,13 @@ export default function Jobs({ go }: { go: (p: any) => void }) {
           <>
             <select value={tag} onChange={(e) => { setTag(e.target.value); setSel(null); }} className={input}>
               <option value="">全部标签</option>
-              {tags.map(([t, n]) => <option key={t} value={t}>{t} · {n}</option>)}
+              {tags.map(([t, n]) => <option key={t} value={t}>{plain(t)} · {n}</option>)}
             </select>
             <Button onClick={() => setEditing(currentPreset ?? null)}>{currentPreset ? "编辑搜索模式" : "＋ 搜索模式"}</Button>
           </>
         )}
-        <select value={tier} onChange={(e) => { setTier(e.target.value); setSel(null); }} className={input} title="按画像逐条对照岗位要求：优先考虑（职责相关、核心要求都有证据）/ 可迁移（相关，部分要求待核实或只能迁移）/ 待补资料（只有岗位名或类别）/ 明显缺口（你确认没做过的核心要求）/ 低相关">
-          <option value="">适配度：全部</option><option value="优先考虑">只看优先考虑</option><option value="可迁移">可迁移及以上</option>
+        <select value={tier} onChange={(e) => { setTier(e.target.value); setSel(null); }} className={input} title="按资料逐条对照岗位要求：很对口（职责相关、核心要求都有证据）/ 部分对口（相关，部分要求待核实或只能迁移）/ 岗位信息不全（只有岗位名或类别）/ 明显缺口（你确认没做过的核心要求）/ 低相关">
+          <option value="">适配度：全部</option><option value="优先考虑">只看很对口</option><option value="可迁移">部分对口及以上</option>
         </select>
         <select value={coType} onChange={(e) => { setCoType(e.target.value); setSel(null); }} className={input} title="按企业类型筛选">
           <option value="">企业类型：全部</option><option value="央国企">央国企</option><option value="民企">民企</option><option value="外企">外企 / 合资</option><option value="事业单位">事业单位 / 研究院所</option><option value="银行">银行</option>
@@ -230,7 +241,7 @@ export default function Jobs({ go }: { go: (p: any) => void }) {
       {editing !== undefined && <PresetEditor key={editing?.id ?? "new"} preset={editing} onSaved={(n) => { setTag(n); loadTags(); }} onRemoved={() => { setEditing(undefined); setTag(""); loadTags(); }} onClose={() => setEditing(undefined)} />}
       {err && <div className="text-bad mb-3 text-sm">{err}</div>}
       {items.length === 0 ? (query.trim() ? <NotInPool key={query.trim()} name={query.trim()} onAdded={reload} />
-        : <Empty>{all ? "岗位库还是空的" : <>还没有推荐。去 <button className="text-accent" onClick={() => go("profile")}>画像</button> 填学位、专业、方向，或新建一个搜索模式。</>}</Empty>) : (
+        : <Empty>{all ? "岗位库还是空的" : <>还没有推荐。去 <button className="text-accent" onClick={() => go("profile")}>资料</button> 填学位、专业、方向，或新建一个搜索模式。</>}</Empty>) : (
         <div className={`grid grid-cols-[minmax(0,1.1fr)_minmax(0,1fr)] gap-5 items-start transition-opacity ${loading ? "opacity-60" : ""}`}>
           <div>
             <Card>{items.map((c) => <CompanyRow key={c.companyId} c={c} selected={sel?.companyId === c.companyId} onClick={() => setSel(c)} />)}</Card>

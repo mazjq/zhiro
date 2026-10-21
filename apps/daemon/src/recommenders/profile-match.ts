@@ -46,7 +46,7 @@ export const profileMatch: Recommender = {
     const cities = terms(facts.filter((f) => f.kind === "preference" && f.data.field === "城市").map((f) => f.data.value));
     const gaps = (s.domain.db.prepare("select concept_id from user_gap where status = 'confirmed'").all() as { concept_id: string }[]).map((r) => r.concept_id);
     const me = userSide(facts as any[], myLevel, gaps);
-    if (!me.evidence.length && !majors.length) throw new DomainError("PROFILE_EMPTY", "画像里还没有可用的方向、技能或项目，无法匹配");
+    if (!me.evidence.length && !majors.length) throw new DomainError("PROFILE_EMPTY", "你的资料里还没有可用的方向、技能或项目，无法匹配");
     const distinct = new Set(me.evidence.map((e) => e.conceptId).filter((id) => concept(id)?.distinct));
     const majorText = (c: Candidate) => c.majorReq || (/专业(?:要求)?[:：]\s*([^\n；;。]+)/.exec(c.jd)?.[1] ?? "") || (c.agg ? c.campaignMajor : "");
 
