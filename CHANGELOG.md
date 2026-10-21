@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.2.1](https://github.com/mazjq/zhiro/compare/v0.2.0...v0.2.1) (2026-10-21)
+
+
+### Bug Fixes
+
+* **copy:** 「资料」 on screen instead of 「画像」; 待补资料 → 岗位信息不全 ([#19](https://github.com/mazjq/zhiro/issues/19)) ([efaf90a](https://github.com/mazjq/zhiro/commit/efaf90a677b46c5066e2ad6879eacfba6ae7313d))
+
 ## [0.2.0](https://github.com/mazjq/zhiro/compare/v0.1.2...v0.2.0) (2026-10-21)
 
 
