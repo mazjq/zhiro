@@ -147,7 +147,7 @@ export default function Resumes() {
           <Button tone="primary" onClick={save} disabled={!draft.name || (!draft.id && !file)}>{draft.id ? "保存修改" : "加入简历库"}</Button>
           {draft.id && <Button onClick={reset}>取消</Button>}
           <label className="text-xs text-ink-2 flex items-center gap-1.5"><input type="checkbox" checked={draft.isDefault} onChange={(e) => setDraft({ ...draft, isDefault: e.target.checked })} />设为默认</label>
-          <label className="text-xs text-ink-2 flex items-center gap-1.5" title="后台抽取这份简历里的事实，补进画像；和已有的卡相同的会合并"><input type="checkbox" checked={toProfile} onChange={(e) => setToProfile(e.target.checked)} />同时补全画像</label>
+          <label className="text-xs text-ink-2 flex items-center gap-1.5" title="后台抽取这份简历里的事实，补进资料；和已有的卡相同的会合并"><input type="checkbox" checked={toProfile} onChange={(e) => setToProfile(e.target.checked)} />同时补全资料</label>
           <span className="text-sm text-bad">{msg}</span>
         </div>
       </Card>

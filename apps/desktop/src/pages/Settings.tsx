@@ -9,10 +9,10 @@ const k = (n: number) => (n >= 10_000 ? `${(n / 10_000).toFixed(1)} 万` : n.toL
 /** What the background tidying is (said on the page because the person asked). */
 const BACKGROUND_WORK = [
   "收件箱分类：判断邮件是笔试、面试、offer、拒信还是别的，抽出公司和时间",
-  "招聘简章抽取：从存下或读到的招聘页里抽公司、岗位、截止、投递链接；「待补资料」自动补截止日期也是它",
+  "招聘简章抽取：从存下或读到的招聘页里抽公司、岗位、截止、投递链接；「岗位信息不全」自动补截止日期也是它",
   "求职材料抽取：从简历、论文、证书里抽事实卡；简历分析",
-  "网申读表与认字段：判断网申表格每一栏该填画像里的哪一项",
-  "岗位深度匹配：一个岗位和你的画像对一遍，给出符合与差距",
+  "网申读表与认字段：判断网申表格每一栏该填资料里的哪一项",
+  "岗位深度匹配：一个岗位和你的资料对一遍，给出符合与差距",
 ];
 
 /**
@@ -407,7 +407,7 @@ export default function Settings() {
         <Card className="p-5 col-span-2">
           <div className="flex items-center gap-3">
             <div className="font-bold">助手权限</div>
-            <span className="text-xs text-ink-3" title="默认：关注、标签、准备申请、不投了、画像字段、搜索模式直接做，聊天里可撤销；结束已投递的申请、删除、发送、联网调研、一次超过 10 条写操作仍要你确认。保守：所有写操作都要确认。">悬停看说明</span>
+            <span className="text-xs text-ink-3" title="默认：关注、标签、准备申请、不投了、资料字段、搜索模式直接做，聊天里可撤销；结束已投递的申请、删除、发送、联网调研、一次超过 10 条写操作仍要你确认。保守：所有写操作都要确认。">悬停看说明</span>
             <div className="ml-auto flex gap-2">
               {([["default", "默认"], ["conservative", "保守"]] as const).map(([m, label]) => (
                 <Button key={m} tone={(cfg?.agent?.mode ?? "default") === m ? "primary" : ""} onClick={async () => { try { await call("agent.mode", { mode: m }); load(); } catch (e: any) { setMsg(e.message); } }}>{label}</Button>

@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { call } from "../api";
 import { useLatest, useOnDataChange } from "../refresh";
-import { H1, Card, Chip, Button, Empty } from "../ui";
+import { H1, Card, Chip, Button, Empty, plain } from "../ui";
 import { CompanyRow, CompanyDetail } from "./CompanyView";
 import { Reader } from "../Reader";
 
@@ -211,12 +211,12 @@ export default function Jobs({ go }: { go: (p: any) => void }) {
           <>
             <select value={tag} onChange={(e) => { setTag(e.target.value); setSel(null); }} className={input}>
               <option value="">全部标签</option>
-              {tags.map(([t, n]) => <option key={t} value={t}>{t} · {n}</option>)}
+              {tags.map(([t, n]) => <option key={t} value={t}>{plain(t)} · {n}</option>)}
             </select>
             <Button onClick={() => setEditing(currentPreset ?? null)}>{currentPreset ? "编辑搜索模式" : "＋ 搜索模式"}</Button>
           </>
         )}
-        <select value={tier} onChange={(e) => { setTier(e.target.value); setSel(null); }} className={input} title="按画像逐条对照岗位要求：优先考虑（职责相关、核心要求都有证据）/ 可迁移（相关，部分要求待核实或只能迁移）/ 待补资料（只有岗位名或类别）/ 明显缺口（你确认没做过的核心要求）/ 低相关">
+        <select value={tier} onChange={(e) => { setTier(e.target.value); setSel(null); }} className={input} title="按资料逐条对照岗位要求：优先考虑（职责相关、核心要求都有证据）/ 可迁移（相关，部分要求待核实或只能迁移）/ 岗位信息不全（只有岗位名或类别）/ 明显缺口（你确认没做过的核心要求）/ 低相关">
           <option value="">适配度：全部</option><option value="优先考虑">只看优先考虑</option><option value="可迁移">可迁移及以上</option>
         </select>
         <select value={coType} onChange={(e) => { setCoType(e.target.value); setSel(null); }} className={input} title="按企业类型筛选">
@@ -230,7 +230,7 @@ export default function Jobs({ go }: { go: (p: any) => void }) {
       {editing !== undefined && <PresetEditor key={editing?.id ?? "new"} preset={editing} onSaved={(n) => { setTag(n); loadTags(); }} onRemoved={() => { setEditing(undefined); setTag(""); loadTags(); }} onClose={() => setEditing(undefined)} />}
       {err && <div className="text-bad mb-3 text-sm">{err}</div>}
       {items.length === 0 ? (query.trim() ? <NotInPool key={query.trim()} name={query.trim()} onAdded={reload} />
-        : <Empty>{all ? "岗位库还是空的" : <>还没有推荐。去 <button className="text-accent" onClick={() => go("profile")}>画像</button> 填学位、专业、方向，或新建一个搜索模式。</>}</Empty>) : (
+        : <Empty>{all ? "岗位库还是空的" : <>还没有推荐。去 <button className="text-accent" onClick={() => go("profile")}>资料</button> 填学位、专业、方向，或新建一个搜索模式。</>}</Empty>) : (
         <div className={`grid grid-cols-[minmax(0,1.1fr)_minmax(0,1fr)] gap-5 items-start transition-opacity ${loading ? "opacity-60" : ""}`}>
           <div>
             <Card>{items.map((c) => <CompanyRow key={c.companyId} c={c} selected={sel?.companyId === c.companyId} onClick={() => setSel(c)} />)}</Card>

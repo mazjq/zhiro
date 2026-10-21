@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import { call, daysLeft } from "../api";
 import { useLatest, useOnDataChange } from "../refresh";
-import { Card, Chip, Button, gradeTone, deadlineTone, deadlineShort, STATE_LABEL } from "../ui";
+import { Card, Chip, Button, gradeTone, deadlineTone, deadlineShort, STATE_LABEL, plain } from "../ui";
 
 /** A 公众号 article is a poster, not a place to apply — whichever column the sheet put it in. */
 const isPoster = (u: string) => u.includes("mp.weixin.qq.com");
@@ -215,7 +215,7 @@ function Intel({ c }: { c: any }) {
 }
 
 /** 岗位适配度 (ADR-035): the score bands the daemon uses — 优先考虑 200+, 可迁移 100+, 待补资料 50+; a search preset's score is its own. */
-const tierOf = (score: number) => (score >= 200 ? "优先考虑" : score >= 100 ? "可迁移" : score >= 50 ? "待补资料" : `${score} 分`);
+const tierOf = (score: number) => (score >= 200 ? "优先考虑" : score >= 100 ? "可迁移" : score >= 50 ? "岗位信息不全" : `${score} 分`);
 const tierTone = (t: string) => (t === "优先考虑" ? "good" : t === "可迁移" ? "accent" : t === "明显缺口" ? "amber" : "");
 
 export function CompanyRow({ c, selected, onClick }: { c: any; selected: boolean; onClick: () => void }) {
@@ -253,7 +253,7 @@ function DeepFit({ c, reload }: { c: any; reload: () => void }) {
   }, [left > 0, c.companyId]);
   if (left) return <span className="text-xs text-ink-3">模型正在逐条比对…还剩 {left} 个</span>;
   if (!ids.length) return null;
-  return <button className="text-xs text-accent" title="让模型逐条对照岗位要求和你的画像，给出分数、满足项和缺口；每个岗位约 1–2k token" onClick={async () => { const r = await call("fit.deep", { positionIds: ids }); setLeft(r.pending || 0); }}>深度匹配 {ids.length} 个</button>;
+  return <button className="text-xs text-accent" title="让模型逐条对照岗位要求和你的资料，给出分数、满足项和缺口；每个岗位约 1–2k token" onClick={async () => { const r = await call("fit.deep", { positionIds: ids }); setLeft(r.pending || 0); }}>深度匹配 {ids.length} 个</button>;
 }
 
 /** The model's verdict on one post; meets and gaps on hover (fetched once). */
@@ -264,7 +264,7 @@ function FitLine({ p, companyId }: { p: any; companyId: string }) {
   useOnDataChange(() => d && fetch()); // fetched once on hover; after that kept current
   const tone = p.fit.score >= 80 ? "good" : p.fit.score >= 55 ? "accent" : "amber";
   return (
-    <div className="text-xs text-ink-2 mt-0.5" onMouseEnter={load} title={d?.meets ? `满足：${d.meets.join("；") || "—"}\n缺口：${d.gaps.join("；") || "—"}${d.stale ? "\n（画像之后改过，可重新深度匹配）" : ""}` : "悬停查看满足项与缺口"}>
+    <div className="text-xs text-ink-2 mt-0.5" onMouseEnter={load} title={d?.meets ? `满足：${d.meets.join("；") || "—"}\n缺口：${d.gaps.join("；") || "—"}${d.stale ? "\n（资料之后改过，可重新深度匹配）" : ""}` : "悬停查看满足项与缺口"}>
       <Chip tone={tone}>模型 {p.fit.score}</Chip> {p.fit.verdict}
     </div>
   );
@@ -330,7 +330,7 @@ export function CompanyDetail({ c, reload, onWatch, children }: { c: any; reload
                 : <Button tone={p.watched ? "" : p.match ? "primary" : ""} onClick={() => onWatch(p)}>{p.watched ? "已关注 ✓" : "关注"}</Button>}
             </div>
             {p.fit && <FitLine p={p} companyId={c.companyId} />}
-            {p.match && <div className="text-xs text-ink-3 mt-0.5">{(() => { const [t, ...why] = p.match.reason.split(" · "); return why.length ? <><Chip tone={tierTone(t)}>{t}</Chip> {why.join(" · ")}</> : p.match.reason; })()}</div>}
+            {p.match && <div className="text-xs text-ink-3 mt-0.5">{(() => { const [t, ...why] = p.match.reason.split(" · "); return why.length ? <><Chip tone={tierTone(t)}>{plain(t)}</Chip> {plain(why.join(" · "))}</> : plain(p.match.reason); })()}</div>}
           </div>
         ))}
       </div>

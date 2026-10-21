@@ -148,7 +148,7 @@ function Company({ c, pending, onChanged }: { c: any; pending: boolean; onChange
           })}
           {c.suitableTotal > c.suitable.length && <div className="text-xs text-ink-3">另有 {c.suitableTotal - c.suitable.length} 个适合的没列出。点右上的「库里的岗位」看全部。</div>}
         </div>
-      ) : <div className="text-xs text-ink-3 mt-1">{c.openPosts ? "在招的岗位里，按你的画像还没有判为适合的。点右上的「库里的岗位」看全部。" : "库里有这家公司，但现在没有在招的岗位。"}</div>)}
+      ) : <div className="text-xs text-ink-3 mt-1">{c.openPosts ? "在招的岗位里，按你的资料还没有判为适合的。点右上的「库里的岗位」看全部。" : "库里有这家公司，但现在没有在招的岗位。"}</div>)}
       {msg && <div className="text-xs text-ink-2 mt-1">{msg}</div>}
     </div>
   );
