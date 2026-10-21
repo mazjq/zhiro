@@ -226,5 +226,4 @@ Bug reports, suggestions for recruiting sites to support, and pull requests are 
 
 [MIT](LICENSE). The Moka reader includes three files from [career-ops](https://github.com/career-ops-hq/career-ops)
 (MIT). The financial-report and announcement sources behind company profiles follow the public endpoints collected in
-Simon Lin's [a-stock-data](https://github.com/simonlin1212/a-stock-data) (Apache-2.0). Reading BOSS 直聘 in a logged-in browser and taking only the job data the page itself loads follows
-[boss-zhipin-scraper](https://github.com/eatmoreduck/boss-zhipin-scraper) (MIT); no code is taken from it.
+Simon Lin's [a-stock-data](https://github.com/simonlin1212/a-stock-data) (Apache-2.0).

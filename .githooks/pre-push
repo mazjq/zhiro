@@ -1,0 +1,9 @@
+#!/bin/sh
+# Installed by `pnpm install` (git config core.hooksPath .githooks). Branches named local/* hold what stays on one
+# machine (D-31) and are never pushed.
+while read local_ref local_sha remote_ref remote_sha; do
+  case "$local_ref" in
+    refs/heads/local/*) echo "refusing to push $local_ref: local/* branches stay on this machine (D-31)" >&2; exit 1 ;;
+  esac
+done
+exit 0
