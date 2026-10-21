@@ -14,7 +14,12 @@ import { normName, smeMatch } from "./intel.js";
 const UA = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/128.0 Safari/537.36";
 const F10 = "https://datacenter.eastmoney.com/securities/api/data/v1/get";
 const A_SHARE = ["深交所主板A股", "上交所主板A股", "深交所创业板A股", "上交所科创板A股", "北京证券交易所A股", "深交所风险警示板A股", "上交所风险警示板A股"];
-const KEEP_DAYS = 30;
+/**
+ * Everything fetched for comparing employers — the company list, an industry's statements, a name looked up on the
+ * other boards — is used for a week, then fetched again (one period, the person's call 2026-10-20): new listings and
+ * staff counts show up within a week; statements change only with the next report anyway.
+ */
+const KEEP_DAYS = 7;
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
 export interface Company { code: string; name: string; org: string; industry: string; employees: number | null; market?: string; csrc?: string; peerSw?: string; approx?: boolean }
@@ -47,12 +52,12 @@ function cached<T>(db: Db, key: string, now: number): { at: string; data: T } | 
 const keep = (db: Db, key: string, data: unknown, now: number) =>
   db.prepare("insert or replace into peer_snapshot(key, fetched_at, data_json) values (?,?,?)").run(key, new Date(now).toISOString(), JSON.stringify(data));
 /**
- * A name looked up on the other boards (新三板, 港股, 美股) is remembered for a week, found or not: an unlisted company
- * took a second of lookups on every comparison (2026-10-20). A lookup that failed is not remembered.
+ * A name looked up on the other boards (新三板, 港股, 美股) is remembered as long as the rest (KEEP_DAYS), found or not:
+ * an unlisted company took a second of lookups on every comparison (2026-10-20). A lookup that failed is not remembered.
  */
 async function remembered<T>(db: Db, key: string, now: number, look: () => Promise<T>): Promise<T> {
   const r = db.prepare("select fetched_at, data_json from peer_snapshot where key = ?").get(key) as { fetched_at: string; data_json: string } | undefined;
-  if (r && now - Date.parse(r.fetched_at) <= 7 * 86400_000) return JSON.parse(r.data_json).v as T;
+  if (r && now - Date.parse(r.fetched_at) <= KEEP_DAYS * 86400_000) return JSON.parse(r.data_json).v as T;
   const v = await look();
   keep(db, key, { v }, now);
   return v;
