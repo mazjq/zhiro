@@ -12,7 +12,7 @@
     "check:clean": "node scripts/check-clean.mjs",
     "prepare": "node -e \"try{require('child_process').execSync('git config core.hooksPath .githooks',{stdio:'ignore'})}catch{}\""
   },
-  "version": "0.2.0",
+  "version": "0.2.1",
   "devDependencies": {
     "@biomejs/biome": "2.2.4",
     "esbuild": "0.28.2"
