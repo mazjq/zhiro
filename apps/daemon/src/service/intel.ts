@@ -307,7 +307,10 @@ export async function refreshIntel(s: Services, companyId: string) {
     }
   }
   // for every company, listed or not
-  for (const [kind, fn, source] of [["news", () => fetchNews(co.name), "wallstreetcn:search"], ["ipo", () => fetchIpo(co.name), "szse:projectrends"]] as [Kind, () => Promise<unknown>, string][]) {
+  // a listing under review is looked for only where there is no listing yet (an A-share company has nothing to review)
+  const steps: [Kind, () => Promise<unknown>, string][] = [["news", () => fetchNews(co.name), "wallstreetcn:search"]];
+  if (!listing || listing.market !== "A股") steps.push(["ipo", () => fetchIpo(co.name), "szse:projectrends"]);
+  for (const [kind, fn, source] of steps) {
     try { put(s, companyId, kind, await fn(), source); } catch (e: any) { errors[kind] = String(e?.message ?? e).slice(0, 200); }
     await sleep(300);
   }
