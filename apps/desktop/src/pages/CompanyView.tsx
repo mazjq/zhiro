@@ -123,7 +123,7 @@ function OfficialSync({ c, reload }: { c: any; reload: () => void }) {
 const yi = (v: any) => (v == null || Number.isNaN(Number(v)) ? "—" : `${(Number(v) / 1e8).toFixed(1)} 亿`);
 const pct = (v: any) => (v == null || Number.isNaN(Number(v)) ? "" : `${Number(v) > 0 ? "+" : ""}${Number(v).toFixed(1)}%`);
 
-/** What a kind of 企业情况 is called on the card, for saying which ones were not fetched. */
+/** What a kind of 企业情况 is called on the card. */
 const KIND_LABEL: Record<string, string> = { listing: "上市信息", basic: "基本盘", finance: "财报", dividends: "分红", announcements: "公告", holders: "股东", irm: "投资者问答", sectors: "板块", reports: "研报", forecast: "业绩预告", news: "新闻", ipo: "上市审核进度" };
 
 /** 企业情况 (ADR-029): one card, each kind of fact with the date it was fetched; refresh is one click or the assistant's call. */
@@ -134,6 +134,8 @@ function Intel({ c }: { c: any }) {
   const latest = useLatest();
   const load = () => latest("intel", call("company.intel", { companyId: c.companyId })).then(setX).catch(() => setX(null));
   useEffect(() => { setErr(""); load(); }, [c.companyId]);
+  // stale kinds are being fetched behind the card: look again shortly, until they are in
+  useEffect(() => { if (!x?.refreshing) return; const t = setTimeout(load, 5000); return () => clearTimeout(t); }, [x]);
   // kinds the person expanded: after a refresh (an agent updated the card) they are asked for in full again
   const expanded = useRef(new Set<string>());
   useEffect(() => { expanded.current.clear(); }, [c.companyId]);
@@ -144,7 +146,7 @@ function Intel({ c }: { c: any }) {
   const detail = (k: string) => call("company.intelDetail", { companyId: c.companyId, kind: k }).then((d) => setX((x: any) => (x?.rows ? { ...x, rows: x.rows.map((r: any) => (r.kind === k ? { ...r, data: d.data, more: false } : r)) } : x))).catch(() => {});
   const more = (k: string) => { if (!row(k)?.more) return; expanded.current.add(k); detail(k); };
   const More = ({ r }: { r: any }) => (r?.more ? <button className="text-xs text-accent ml-2" onClick={() => more(r.kind)}>展开</button> : null);
-  const age = (r: any) => (r ? <span className="text-xs text-ink-3 ml-2" title={r.fetchedAt}>{r.ageDays === 0 ? "今天" : `${r.ageDays} 天前`}{r.ageDays > 30 ? " · 过期" : ""}</span> : null);
+  const age = (r: any) => (r ? <span className="text-xs text-ink-3 ml-2" title={`${r.fetchedAt} 取 · 每 ${r.everyDays ?? 30} 天更新一次`}>{r.ageDays === 0 ? "今天" : `${r.ageDays} 天前`}{r.stale ? " · 待更新" : ""}</span> : null);
   const basic = row("basic"), fin = row("finance"), div = row("dividends"), ann = row("announcements"), news = row("news"), ipo = row("ipo"), holders = row("holders"), sectors = row("sectors"), forecast = row("forecast"), reports = row("reports"), irm = row("irm");
   const listed = x?.listing && !x.listing.none;
   const [researchMsg, setResearchMsg] = useState("");
@@ -159,8 +161,9 @@ function Intel({ c }: { c: any }) {
       <div className="flex items-center gap-2 mb-1">
         <span className="font-bold text-sm">企业情况</span>
         {x?.listing && (listed ? <Chip tone="good">{x.listing.market} {x.listing.code}</Chip> : <Chip>非上市</Chip>)}
-        <span className="ml-auto"><Button onClick={refresh} disabled={busy}>{busy ? "抓取中…" : x?.rows?.length ? "更新" : "生成"}</Button></span>
+        <span className="ml-auto"><Button onClick={refresh} disabled={busy}>{busy ? "抓取中…" : x?.rows?.length ? "立即全部更新" : "生成"}</Button></span>
       </div>
+      {x?.refreshing && !busy && <div className="text-xs text-ink-3 mb-1">正在后台更新过期的：{(x.staleKinds ?? []).map((k: string) => KIND_LABEL[k] ?? k).join("、")}</div>}
       {err && <div className="text-xs text-amber mb-1" title="多半是网络或数据源一时没响应；已有的数据照常显示">{err}</div>}
       {!x?.listing && !busy && <div className="text-xs text-ink-3">还没生成。上市公司能拿到财报、公告、分红；非上市只匹配专精特新名录，其余让助手联网调研。</div>}
       {basic && <div className="py-1 border-t border-line" title={`来源 ${basic.source}`}>{basic.data.industry}{basic.data.province && ` · ${basic.data.province}`}{basic.data.market?.startsWith("新三板") && ` · ${basic.data.market}`}{basic.data.employees != null && ` · 员工 ${Number(basic.data.employees).toLocaleString()} 人`}{basic.data.rdStaff != null && `（研发 ${basic.data.rdStaff}）`}{basic.data.staffYear && <a className="text-xs text-accent ml-1" href={basic.data.report?.url} target="_blank" rel="noreferrer">{basic.data.staffYear} 年报</a>}{basic.data.founded && ` · ${basic.data.founded.slice(0, 4)} 年成立`}{basic.data.listed && `，${basic.data.listed.slice(0, 4)} 年上市`}{age(basic)}</div>}

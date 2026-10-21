@@ -171,6 +171,16 @@ entries condense what still holds.
   placed: they publish no statements.
   2026-10-20: no caps by default — the person's call. A person's pace and the 24-hour stop at the first check stay;
   caps (and halving them after a start or a stop) are there for whoever sets them in `jobos.yaml` → `boss`.
+- **D-30 · 2026-10-21 · 企业情况: each kind on its own period, fetched behind the card.** The card fetched every kind
+  at once and called itself stale when any kind passed 30 days. Now each kind has a period by how fast it changes
+  (`EVERY_DAYS`: news and announcements a day; a review in progress three days; Q&A, research reports and forecasts a
+  week; statements, dividends and holders a month; industry and staff count a quarter; a listing found half a year,
+  nothing found a month). Reading returns what is stored at once and fetches only the stale kinds behind it (one
+  refresh per company at a time); a card never generated fetches nothing until asked. The listing is the root: when
+  it changes, every kind under it is fetched again. A kind that failed waits an hour, then two, four… up to a day
+  (in memory). The card's button fetches everything now. An A-share company is not looked for in the listing-review
+  lists. Reviewed by Codex (2026-10-21), which also asked for a background sweep of the companies the person follows
+  and one daily table per exchange for reviews — next steps.
 - **D-31 · 2026-10-21 · BOSS 直聘: no automated access in the public tool.** BOSS 直聘's user agreement (article 13,
   read 2026-10-21 at zhipin.com/web/common/protocol/protocol-2019-09-30.html) counts reading, copying or storing its
   content "by spider, crawler or 拟人程序 … rather than a real user" without permission as unlawful acquisition. D-26 to

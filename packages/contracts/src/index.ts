@@ -1001,9 +1001,9 @@ export const tools = {
   }),
   "company.intel": defineTool({
     name: "company.intel",
-    description: "企业情况卡（ADR-029）：是否上市（A股/港股/新三板/美股）、基本盘（行业/省份/员工数/成立与上市日期）、近三年营收净利与研发费用、分红、近一年公告里的关键词（专精特新/政府补助/IPO/扩产/对外投资/减持等）、专精特新名录匹配；每类各带 fetchedAt 与 ageDays。stale=true 表示没有数据或有一类超过 30 天没更新，此时先 company.intelRefresh。非上市公司只有名录匹配，其余要 research.company 联网调研。列表是摘要：more=true 的类别（新闻、互动易问答全文、研报、股东、分红、公告命中、行业概念）用 company.intelDetail 取全部。",
+    description: "企业情况卡（ADR-029）：是否上市（A股/港股/新三板/美股）、基本盘（行业/省份/员工数/成立与上市日期）、近三年营收净利与研发费用、分红、近一年公告里的关键词（专精特新/政府补助/IPO/扩产/对外投资/减持等）、专精特新名录匹配；每类各带 fetchedAt、ageDays 和 everyDays（这一类多久更新一次：新闻公告 1 天、问答研报业绩预告 7 天、在审 IPO 3 天、财报分红股东 30 天、行业员工 90 天、上市信息 180 天）。读的时候立即返回已有的；过期的类（staleKinds）会在后台自动更新（refreshing=true），稍后再读就是新的，一般不用调 company.intelRefresh。非上市公司只有名录匹配，其余要 research.company 联网调研。列表是摘要：more=true 的类别（新闻、互动易问答全文、研报、股东、分红、公告命中、行业概念）用 company.intelDetail 取全部。",
     input: Type.Object({ companyId: Id }),
-    output: Type.Object({ companyId: Id, companyName: Type.String(), listing: Type.Unknown(), rows: Type.Array(Type.Object({ kind: Type.String(), data: Type.Unknown(), source: Type.String(), fetchedAt: Type.String(), ageDays: Type.Number(), more: Type.Optional(Type.Boolean()) })), sme: Type.Unknown(), stale: Type.Boolean() }),
+    output: Type.Object({ companyId: Id, companyName: Type.String(), listing: Type.Unknown(), rows: Type.Array(Type.Object({ kind: Type.String(), data: Type.Unknown(), source: Type.String(), fetchedAt: Type.String(), ageDays: Type.Number(), everyDays: Type.Number(), stale: Type.Boolean(), more: Type.Optional(Type.Boolean()) })), sme: Type.Unknown(), stale: Type.Boolean(), staleKinds: Type.Array(Type.String()), refreshing: Type.Boolean() }),
     effects: READ,
     execution: "sync",
     errors: ["NOT_FOUND"],
@@ -1019,8 +1019,8 @@ export const tools = {
   }),
   "company.intelRefresh": defineTool({
     name: "company.intelRefresh",
-    description: "重新抓取一家公司的企业情况（巨潮、东方财富 F10、新浪财报、巨潮公告；新三板走股转年报 PDF + 东财三板 F10；匿名只读，约 2–30 秒）；抓不到的类别保留旧值并在 errors 里说明。不花模型额度。",
-    input: Type.Object({ companyId: Id }),
+    description: "立即重新抓取一家公司的企业情况并等它完成（巨潮、东方财富 F10、新浪财报、巨潮公告；新三板走股转年报 PDF + 东财三板 F10；匿名只读，约 2–30 秒）。默认全部类别重抓；force=false 只抓过期的类。抓不到的类别保留旧值并在 errors 里说明。不花模型额度。",
+    input: Type.Object({ companyId: Id, force: Type.Optional(Type.Boolean({ description: "默认 true：全部重抓；false：只抓过期的类" })) }),
     output: Type.Object({ companyId: Id, companyName: Type.String(), listing: Type.Unknown(), rows: Type.Array(Type.Unknown()), sme: Type.Unknown(), stale: Type.Boolean(), errors: Type.Record(Type.String(), Type.String()) }),
     effects: NETWORK_READ,
     execution: "sync",

@@ -84,7 +84,7 @@ import { tierOf, undoPlan, recordAction, listActions, undoAction, setMode, setAg
 import { backendOf, type ChatHub } from "./agent/backend.js";
 import { exportVault, defaultExportPath } from "./service/export.js";
 import { join } from "node:path";
-import { getIntel, getIntelDetail, refreshIntel, importSme } from "./service/intel.js";
+import { readIntel, getIntelDetail, refreshIntel, importSme } from "./service/intel.js";
 import { compare as employerCompare } from "./service/employer.js";
 import { sameCompanies } from "./service/same-company.js";
 import { enqueueFit, listFit } from "./service/fit.js";
@@ -451,9 +451,9 @@ const handlers: { [N in ToolName]: Handler<N> } = {
   "company.official": (i, _a, s) => ({ links: officialLinks(s, i.companyId) }),
   "company.syncOfficial": (i, _a, s) => syncOfficial(s, i.companyId),
   "company.search": (i, _a, s) => searchCompanies(s.domain.db, i.query, i.limit ?? 10),
-  "company.intel": (i, _a, s) => getIntel(s, i.companyId),
+  "company.intel": (i, _a, s) => readIntel(s, i.companyId),
   "company.intelDetail": (i, _a, s) => getIntelDetail(s, i.companyId, i.kind),
-  "company.intelRefresh": (i, _a, s) => refreshIntel(s, i.companyId),
+  "company.intelRefresh": (i, _a, s) => refreshIntel(s, i.companyId, { force: i.force !== false }),
   "intel.smeImport": (i, _a, s) => importSme(s.domain.db, s.config.vault, i.path),
   "channel.list": (_i, _a, s) => ({ items: listChannels(s) }),
   "intel.smeFromUrl": (i, _a, s) => loadSources(s.domain.db, [{ url: i.url, level: i.level, batch: i.batch, region: i.region, published_at: i.publishedAt }]),
