@@ -240,13 +240,27 @@ export function brief(kind: string, d: any): any {
     default: return d;
   }
 }
-export interface IntelRow { kind: Kind; data: any; source: string; fetchedAt: string; ageDays: number; more?: boolean }
-const toRow = (r: any): IntelRow => ({ kind: r.kind, data: JSON.parse(r.data_json), source: r.source, fetchedAt: r.fetched_at, ageDays: Math.floor((Date.now() - Date.parse(r.fetched_at)) / 86400_000) });
+export interface IntelRow { kind: Kind; data: any; source: string; fetchedAt: string; ageDays: number; everyDays: number; stale: boolean; more?: boolean }
+
+/**
+ * How long each kind is good for, by how fast it changes (the person's call, 2026-10-21): news and announcements a
+ * day, a review in progress a few days, statements a month, the industry and staff count a quarter. A listing found
+ * holds half a year; nothing found is looked for again in a month. Reading never waits for these: a stale kind is
+ * fetched in the background and shown on the next read.
+ */
+export const EVERY_DAYS: Record<Kind, number> = { listing: 180, basic: 90, sectors: 90, finance: 30, dividends: 30, holders: 30, forecast: 7, reports: 7, irm: 7, announcements: 1, news: 1, ipo: 3, sme: 365 };
+const everyDays = (kind: Kind, data: any) =>
+  kind === "listing" && data?.none ? 30 : kind === "ipo" && !data?.szse ? 30 : EVERY_DAYS[kind] ?? 30;
+const toRow = (r: any, now = Date.now()): IntelRow => {
+  const data = JSON.parse(r.data_json), age = (now - Date.parse(r.fetched_at)) / 86400_000, every = everyDays(r.kind, data);
+  return { kind: r.kind, data, source: r.source, fetchedAt: r.fetched_at, ageDays: Math.floor(age), everyDays: every, stale: age > every };
+};
 export function getIntelDetail(s: Services, companyId: string, kind: string) {
   const r = s.domain.db.prepare("select * from company_intel where company_id = ? and kind = ?").get(companyId, kind);
   if (!r) throw new NotFound(`企业情况 ${companyId} ${kind}`);
   return { companyId, ...toRow(r) };
 }
+/** The card as stored. `stale` counts only the kinds shown; a stale card starts a background refresh (see readIntel). */
 export function getIntel(s: Services, companyId: string) {
   const co = s.domain.db.prepare("select name from company where id = ?").get(companyId) as { name: string } | undefined;
   if (!co) throw new NotFound(`company ${companyId}`);
@@ -255,64 +269,95 @@ export function getIntel(s: Services, companyId: string) {
     return JSON.stringify(b) === JSON.stringify(row.data) ? row : { ...row, data: b, more: true };
   });
   const sme = smeMatch(s.domain.db, co.name);
-  const listing = rows.find((r) => r.kind === "listing")?.data ?? null;
-  return { companyId, companyName: co.name, listing, rows: rows.filter((r) => r.kind !== "listing"), sme, stale: rows.length === 0 || rows.some((r) => r.ageDays > 30) };
+  const listingRow = rows.find((r) => r.kind === "listing");
+  const staleKinds = rows.length === 0 ? ["listing"] : rows.filter((r) => r.stale).map((r) => r.kind);
+  return { companyId, companyName: co.name, listing: listingRow?.data ?? null, rows: rows.filter((r) => r.kind !== "listing"), sme, stale: staleKinds.length > 0, staleKinds, refreshing: running.has(companyId) };
+}
+/**
+ * company.intel: what is stored, at once; the stale kinds are fetched behind it (one refresh per company at a time).
+ * A card never generated stays empty until the person (or an agent) asks for it: glancing at a company fetches nothing.
+ */
+export function readIntel(s: Services, companyId: string) {
+  const card = getIntel(s, companyId);
+  const kept = card.listing !== null;
+  if (kept && card.stale && !card.refreshing) void refreshIntel(s, companyId).catch(() => {});
+  return { ...card, refreshing: card.refreshing || (kept && card.stale) };
 }
 
 const put = (s: Services, companyId: string, kind: Kind, data: unknown, source: string) =>
   s.domain.db.prepare("insert or replace into company_intel(company_id, kind, data_json, source, fetched_at) values (?,?,?,?,?)").run(companyId, kind, JSON.stringify(data), source, new Date().toISOString());
 
-/** Fetch every kind afresh; a kind that fails keeps its old row and is reported. */
-export async function refreshIntel(s: Services, companyId: string) {
+/** One refresh per company at a time: a read and a click at once share it. */
+const running = new Map<string, Promise<any>>();
+/**
+ * A kind that failed waits before it is tried again — an hour, then two, four… up to a day — so a source that is down
+ * is not asked on every read. Kept in memory: a restart tries again.
+ */
+const failed = new Map<string, { n: number; until: number }>();
+const mayTry = (key: string, now: number) => (failed.get(key)?.until ?? 0) <= now;
+const noteFailure = (key: string, now: number) => { const n = (failed.get(key)?.n ?? 0) + 1; failed.set(key, { n, until: now + Math.min(24, 2 ** (n - 1)) * 3600_000 }); };
+
+/**
+ * Fetch the kinds that are stale (all of them with `force`, as the card's button does). The listing is the root: when
+ * it changes (another code or board), every kind under it is fetched again. A kind that fails keeps its old row and
+ * is reported in `errors`.
+ */
+export function refreshIntel(s: Services, companyId: string, opts: { force?: boolean } = {}) {
+  const on = running.get(companyId);
+  if (on) return on;
+  const job = refreshKinds(s, companyId, !!opts.force).finally(() => running.delete(companyId));
+  running.set(companyId, job);
+  return job;
+}
+
+async function refreshKinds(s: Services, companyId: string, force: boolean) {
   const co = s.domain.db.prepare("select name from company where id = ?").get(companyId) as { name: string } | undefined;
   if (!co) throw new NotFound(`company ${companyId}`);
+  const now = Date.now();
+  const have = new Map((s.domain.db.prepare("select * from company_intel where company_id = ?").all(companyId) as any[]).map((r) => [r.kind as Kind, toRow(r, now)]));
   const errors: Record<string, string> = {};
-  let listing: Listing | null = await resolveListing(co.name).catch((e) => { errors.listing = String(e?.message ?? e); return null; });
-  let via = "cninfo:topSearch";
-  if (!listing) { await sleep(300); listing = await resolveNeeq(co.name, normName(co.name)).catch((e) => { errors.listing = String(e?.message ?? e); return null; }); via = "eastmoney:codetable"; }
-  // not on a mainland or Hong Kong board: a company listed in the US (拼多多, 蔚来, 英伟达) is found by 东财's name search
-  if (!listing) { await sleep(300); listing = await resolveUsListing(co.name).catch((e) => { errors.listing = String(e?.message ?? e); return null; }); via = "eastmoney:search"; }
-  put(s, companyId, "listing", listing ?? { none: true }, listing ? via : "cninfo:topSearch+eastmoney:codetable+eastmoney:search");
-  if (listing && listing.market === "美股") {
-    for (const [kind, fn, source] of [["basic", () => fetchUsBasic(listing.code), "eastmoney:USF10"], ["finance", () => fetchUsFinance(listing.code), "eastmoney:USF10"]] as [Kind, () => Promise<unknown>, string][]) {
-      try { put(s, companyId, kind, await fn(), source); } catch (e: any) { errors[kind] = String(e?.message ?? e).slice(0, 200); }
-      await sleep(300);
-    }
-  }
-  if (listing && listing.market === "新三板") {
-    for (const [kind, fn, source] of [["basic", () => fetchNeeqBasic(listing.code), "neeq:detailCompany+年报"], ["finance", () => fetchNeeqFinance(listing.code), "eastmoney:xinsanban"]] as [Kind, () => Promise<unknown>, string][]) {
-      try { put(s, companyId, kind, await fn(), source); } catch (e: any) { errors[kind] = String(e?.message ?? e).slice(0, 200); }
-      await sleep(300);
-    }
-  }
-  if (listing && listing.market === "港股") {
-    try { put(s, companyId, "finance", await fetchHkFinance(listing.code), "eastmoney:HKF10"); } catch (e: any) { errors.finance = String(e?.message ?? e).slice(0, 200); }
+  const due = (kind: Kind) => force || !have.has(kind) || have.get(kind)!.stale;
+  const attempt = async (kind: Kind, fn: () => Promise<unknown>, source: string) => {
+    const key = `${companyId}:${kind}`;
+    if (!force && !mayTry(key, now)) return;
+    try { put(s, companyId, kind, await fn(), source); failed.delete(key); } catch (e: any) { errors[kind] = String(e?.message ?? e).slice(0, 200); noteFailure(key, now); }
     await sleep(300);
+  };
+
+  let listing: Listing | null = have.get("listing")?.data?.none ? null : (have.get("listing")?.data ?? null);
+  let changed = false;
+  if (due("listing")) {
+    const was = have.get("listing")?.data;
+    let found: Listing | null = await resolveListing(co.name).catch((e) => { errors.listing = String(e?.message ?? e); return null; });
+    let via = "cninfo:topSearch";
+    if (!found) { await sleep(300); found = await resolveNeeq(co.name, normName(co.name)).catch((e) => { errors.listing = String(e?.message ?? e); return null; }); via = "eastmoney:codetable"; }
+    // not on a mainland or Hong Kong board: a company listed in the US (拼多多, 蔚来, 英伟达) is found by 东财's name search
+    if (!found) { await sleep(300); found = await resolveUsListing(co.name).catch((e) => { errors.listing = String(e?.message ?? e); return null; }); via = "eastmoney:search"; }
+    if (found || !errors.listing) put(s, companyId, "listing", found ?? { none: true }, found ? via : "cninfo:topSearch+eastmoney:codetable+eastmoney:search");
+    if (found || !errors.listing) { changed = !was || (was.none ? !!found : !found || was.code !== found.code || was.market !== found.market); listing = found; }
   }
-  if (listing && listing.market === "A股") {
-    const steps: [Kind, () => Promise<unknown>, string][] = [
-      ["basic", () => fetchBasic(listing.code), "eastmoney:F10"],
-      ["finance", () => fetchFinance(listing.code), "eastmoney:ZYZB+sina:lrb"],
-      ["dividends", () => fetchDividends(listing.code), "eastmoney:datacenter"],
-      ["announcements", () => fetchAnnouncements(listing.code, listing.orgId), "cninfo:hisAnnouncement"],
-      ["holders", () => fetchHolders(listing.code), "eastmoney:F10-shareholders"],
-      ["irm", () => fetchIrm(listing.code), "cninfo:irm"],
-      ["sectors", () => fetchSectors(listing.code), "eastmoney:slist"],
-      ["reports", () => fetchReports(listing.code), "eastmoney:reportapi"],
-      ["forecast", () => fetchForecast(listing.code), "eastmoney:datacenter"],
-    ];
-    for (const [kind, fn, source] of steps) {
-      try { put(s, companyId, kind, await fn(), source); } catch (e: any) { errors[kind] = String(e?.message ?? e).slice(0, 200); }
-      await sleep(300);
-    }
+  const go = (kind: Kind) => changed || due(kind);
+  const steps: [Kind, () => Promise<unknown>, string][] = [];
+  if (listing?.market === "美股") steps.push(["basic", () => fetchUsBasic(listing!.code), "eastmoney:USF10"], ["finance", () => fetchUsFinance(listing!.code), "eastmoney:USF10"]);
+  if (listing?.market === "新三板") steps.push(["basic", () => fetchNeeqBasic(listing!.code), "neeq:detailCompany+年报"], ["finance", () => fetchNeeqFinance(listing!.code), "eastmoney:xinsanban"]);
+  if (listing?.market === "港股") steps.push(["finance", () => fetchHkFinance(listing!.code), "eastmoney:HKF10"]);
+  if (listing?.market === "A股") {
+    const l = listing;
+    steps.push(
+      ["basic", () => fetchBasic(l.code), "eastmoney:F10"],
+      ["finance", () => fetchFinance(l.code), "eastmoney:ZYZB+sina:lrb"],
+      ["dividends", () => fetchDividends(l.code), "eastmoney:datacenter"],
+      ["announcements", () => fetchAnnouncements(l.code, l.orgId), "cninfo:hisAnnouncement"],
+      ["holders", () => fetchHolders(l.code), "eastmoney:F10-shareholders"],
+      ["irm", () => fetchIrm(l.code), "cninfo:irm"],
+      ["sectors", () => fetchSectors(l.code), "eastmoney:slist"],
+      ["reports", () => fetchReports(l.code), "eastmoney:reportapi"],
+      ["forecast", () => fetchForecast(l.code), "eastmoney:datacenter"],
+    );
   }
-  // for every company, listed or not
-  // a listing under review is looked for only where there is no listing yet (an A-share company has nothing to review)
-  const steps: [Kind, () => Promise<unknown>, string][] = [["news", () => fetchNews(co.name), "wallstreetcn:search"]];
-  if (!listing || listing.market !== "A股") steps.push(["ipo", () => fetchIpo(co.name), "szse:projectrends"]);
-  for (const [kind, fn, source] of steps) {
-    try { put(s, companyId, kind, await fn(), source); } catch (e: any) { errors[kind] = String(e?.message ?? e).slice(0, 200); }
-    await sleep(300);
-  }
+  // for every company, listed or not; a listing under review is looked for only where there is no A-share listing
+  steps.push(["news", () => fetchNews(co.name), "wallstreetcn:search"]);
+  if (listing?.market !== "A股") steps.push(["ipo", () => fetchIpo(co.name), "szse:projectrends"]);
+  for (const [kind, fn, source] of steps) if (go(kind)) await attempt(kind, fn, source);
   return { ...getIntel(s, companyId), errors };
 }
