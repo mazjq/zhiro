@@ -104,14 +104,14 @@ entries condense what still holds.
   false, confidence 0.7 (official readers give 0.85–0.9). Not `notices`: each job has its own id and page, and marking
   it would queue every such company for the daily model-paid lead resolution. Pages are 0.6–1.4 s apart; a column of
   ~110 open announcements takes about nine minutes.
-- **D-26 · 2026-10-18 · BOSS 直聘 is searched by the person's own agent in the person's own browser, not crawled.** A
+- **[已被 D-31 取代] D-26 · 2026-10-18 · BOSS 直聘 is searched by the person's own agent in the person's own browser, not crawled.** A
   headless browser was flagged by BOSS on its first search (2026-10-16, 「您的环境存在异常」). Searching in the person's
   real, logged-in, visible browser with page loads 5–12 s apart did not trip it (2026-10-18, one search page and two
   job pages). So Zhiro ships no BOSS reader; the agent skill (`agent-skills/zhiro`) carries the protocol: city home page
   first, then the search URL; a page budget per session and per day; list pages first, details only for picks; dedupe
   against the pool; file picks with `listing.capture` (publisher `boss`); stop on any verification or login page; never
   press 沟通 / 投递. One quiet run is evidence, not a guarantee; the protocol keeps the volume low and stops early.
-- **D-27 · 2026-10-18 · BOSS visits: a budget and a circuit breaker held by Zhiro, not a rule the agent remembers.**
+- **[已被 D-31 取代] D-27 · 2026-10-18 · BOSS visits: a budget and a circuit breaker held by Zhiro, not a rule the agent remembers.**
   D-26 put the BOSS rules in the skill; a rule in a document is forgotten at the next handoff. Now every page the agent
   opens needs a one-time permit (`boss.permit`): it names the one page, the earliest moment to open it (a person-like
   pause by what came before: 4–10 s after the city page, 8–30 s from a list to a job, 12–45 s between jobs, now and then
@@ -125,7 +125,7 @@ entries condense what still holds.
   may complete with values found on that same page. An agent's `listing.capture` of a BOSS link is refused. What
   Zhiro cannot see — whether the agent waited and which browser it used — stays a rule of the skill, and the page says
   so. Advised by Codex (2026-10-18); the budget is the person's call (the review advised less).
-- **D-28 · 2026-10-18 · BOSS: Zhiro drives a dedicated Chrome and listens to the page's own job data.** D-27 had the
+- **[已被 D-31 取代] D-28 · 2026-10-18 · BOSS: Zhiro drives a dedicated Chrome and listens to the page's own job data.** D-27 had the
   agent open every page and hand its text back; it cost tokens per page and was slower than a person. Now the person
   starts a normal Chrome with its own profile (`<vault>/boss-chrome`; Chrome 136+ will not open the everyday profile
   for debugging) and a debugging port (9333), and logs in to BOSS once. Zhiro attaches over CDP, opens the home page at
@@ -171,3 +171,15 @@ entries condense what still holds.
   placed: they publish no statements.
   2026-10-20: no caps by default — the person's call. A person's pace and the 24-hour stop at the first check stay;
   caps (and halving them after a start or a stop) are there for whoever sets them in `jobos.yaml` → `boss`.
+- **D-31 · 2026-10-21 · BOSS 直聘: no automated access in the public tool.** BOSS 直聘's user agreement (article 13,
+  read 2026-10-21 at zhipin.com/web/common/protocol/protocol-2019-09-30.html) counts reading, copying or storing its
+  content "by spider, crawler or 拟人程序 … rather than a real user" without permission as unlawful acquisition. D-26 to
+  D-28 (an agent opening BOSS pages in the person's browser under permits; Zhiro driving a dedicated Chrome and
+  listening to the page's own data) are such programs, so they are out of the public tool: the services, the boss.*
+  tools, the settings card, the 找实习 candidate list and the config section. What stays: migrations v37 / v38 and their
+  tables (a published migration is not undone; the tables are empty in a new library), the capture bookmark's
+  recognising zhipin.com (the person reading a page and saving it), the refusal of a BOSS link captured by an agent,
+  and the employer comparison reading boss_candidate rows a library already has. The person who asked for D-28 keeps
+  it on a local branch that is never pushed (`local/*`, refused by the pre-push hook), at their own risk.
+  Reviewed by Codex (2026-10-21), which advised a local branch over a plugin loader: the BOSS code leans on internals
+  a loader would have to expose.

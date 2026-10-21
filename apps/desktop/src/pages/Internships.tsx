@@ -51,48 +51,10 @@ export default function Internships() {
         </Card>
       )}
       {more && <div className="mt-3 text-center"><Button onClick={() => load(items?.length ?? 0)}>再看 {PAGE} 个</Button></div>}
-      <BossCandidates onFiled={() => load()} />
     </>
   );
 }
 
-/** What the agent found on BOSS (boss.search) but has not read in full yet: one click reads the job page and files it. */
-function BossCandidates({ onFiled }: { onFiled: () => void }) {
-  const [items, setItems] = useState<any[]>([]);
-  const [busy, setBusy] = useState("");
-  const [msg, setMsg] = useState("");
-  const load = () => call("boss.candidates", { internOnly: true, limit: 30 }).then((r) => setItems(r.items)).catch(() => setItems([]));
-  useEffect(() => { load(); }, []);
-  useOnDataChange(load);
-  const fill = async (ref: string) => {
-    setBusy(ref); setMsg("");
-    try {
-      const r = await call("boss.detail", { refs: [ref] }), x = r.results?.[0];
-      setMsg(x?.outcome === "filed" ? `已收进库：${x.company ?? ""}` : x?.message ?? x?.outcome ?? "");
-      load(); onFiled();
-    } catch (e: any) { setMsg(e.message); } finally { setBusy(""); }
-  };
-  if (!items.length) return null;
-  return (
-    <div className="mt-6">
-      <div className="font-bold mb-1">BOSS 上搜到、还没补详情的 · {items.length}</div>
-      <div className="text-xs text-ink-3 mb-2">点「补详情」会在 BOSS 专用浏览器里打开职位页，读完职位描述和公司全名再收进库。</div>
-      {msg && <div className="mb-2 text-sm text-ink-2">{msg}</div>}
-      <Card className="divide-y divide-line">
-        {items.map((c) => (
-          <div key={c.ref} className="px-4 py-2 flex items-center gap-2 text-sm">
-            <div className="flex-1 min-w-0">
-              <span className="font-medium">{c.title}</span>
-              <span className="text-ink-2 ml-2">{c.brand}</span>
-              <span className="text-xs text-ink-3 ml-2">{[c.salary, c.place, c.need].filter(Boolean).join(" · ")}</span>
-            </div>
-            <Button onClick={() => fill(c.ref)} disabled={!!busy}>{busy === c.ref ? "读取中…" : "补详情"}</Button>
-          </div>
-        ))}
-      </Card>
-    </div>
-  );
-}
 
 function Row({ p, open, onToggle, onWatch }: { p: any; open: boolean; onToggle: () => void; onWatch: () => void }) {
   const [d, setD] = useState<any>(null);
