@@ -123,6 +123,9 @@ function OfficialSync({ c, reload }: { c: any; reload: () => void }) {
 const yi = (v: any) => (v == null || Number.isNaN(Number(v)) ? "—" : `${(Number(v) / 1e8).toFixed(1)} 亿`);
 const pct = (v: any) => (v == null || Number.isNaN(Number(v)) ? "" : `${Number(v) > 0 ? "+" : ""}${Number(v).toFixed(1)}%`);
 
+/** What a kind of 企业情况 is called on the card, for saying which ones were not fetched. */
+const KIND_LABEL: Record<string, string> = { listing: "上市信息", basic: "基本盘", finance: "财报", dividends: "分红", announcements: "公告", holders: "股东", irm: "投资者问答", sectors: "板块", reports: "研报", forecast: "业绩预告", news: "新闻", ipo: "上市审核进度" };
+
 /** 企业情况 (ADR-029): one card, each kind of fact with the date it was fetched; refresh is one click or the assistant's call. */
 function Intel({ c }: { c: any }) {
   const [x, setX] = useState<any>(null);
@@ -135,7 +138,7 @@ function Intel({ c }: { c: any }) {
   const expanded = useRef(new Set<string>());
   useEffect(() => { expanded.current.clear(); }, [c.companyId]);
   useOnDataChange(() => { if (!busy) load().then(() => { for (const k of expanded.current) detail(k); }); });
-  const refresh = async () => { setBusy(true); setErr(""); try { const r = await call("company.intelRefresh", { companyId: c.companyId }); setX(r); const e = Object.entries(r.errors ?? {}); if (e.length) setErr(e.map(([k, v]) => `${k}: ${v}`).join("；")); } catch (e: any) { setErr(e.message); } finally { setBusy(false); } };
+  const refresh = async () => { setBusy(true); setErr(""); try { const r = await call("company.intelRefresh", { companyId: c.companyId }); setX(r); const e = Object.keys(r.errors ?? {}); if (e.length) setErr(`这几类这次没取到，下次更新再试：${e.map((k) => KIND_LABEL[k] ?? k).join("、")}`); } catch (e: any) { setErr(e.message); } finally { setBusy(false); } };
   const row = (k: string) => x?.rows?.find((r: any) => r.kind === k);
   // the card gets summaries (more=true when something was left out); the whole kind is one call away
   const detail = (k: string) => call("company.intelDetail", { companyId: c.companyId, kind: k }).then((d) => setX((x: any) => (x?.rows ? { ...x, rows: x.rows.map((r: any) => (r.kind === k ? { ...r, data: d.data, more: false } : r)) } : x))).catch(() => {});
@@ -148,7 +151,7 @@ function Intel({ c }: { c: any }) {
   const [assessing, setAssessing] = useState(false);
   const assess = async () => {
     setAssessing(true);
-    try { const r = await call("research.company", { companyName: c.companyName, question: "就业评估" }); setResearchMsg(`已交给你的 AI 助手写就业评估报告（约十几分钟），写好在「找岗位 → 调研」里。运行 ${r.runId.slice(-6)}`); }
+    try { const r = await call("research.company", { companyName: c.companyName, question: "就业评估" }); setResearchMsg(`已交给你的 AI 助手写就业评估报告（约十几分钟），写好在这张公司卡下方的「调研」里，点「看报告」。运行 ${r.runId.slice(-6)}`); }
     catch (e: any) { setResearchMsg(e.message); setAssessing(false); }
   };
   return (
@@ -158,7 +161,7 @@ function Intel({ c }: { c: any }) {
         {x?.listing && (listed ? <Chip tone="good">{x.listing.market} {x.listing.code}</Chip> : <Chip>非上市</Chip>)}
         <span className="ml-auto"><Button onClick={refresh} disabled={busy}>{busy ? "抓取中…" : x?.rows?.length ? "更新" : "生成"}</Button></span>
       </div>
-      {err && <div className="text-xs text-bad mb-1">{err}</div>}
+      {err && <div className="text-xs text-amber mb-1" title="多半是网络或数据源一时没响应；已有的数据照常显示">{err}</div>}
       {!x?.listing && !busy && <div className="text-xs text-ink-3">还没生成。上市公司能拿到财报、公告、分红；非上市只匹配专精特新名录，其余让助手联网调研。</div>}
       {basic && <div className="py-1 border-t border-line" title={`来源 ${basic.source}`}>{basic.data.industry}{basic.data.province && ` · ${basic.data.province}`}{basic.data.market?.startsWith("新三板") && ` · ${basic.data.market}`}{basic.data.employees != null && ` · 员工 ${Number(basic.data.employees).toLocaleString()} 人`}{basic.data.rdStaff != null && `（研发 ${basic.data.rdStaff}）`}{basic.data.staffYear && <a className="text-xs text-accent ml-1" href={basic.data.report?.url} target="_blank" rel="noreferrer">{basic.data.staffYear} 年报</a>}{basic.data.founded && ` · ${basic.data.founded.slice(0, 4)} 年成立`}{basic.data.listed && `，${basic.data.listed.slice(0, 4)} 年上市`}{age(basic)}</div>}
       {fin && (
@@ -198,12 +201,11 @@ function Intel({ c }: { c: any }) {
           <span className="flex-1">非上市{x.sme?.matches.length === 0 ? `，不在本地专精特新名录（${x.sme?.rosterSize ?? 0} 家）` : ""}。融资、人员、上市进展、口碑写在下面的就业评估报告里。</span>
         </div>
       )}
-      {x?.listing && (
-        <div className="text-xs text-ink-3 py-1 border-t border-line flex items-center gap-2">
-          <span className="flex-1">就业评估报告：利润为什么变、钱去了哪、技术人员有没有激励、上市进展、和你的匹配。数字由职路取，解读由你的 AI 助手写，不打分。</span>
-          <Button onClick={assess} disabled={assessing}>{assessing ? "已派发" : "写一份"}</Button>
-        </div>
-      )}
+      {/* not behind 「生成」: the report fetches its own facts (a video session looked for this button, 2026-10-21) */}
+      <div className="text-xs text-ink-3 py-1 border-t border-line flex items-center gap-2">
+        <span className="flex-1">就业评估报告：利润为什么变、人员和人均、钱去了哪、技术人员有没有激励、融资和上市进展、和你的匹配。数字由职路取，解读由你的 AI 助手写，不打分。</span>
+        <Button onClick={assess} disabled={assessing}>{assessing ? "已派发" : "写一份"}</Button>
+      </div>
       {researchMsg && <div className="text-xs text-ink-3">{researchMsg}</div>}
     </div>
   );
