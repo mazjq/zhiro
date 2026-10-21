@@ -211,7 +211,7 @@ export class CareerAgent {
       "岗位的 match.reason 以 待补资料 开头、或岗位名只是类别（「机械工程」「技术类」）、或 position_get 没有岗位描述时，不要据此判断合不合适：先 lead_resolve({companyIds:[…]}) 让系统读公告页补出具体岗位（几秒到一分钟），再用 pool_list 看补出来的岗位；仍补不出就如实说「这家只有类别，入口是 X，需要手动查看」。判断合不合适看 match.reason 里的档位与待核实项，细看用 position_get。",
       "一条消息里有 3 题以上互不依赖的调研任务（各自要读不同网页）：用 research_dispatch 一次派出全部题目（itemId、题目原文、该题的输出格式），等结果回来后按用户要求的格式汇总，status 不是 answered 的题照实写明原因；不要自己逐题读页。",
       "长调研（要读很多页才能回答）：每拿到一题就立刻 research_checkpoint 记下该题的最终内容和链接——较早的页面内容会被省略，没记的就没有了，收尾时没记录的题按未完成处理；先查岗位库（pool_list / company_search / position_get：8 千家公司的官方入口、国能等站的全量岗位都在库里），库里没有再 page_read；同一站点要连做几步（选单位 → 点岗位 → 下一页）用 page_read 的 mode=open + continue，不要每次从首页重来；读列表页后按 links 读详情；不同站点、不同题目的 page_read 在同一条消息里一起发起（它们会并行执行，一条一条发要慢好几倍）；一个站点读不到（needsLogin / blocked）就标 blocked 换下一题，不要反复重试；全部题目记完调用 research_finish，再按用户要求的格式写出完整答案。",
-      "问一家公司的经营状况（收益、研发、员工数、分红、专精特新、IPO、扩产、投资）先 company_intel；stale 为 true 或没有数据就 company_intelRefresh 再看；非上市公司只有名录匹配，其余用 research_company 派联网调研（会出确认卡）。回答时带上每类数据的更新日期。",
+      "问一家公司的经营状况（收益、研发、员工数、分红、专精特新、IPO、扩产、投资）先 company_intel；过期的类会在后台自动更新（refreshing=true 时稍后再读）；从没生成过（listing 为空）才调 company_intelRefresh；非上市公司只有名录匹配，其余用 research_company 派联网调研（会出确认卡）。回答时带上每类数据的更新日期。",
       "问一个行业或方向（规模、哪些公司、谁在赚钱、薪资）：直接用数据工具取数再答——industry_companies（这个主题在股市里的上市公司，候选名单）、company_financials（按公司名或代码查任何上市公司的营收 / 净利 / 研发 / 员工数，不必在岗位库里）、industry_reports（券商最近的研报）、labor_us（美国某职业的就业人数与年薪）。回答里写明数字的财年、币种和来源。要一份完整的报告再用 research_topic（会出确认卡）。",
       "工具返回里如果有 changedByUser，是用户在 Zhiro 窗口里自你上次调用以来改过的东西（一行一处）：以它为准更新你记着的情况，必要时重新读，不要把旧的说法再告诉用户。",
       "批量删除、批量结束申请这类影响多条数据的操作，先说清会影响哪些、请用户确认，再调用工具。授权码、密码、模型登录只能由用户在界面里操作，不要在对话里索要或转交。",
