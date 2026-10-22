@@ -446,6 +446,9 @@ export const MIGRATIONS: string[] = [
   alter table message add column classify_attempts integer not null default 0;
   alter table message add column classify_next_at text;
   alter table message add column is_reminder integer;
+  `,
+  // v43: P2b — what a mail filed on its own changed, before and after, so it can be undone exactly
+  `
   alter table message add column filed_json text;
   `,
 ];

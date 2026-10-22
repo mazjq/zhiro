@@ -301,3 +301,31 @@ describe("inbox: clear mail is filed on its own (P2b)", () => {
     expect((await ingestMessage(d, "a", mail("面试安排"))).message.status).toBe("proposed");
   });
 });
+
+describe("inbox: undoing what mail filed (P2b review)", () => {
+  it("two filings of one application undo newest first; the history says undone; the notice not yet sent is withdrawn", async () => {
+    const { domain, d, control } = setup({ 一面邀请: { category: "面试", round: "一面", scheduledAt: "2026-10-25T10:00:00+08:00" }, 一面改期: { category: "面试改期", round: "一面", scheduledAt: "2026-10-26T15:00:00+08:00" } });
+    d.auto = true;
+    const a = await ingestMessage(d, "a", mail("一面邀请"));
+    const b = await ingestMessage(d, "a", mail("一面改期通知"));
+    expect(b.message.status).toBe("filed");
+    expect(domain.timeline(control.id).stages[0].scheduledAt).toBe("2026-10-26T15:00:00+08:00");
+    const { unfileMail } = await import("./inbox.js");
+    unfileMail(d, b.message.id);
+    expect(domain.timeline(control.id).stages[0].scheduledAt).toBe("2026-10-25T10:00:00+08:00");
+    unfileMail(d, a.message.id); // the earlier one, after the later one was undone
+    expect(domain.timeline(control.id).stages).toHaveLength(0);
+    expect((domain.db.prepare("select count(*) as n from agent_action where undone_at is null").get() as any).n).toBe(0);
+    expect((domain.db.prepare("select count(*) as n from notice where key like 'filed:%' and state = 'pending'").get() as any).n).toBe(0);
+  });
+  it("a stage the person changed after it was filed is not touched by an undo", async () => {
+    const { domain, d, control } = setup({ 笔试邀请: { category: "笔试", scheduledAt: "2026-10-25T19:00:00+08:00" } });
+    d.auto = true;
+    const r = await ingestMessage(d, "a", mail("笔试邀请"));
+    const st = domain.timeline(control.id).stages[0];
+    domain.updateStage({ id: st.id, notes: "带身份证" });
+    const { unfileMail } = await import("./inbox.js");
+    expect(() => unfileMail(d, r.message.id)).toThrow(/改过/);
+    expect(domain.timeline(control.id).stages).toHaveLength(1);
+  });
+});

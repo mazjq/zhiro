@@ -304,8 +304,10 @@ function fileMail(d: InboxDeps, messageId: string, r: { kind: string; payload: a
   if (r.kind === "stage.add") { created = d.domain.addStage(r.payload, src).id; said = `记了${r.payload.kind}${r.payload.scheduledAt ? `（${String(r.payload.scheduledAt).slice(5, 16).replace("T", " ")}）` : ""}`; }
   else if (r.kind === "stage.update") { d.domain.updateStage(r.payload, src); said = r.payload.result ? `环节结果：${r.payload.result}` : `环节改到 ${String(r.payload.scheduledAt ?? "").slice(5, 16).replace("T", " ")}`; }
   else { d.domain.updateApplication(r.payload, src); said = r.payload.state ? `申请改为「${({ submitted: "已投递", in_process: "流程中", closed: "已结束" } as any)[r.payload.state] ?? r.payload.state}」` : "记了一条进展"; }
-  const after = db.prepare("select updated_at from application where id = ?").get(appId) as any;
-  db.prepare("update message set filed_json = ? where id = ?").run(JSON.stringify({ kind: r.kind, payload: r.payload, applicationId: appId, before, stageBefore, created, afterUpdatedAt: after?.updated_at }), messageId);
+  const appAfter = db.prepare("select state, close_reason, next_action, next_action_at from application where id = ?").get(appId) as any;
+  const stageId = created ?? (r.kind === "stage.update" ? r.payload.id : null);
+  const stageAfter = stageId ? db.prepare("select scheduled_at, result, link, notes from stage where id = ?").get(stageId) : null;
+  db.prepare("update message set filed_json = ? where id = ?").run(JSON.stringify({ kind: r.kind, payload: r.payload, applicationId: appId, before, appAfter, stageId, stageBefore, stageAfter, created }), messageId);
   db.prepare("insert into agent_action(id, at, actor, tool, input_json, summary, undo_json, turn_id) values (?,?,?,?,?,?,?,null)")
     .run(ulid(), now(), src, r.kind, JSON.stringify(r.payload), `邮件「${subject.slice(0, 30)}」：${said}`, JSON.stringify({ name: "inbox.unfile", input: { id: messageId } }));
   if (TELL.has(c.category)) {
@@ -317,27 +319,43 @@ function fileMail(d: InboxDeps, messageId: string, r: { kind: string; payload: a
 }
 
 /**
- * inbox.unfile: undo what a mail filed on its own — only while nothing was changed after it (the stage untouched, the
- * application not updated since); otherwise the person is told to set it right by hand, nothing is overwritten.
+ * inbox.unfile: undo what a mail filed on its own. Field by field: only what this filing set and nothing changed since
+ * is put back — a stage or an application the person (or a later filing still standing) changed afterwards is not
+ * overwritten; the undo then stops and says so. Undoing several filings of one application works newest first. The
+ * reminders follow the stage; the notice about the filing is withdrawn (or corrected when already sent); the history
+ * entry is marked undone, whichever way the undo came.
  */
 export function unfileMail(d: InboxDeps, messageId: string) {
   const db = d.domain.db;
   const m = db.prepare("select * from message where id = ?").get(messageId) as any;
   if (!m) throw new NotFound(`message ${messageId}`);
-  if (m.status !== "filed" || !m.filed_json) throw new DomainError("NOT_FILED", "这封邮件没有自动记过账");
+  if (m.status !== "filed" || !m.filed_json) throw new DomainError("NOT_FILED", "这封邮件没有自动记过账（或已经撤销）");
   const f = JSON.parse(m.filed_json);
+  const same = (x: any, y: any) => JSON.stringify(x ?? null) === JSON.stringify(y ?? null);
   return tx(db, () => {
-    const app = db.prepare("select updated_at from application where id = ?").get(f.applicationId) as any;
-    if (app && f.afterUpdatedAt && app.updated_at !== f.afterUpdatedAt) throw new DomainError("CHANGED_SINCE", "这条申请在那之后又改过了：自动撤销会覆盖你的改动，请在投递页手动改回");
+    const appNow = db.prepare("select state, close_reason, next_action, next_action_at from application where id = ?").get(f.applicationId) as any;
+    if (f.appAfter && !same(appNow, f.appAfter)) throw new DomainError("CHANGED_SINCE", "这条申请在那之后又改过了：自动撤销会覆盖那些改动，请在投递页手动改回");
+    if (f.stageId) {
+      const stNow = db.prepare("select scheduled_at, result, link, notes from stage where id = ?").get(f.stageId) as any;
+      if (stNow && f.stageAfter && !same(stNow, f.stageAfter)) throw new DomainError("CHANGED_SINCE", "这个环节在那之后又改过了（时间、结果、链接或备注）：请手动处理");
+    }
     if (f.created) {
-      const st = db.prepare("select result from stage where id = ?").get(f.created) as any;
-      if (st && st.result) throw new DomainError("CHANGED_SINCE", "这个环节后来记了结果：请手动处理");
       db.prepare("delete from stage where id = ?").run(f.created);
       db.prepare("update notice set state = 'cancelled', last_error = '自动记账已撤销', next_at = null where ref_kind = 'stage' and ref_id = ? and state in ('pending', 'sent')").run(f.created);
     }
-    if (f.stageBefore) db.prepare("update stage set scheduled_at = ?, result = ?, link = ?, notes = ? where id = ?").run(f.stageBefore.scheduled_at, f.stageBefore.result, f.stageBefore.link, f.stageBefore.notes, f.payload.id);
+    if (f.stageBefore) {
+      db.prepare("update stage set scheduled_at = ?, result = ?, link = ?, notes = ? where id = ?").run(f.stageBefore.scheduled_at, f.stageBefore.result, f.stageBefore.link, f.stageBefore.notes, f.stageId);
+      // the reminders follow the stage back: those of the filed time go, those of the time restored come back
+      db.prepare("update notice set state = 'cancelled', last_error = '自动记账已撤销', next_at = null where ref_kind = 'stage' and ref_id = ? and due_at is not ? and state in ('pending', 'sent')").run(f.stageId, f.stageBefore.scheduled_at);
+      if (!f.stageBefore.result) db.prepare("update notice set state = 'pending', last_error = '', next_at = ?, message_id = null, sent_at = null, level = 0 where ref_kind = 'stage' and ref_id = ? and due_at = ? and state = 'cancelled' and due_at > ?").run(now(), f.stageId, f.stageBefore.scheduled_at, now());
+    }
     if (f.before) db.prepare("update application set state = ?, close_reason = ?, next_action = ?, next_action_at = ?, updated_at = ? where id = ?").run(f.before.state, f.before.close_reason, f.before.next_action, f.before.next_action_at, now(), f.applicationId);
     d.domain.event(f.applicationId, "note", `撤销了邮件「${String(m.subject).slice(0, 40)}」的自动记账`, "manual");
+    // the notice about the filing: withdrawn if not sent; corrected if it was
+    const told = db.prepare("select state, title from notice where key = ?").get(`filed:${messageId}`) as any;
+    if (told?.state === "pending") db.prepare("update notice set state = 'cancelled', last_error = '自动记账已撤销', next_at = null where key = ?").run(`filed:${messageId}`);
+    else if (told && told.state !== "cancelled") enqueue(db, { key: `unfiled:${messageId}`, kind: "mail", urgency: "info", title: `更正 · ${told.title}`, lines: ["上一条是记错了，已经撤销，申请改回了原样。"], refKind: "filed", refId: messageId });
+    db.prepare("update agent_action set undone_at = ? where undone_at is null and json_extract(undo_json, '$.name') = 'inbox.unfile' and json_extract(undo_json, '$.input.id') = ?").run(now(), messageId);
     db.prepare("update message set status = 'new', note = '自动记账已撤销', filed_json = null where id = ?").run(messageId);
     return { ok: true };
   });
