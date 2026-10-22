@@ -152,24 +152,28 @@ export function ingest(store: { db: Db }, vault: string, sourceId: string, confi
     }
     batch.finish();
     updated = batch.updated;
-    const complete = opts.closeUnseen && opts.complete !== false && listings.length && campaigns.size;
-    // this subscription lists these posts now (B34); a partial read only adds, it never takes a claim away
-    const seen = db.prepare("insert into position_seen(position_id, config_id, seen_at) values (?,?,?) on conflict do update set seen_at = excluded.seen_at");
-    for (const p of new Set(listedRows.values())) seen.run(p, configId, started);
     // a full pull of a career site is the whole truth for what it lists: a post it no longer lists was taken down (or
-    // renamed) — and closes when no other subscription lists it either (two 国聘 channels feed one batch). Only for
-    // scheduled pulls (not a captured page) and never on an empty answer; an applied-to post stays.
-    if (complete) {
+    // renamed) — and closes when no other subscription lists it either (two 国聘 channels feed one batch: B34). Only for
+    // scheduled pulls (not a captured page, not a partial read) and never on an empty answer; an applied-to post stays.
+    if (opts.closeUnseen && opts.complete !== false && listings.length && campaigns.size) {
+      // what it lists now (only full reads claim: a claim must be one a later full read can take back)
+      const seen = db.prepare("insert into position_seen(position_id, config_id, seen_at) values (?,?,?) on conflict do update set seen_at = excluded.seen_at");
+      for (const p of new Set(listedRows.values())) seen.run(p, configId, started);
       // where to look: its campaigns now, the ones it fed before and did not list at all this time (国能 dropped a stale
       // 专项 list), and those of the posts it claimed before
       const gone = (db.prepare("select distinct campaign_id id from source_listing where provider = ? and content_path like ? and campaign_id is not null").all(sourceId, `%-${configId}.json`) as { id: string }[]).map((r) => r.id);
       const claimed = (db.prepare("select distinct p.campaign_id id from position_seen s join position p on p.id = s.position_id where s.config_id = ? and s.seen_at < ?").all(configId, started) as { id: string }[]).map((r) => r.id);
       const ids = [...new Set([...campaigns, ...gone, ...claimed])];
       inChunks(ids, (part, q) => {
-        db.prepare(`delete from position_seen where config_id = ? and seen_at < ? and position_id in (select id from position where campaign_id in (${q}))`).run(configId, started, ...part);
+        // a post closes when no other subscription claims it, and it was this one's: claimed by it before, or — not
+        // claimed by anyone yet (from before claims were kept) — filed by no other subscription
         positionsClosed += Number(db.prepare(`update position set status = 'closed', updated_at = ? where campaign_id in (${q})
-          and status = 'open' and last_seen_at < ? and not exists (select 1 from position_seen s where s.position_id = position.id)
-          and id not in (select position_id from application where state != 'cancelled')`).run(now(), ...part, started).changes);
+          and status = 'open' and last_seen_at < ? and id not in (select position_id from application where state != 'cancelled')
+          and not exists (select 1 from position_seen s where s.position_id = position.id and s.config_id != ?)
+          and (exists (select 1 from position_seen s where s.position_id = position.id and s.config_id = ?)
+            or not exists (select 1 from source_listing l where l.position_id = position.id and (l.provider != ? or l.content_path not like ?)))`)
+          .run(now(), ...part, started, configId, configId, sourceId, `%-${configId}.json`).changes);
+        db.prepare(`delete from position_seen where config_id = ? and seen_at < ? and position_id in (select id from position where campaign_id in (${q}))`).run(configId, started, ...part);
       });
     }
     db.prepare("insert into scan_run(id, source, config_id, started_at, finished_at, complete, found, new_positions, error, snapshot_path) values (?,?,?,?,?,?,?,?,?,?)")
