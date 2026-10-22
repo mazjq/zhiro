@@ -30,6 +30,13 @@ export class WorkflowEngine {
   /** told when a run of some kind finishes or gives up (a research report filed, a lead looked up): the pages hear of it */
   onEnded?: (kind: string, subjectId: string) => void;
   constructor(private db: Db, private pollMs = 15_000) {}
+  /**
+   * Set by the daemon (budget/gate.ts): before a due run starts, why it should wait and until when. A wait is not a
+   * failure — the run keeps its attempts and says what it waits for in last_error.
+   */
+  gate?: (kind: string) => Promise<{ until: string; why: string } | null>;
+  /** Set by the daemon: each step runs inside this (budget/ marks it as background work of its kind). */
+  around?: <T>(kind: string, fn: () => Promise<T>) => Promise<T>;
 
   register(def: WorkflowDef): void {
     this.defs.set(def.kind, def);
@@ -113,6 +120,8 @@ export class WorkflowEngine {
     const due = this.db.prepare(`select * from workflow where state = 'running' and (next_run_at is null or next_run_at <= ?) and (lease_until is null or lease_until < ?)${kind ? " and kind = ?" : ""} order by next_run_at limit 20`).all(nowIso, nowIso, ...(kind ? [kind] : [])) as any[];
     let ran = 0;
     for (const w of due) {
+      const held = this.gate ? await this.gate(w.kind).catch((e) => ({ until: new Date(Date.now() + 10 * 60_000).toISOString(), why: `检查出错：${String(e?.message ?? e).slice(0, 80)}` })) : null;
+      if (held) { this.db.prepare("update workflow set next_run_at = ?, last_error = ?, updated_at = ? where id = ? and state = 'running'").run(held.until, `等待：${held.why}`, now(), w.id); continue; }
       const lease = new Date(Date.parse(nowIso) + 60_000).toISOString();
       const claimed = this.db.prepare("update workflow set lease_until = ? where id = ? and (lease_until is null or lease_until < ?)").run(lease, w.id, nowIso);
       if (claimed.changes === 0) continue;
@@ -134,8 +143,11 @@ export class WorkflowEngine {
       if (!handler) { this.finish(w.id, "completed", ""); return; }
       let res: StepResult;
       try {
-        res = await handler({ subjectId: w.subject_id, checkpoint, attempts });
+        const run = () => handler({ subjectId: w.subject_id, checkpoint, attempts });
+        res = await (this.around ? this.around(w.kind, run) : run());
       } catch (e: any) {
+        // the allowance or the screen asked it to wait (budget/): a sleep, not a failed attempt
+        if (e?.code === "BUDGET_DEFERRED") { this.update(w.id, { state: "running", current_step: step, checkpoint, attempts, next_run_at: e.until, last_error: `等待：${e.message}` }); return; }
         res = { type: "fail", error: String(e?.message ?? e), retryInMs: 5 * 60_000 };
       }
       if ("checkpoint" in res && res.checkpoint !== undefined) checkpoint = res.checkpoint;

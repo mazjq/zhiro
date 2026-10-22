@@ -751,6 +751,22 @@ export const tools = {
     execution: "sync",
     errors: ["NOT_FOUND"],
   }),
+  "budget.status": defineTool({
+    name: "budget.status",
+    description: "后台额度与避让：后台的模型活花的是谁的额度（codex / claude / api / 无）、每个额度窗口用了多少、何时重置、最近的用量速度、今天后台已用多少，此刻能不能做（不能时写明原因与等到何时），以及是否因笔试测评或全屏应用而暂停。",
+    input: Type.Object({}),
+    output: Type.Object({
+      channel: Type.Union([Type.Literal("codex"), Type.Literal("claude"), Type.Literal("api"), Type.Null()]),
+      windows: Type.Array(Type.Object({ win: Type.String(), used: Type.Number(), resetsAt: Type.Union([Type.String(), Type.Null()]), readAt: Type.String(), fillPerHour: Type.Union([Type.Number(), Type.Null()]) })),
+      spentToday: Type.Object({ tokens: Type.Number(), cost: Type.Number() }),
+      reserve: Type.Number(),
+      decision: Type.Object({ ok: Type.Boolean(), until: Type.Optional(Type.String()), why: Type.Optional(Type.String()) }),
+      quiet: Type.Union([Type.String(), Type.Null()]),
+    }),
+    effects: READ,
+    execution: "sync",
+    errors: [],
+  }),
   "usage.summary": defineTool({
     name: "usage.summary",
     description: "模型 token 用量：按用途（网申填写、简历抽取、收件箱分类、助手…）汇总调用次数、输入/输出 token、近 7 天用量、每件事（如每次网申）平均用量，以及按官方 API 价格折算的费用（订阅登录不按量计费）。",

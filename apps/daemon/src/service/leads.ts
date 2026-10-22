@@ -48,6 +48,7 @@ export async function resolveLeads(s: Services, budget = s.config.leads?.dailyBu
       const r = await withPurpose("lead.resolve", l.companyId, () => capture(s.domain, s.config.vault, { url: l.url }, s.llm));
       results.push({ companyName: l.companyName, url: l.url, note: r.note, positions: r.positionIds.length });
     } catch (e: any) {
+      if (e?.code === "BUDGET_DEFERRED") { if (results.some((r) => r.positions)) s.onDataChanged?.(); throw e; } // the run sleeps until the allowance allows
       if (e?.code === "MODEL_DELEGATED") { results.push({ companyName: l.companyName, url: l.url, note: "等外部 agent 代答", positions: 0 }); break; } // the rest waits for the answer
       results.push({ companyName: l.companyName, url: l.url, note: String(e?.message ?? e).slice(0, 120), positions: 0 });
     }
