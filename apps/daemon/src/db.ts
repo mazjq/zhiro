@@ -446,6 +446,7 @@ export const MIGRATIONS: string[] = [
   alter table message add column classify_attempts integer not null default 0;
   alter table message add column classify_next_at text;
   alter table message add column is_reminder integer;
+  alter table message add column filed_json text;
   `,
 ];
 

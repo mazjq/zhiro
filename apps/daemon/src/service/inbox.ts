@@ -9,6 +9,7 @@ import type { Llm } from "../llm.js";
 import { DomainError, NotFound, companyKey, type Domain } from "./domain.js";
 import { withPurpose, currentPurpose } from "./usage.js";
 import { oldestWaitingMail } from "./model-jobs.js";
+import { enqueue } from "../notify/center.js";
 
 /** Mail providers that accept a 授权码 over IMAP — no OAuth, no app registration, reachable from mainland China. */
 export const PROVIDERS: Record<string, { label: string; host: string; port: number; help: string }> = {
@@ -164,7 +165,7 @@ export function linkCandidates(db: Db, company: string, position: string, catego
 export const linkApplication = (db: Db, company: string, position: string, category = ""): string | null => linkCandidates(db, company, position, category).id;
 
 // ---------- message → stored row → proposal
-export interface InboxDeps { domain: Domain; vault: string; llm?: Llm; onChanged?: () => void }
+export interface InboxDeps { domain: Domain; vault: string; llm?: Llm; onChanged?: () => void; /** P2b: file clear mail on its own (default on) */ auto?: boolean }
 
 function msgRow(r: any) {
   return { id: r.id as string, account: r.account as string, from: r.sender as string, subject: r.subject as string, receivedAt: r.received_at as string, category: r.category as string, round: r.round as string,
@@ -207,7 +208,14 @@ function decide(db: Db, c: Classified, applicationId: string, subject: string): 
       : { kind: "stage.add", payload: { applicationId, kind: c.round || "面试", scheduledAt: c.scheduledAt ?? undefined, link: c.link || undefined, notes } };
   }
   if (c.category === "面试取消") { const s = interviewStage(); return s ? { kind: "stage.update", payload: { id: s.id, result: "已取消", notes } } : { note: "记录里没有对应的面试，无需改动" }; }
-  if (c.category === "通过") { const s = interviewStage(); return s ? { kind: "stage.update", payload: { id: s.id, result: "通过", notes } } : { note: "记录里没有还在等结果的环节，无需改动" }; }
+  if (c.category === "通过") {
+    const s = interviewStage();
+    if (s) return { kind: "stage.update", payload: { id: s.id, result: "通过", notes } };
+    // no stage waiting for a result: still progress — sent becomes 流程中, and the notice is kept on the application
+    return app.state === "submitted" ? { kind: "application.update", payload: { id: applicationId, state: "in_process", note: `收到通过通知：${notes}` } }
+      : app.state === "in_process" ? { kind: "application.update", payload: { id: applicationId, note: `收到通过通知：${notes}` } }
+      : { note: "这条申请还没投递，先不推进" };
+  }
   if (c.category === "拒信") return app.state === "closed" ? { note: "这条申请已经结束了" } : { kind: "application.update", payload: { id: applicationId, state: "closed", closeReason: "拒信", note: notes } };
   if (c.category === "投递确认") return app.state === "draft" ? { kind: "application.update", payload: { id: applicationId, state: "submitted", note: notes } } : { note: "申请已经是已投递状态，无需改动" };
   if (c.category === "待办") return { kind: "application.update", payload: { id: applicationId, nextAction: notes.slice(0, 120), nextActionAt: c.scheduledAt ?? undefined } };
@@ -261,6 +269,7 @@ async function classifyKept(d: InboxDeps, id: string, m: RawMail) {
     if (link.id) {
       const r = decide(db, c, link.id, m.subject);
       if ("note" in r) note = r.note;
+      else if (d.auto !== false && c.confidence >= AUTO_CONFIDENCE && !isTimeless(c, r)) { note = fileMail(d, id, r, c, m.subject); status = "filed"; }
       else { proposalId = d.domain.createProposal(r.kind, r.payload, "system:inbox", `来自「${m.subject.slice(0, 60)}」：${c.summary}`.slice(0, 300), 24 * 14).id; status = "proposed"; }
     } else if (c.category !== "其他") {
       status = "unlinked"; // which application: the person picks (inbox.link); a test in it is reminded of meanwhile
@@ -269,6 +278,68 @@ async function classifyKept(d: InboxDeps, id: string, m: RawMail) {
     db.prepare(`update message set category = ?, round = ?, company = ?, position = ?, scheduled_at = ?, link = ?, summary = ?, confidence = ?, application_id = ?,
       proposal_id = ?, status = ?, note = ?, candidates_json = ?, is_reminder = ?, classify_next_at = null where id = ?`).run(c.category, c.round, c.company, c.position, c.scheduledAt, c.link, c.summary, c.confidence,
       link.id, proposalId, status, note, JSON.stringify(link.candidates), c.isReminder ? 1 : 0, id);
+  });
+}
+
+// ---------- P2b: clear mail is filed on its own
+
+/** How sure the classification must say it is before mail changes anything by itself (with a unique link besides). */
+const AUTO_CONFIDENCE = 0.8;
+/** A test or interview invitation without a time is still asked about: a stage with no time reminds of nothing. */
+const isTimeless = (c: Classified, r: { kind: string; payload: any }) => r.kind === "stage.add" && ["笔试", "面试"].includes(c.category) && !r.payload.scheduledAt;
+/** What is worth telling the person at once when mail moved something (the rest goes into the daily brief). */
+const TELL = new Set(["笔试", "测评", "面试", "面试改期", "面试取消", "通过", "offer", "拒信"]);
+
+/**
+ * File what a mail asks for — the only writes mail makes on its own: a stage added or updated, an application moved or
+ * annotated. What it was before is kept on the message (filed_json), the doing is in the history (agent_action, by
+ * system:inbox) with inbox.unfile as its undo, and the person is told of anything that matters.
+ */
+function fileMail(d: InboxDeps, messageId: string, r: { kind: string; payload: any }, c: Classified, subject: string): string {
+  const db = d.domain.db, src = "system:inbox";
+  const appId = r.kind === "stage.update" ? (db.prepare("select application_id from stage where id = ?").get(r.payload.id) as any)?.application_id : r.payload.applicationId ?? r.payload.id;
+  const before = db.prepare("select state, close_reason, next_action, next_action_at from application where id = ?").get(appId) as any;
+  const stageBefore = r.kind === "stage.update" ? db.prepare("select scheduled_at, result, link, notes from stage where id = ?").get(r.payload.id) : null;
+  let created: string | null = null, said = "";
+  if (r.kind === "stage.add") { created = d.domain.addStage(r.payload, src).id; said = `记了${r.payload.kind}${r.payload.scheduledAt ? `（${String(r.payload.scheduledAt).slice(5, 16).replace("T", " ")}）` : ""}`; }
+  else if (r.kind === "stage.update") { d.domain.updateStage(r.payload, src); said = r.payload.result ? `环节结果：${r.payload.result}` : `环节改到 ${String(r.payload.scheduledAt ?? "").slice(5, 16).replace("T", " ")}`; }
+  else { d.domain.updateApplication(r.payload, src); said = r.payload.state ? `申请改为「${({ submitted: "已投递", in_process: "流程中", closed: "已结束" } as any)[r.payload.state] ?? r.payload.state}」` : "记了一条进展"; }
+  const after = db.prepare("select updated_at from application where id = ?").get(appId) as any;
+  db.prepare("update message set filed_json = ? where id = ?").run(JSON.stringify({ kind: r.kind, payload: r.payload, applicationId: appId, before, stageBefore, created, afterUpdatedAt: after?.updated_at }), messageId);
+  db.prepare("insert into agent_action(id, at, actor, tool, input_json, summary, undo_json, turn_id) values (?,?,?,?,?,?,?,null)")
+    .run(ulid(), now(), src, r.kind, JSON.stringify(r.payload), `邮件「${subject.slice(0, 30)}」：${said}`, JSON.stringify({ name: "inbox.unfile", input: { id: messageId } }));
+  if (TELL.has(c.category)) {
+    const co = db.prepare("select co.name, p.title from application a join position p on p.id = a.position_id join campaign ca on ca.id = a.campaign_id join company co on co.id = ca.company_id where a.id = ?").get(appId) as any;
+    enqueue(db, { key: `filed:${messageId}`, kind: "mail", urgency: c.category === "offer" || c.category === "拒信" ? "today" : "info", title: `${c.category} · ${co?.name ?? c.company}`,
+      lines: [`**${co?.name ?? c.company}** · ${co?.title ?? c.position}`, c.summary || subject, `Zhiro 已记下：${said}（记错了可在收件箱里撤销）`], refKind: "filed", refId: messageId });
+  }
+  return `已自动记下：${said}`;
+}
+
+/**
+ * inbox.unfile: undo what a mail filed on its own — only while nothing was changed after it (the stage untouched, the
+ * application not updated since); otherwise the person is told to set it right by hand, nothing is overwritten.
+ */
+export function unfileMail(d: InboxDeps, messageId: string) {
+  const db = d.domain.db;
+  const m = db.prepare("select * from message where id = ?").get(messageId) as any;
+  if (!m) throw new NotFound(`message ${messageId}`);
+  if (m.status !== "filed" || !m.filed_json) throw new DomainError("NOT_FILED", "这封邮件没有自动记过账");
+  const f = JSON.parse(m.filed_json);
+  return tx(db, () => {
+    const app = db.prepare("select updated_at from application where id = ?").get(f.applicationId) as any;
+    if (app && f.afterUpdatedAt && app.updated_at !== f.afterUpdatedAt) throw new DomainError("CHANGED_SINCE", "这条申请在那之后又改过了：自动撤销会覆盖你的改动，请在投递页手动改回");
+    if (f.created) {
+      const st = db.prepare("select result from stage where id = ?").get(f.created) as any;
+      if (st && st.result) throw new DomainError("CHANGED_SINCE", "这个环节后来记了结果：请手动处理");
+      db.prepare("delete from stage where id = ?").run(f.created);
+      db.prepare("update notice set state = 'cancelled', last_error = '自动记账已撤销', next_at = null where ref_kind = 'stage' and ref_id = ? and state in ('pending', 'sent')").run(f.created);
+    }
+    if (f.stageBefore) db.prepare("update stage set scheduled_at = ?, result = ?, link = ?, notes = ? where id = ?").run(f.stageBefore.scheduled_at, f.stageBefore.result, f.stageBefore.link, f.stageBefore.notes, f.payload.id);
+    if (f.before) db.prepare("update application set state = ?, close_reason = ?, next_action = ?, next_action_at = ?, updated_at = ? where id = ?").run(f.before.state, f.before.close_reason, f.before.next_action, f.before.next_action_at, now(), f.applicationId);
+    d.domain.event(f.applicationId, "note", `撤销了邮件「${String(m.subject).slice(0, 40)}」的自动记账`, "manual");
+    db.prepare("update message set status = 'new', note = '自动记账已撤销', filed_json = null where id = ?").run(messageId);
+    return { ok: true };
   });
 }
 

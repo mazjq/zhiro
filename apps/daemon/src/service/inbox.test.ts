@@ -22,7 +22,7 @@ function setup(replies: Record<string, Reply>) {
     const r = key ? replies[key] : { category: "其他" };
     return { content: [{ type: "text", text: JSON.stringify({ round: "", company: "华中数控", position: "", scheduledAt: null, link: "", summary: key ?? "", confidence: 0.9, ...r }) }] };
   } } };
-  const d: InboxDeps = { domain, vault, llm };
+  const d: InboxDeps = { domain, vault, llm, auto: false }; // the decision as a confirm card; filing on its own is tested apart
   const L = (title: string, id: string) => ({ externalId: id, url: "https://e.com", title, company: "武汉华中数控股份有限公司", locations: ["武汉"], publisher: "华中数控", grade: "官方" as const, isOriginal: true, confidence: 1 });
   ingest(domain, vault, "moka", "x", [L("运动控制算法工程师", "1"), L("嵌入式软件工程师", "2")]);
   const control = domain.createApplication(domain.listPositions({ query: "运动控制" }).items[0].id);
@@ -256,5 +256,48 @@ describe("inbox: review fixes (PR #28)", () => {
     expect(Date.parse(r.classify_next_at)).toBeGreaterThan(Date.now() + 60_000);
     const { classifyWaiting } = await import("./inbox.js");
     expect((await classifyWaiting(d)).done).toBe(0); // not its turn yet
+  });
+});
+
+describe("inbox: clear mail is filed on its own (P2b)", () => {
+  it("a dated test invitation becomes a stage at once, is in the history, can be undone; a vague one still asks", async () => {
+    const { domain, d, control } = setup({ 笔试邀请: { category: "笔试", scheduledAt: "2026-10-25T19:00:00+08:00" }, 笔试无时间: { category: "笔试" } });
+    d.auto = true;
+    const r = await ingestMessage(d, "a", mail("笔试邀请"));
+    expect(r.message).toMatchObject({ status: "filed", proposalId: null, applicationId: control.id });
+    expect(domain.timeline(control.id).stages.map((s: any) => s.kind)).toEqual(["笔试"]);
+    expect(domain.getApplication(control.id).state).toBe("in_process");
+    const act = domain.db.prepare("select actor, undo_json from agent_action").get() as any;
+    expect(act.actor).toBe("system:inbox");
+    expect(JSON.parse(act.undo_json)).toEqual({ name: "inbox.unfile", input: { id: r.message.id } });
+    // a test without a time is not filed blindly
+    expect((await ingestMessage(d, "a", mail("笔试无时间通知"))).message.status).toBe("proposed");
+    // undone: the stage gone, the application as it was
+    const { unfileMail } = await import("./inbox.js");
+    unfileMail(d, r.message.id);
+    expect(domain.timeline(control.id).stages).toHaveLength(0);
+    expect(domain.getApplication(control.id).state).toBe("submitted");
+  });
+  it("an undo never overwrites what the person changed afterwards", async () => {
+    const { domain, d, control } = setup({ 拒信: { category: "拒信" } });
+    d.auto = true;
+    const r = await ingestMessage(d, "a", mail("拒信通知"));
+    expect(domain.getApplication(control.id).state).toBe("closed");
+    await new Promise((x) => setTimeout(x, 5));
+    domain.updateApplication({ id: control.id, nextAction: "问问 HR 原因" });
+    const { unfileMail } = await import("./inbox.js");
+    expect(() => unfileMail(d, r.message.id)).toThrow(/改过/);
+  });
+  it("a pass with no stage waiting is progress: sent becomes in process, the note is kept", async () => {
+    const { domain, d, control } = setup({ 资格审查通过: { category: "通过", summary: "已通过资格审查" } });
+    d.auto = true;
+    await ingestMessage(d, "a", mail("资格审查通过"));
+    expect(domain.getApplication(control.id).state).toBe("in_process");
+    expect(domain.timeline(control.id).events.some((e: any) => e.detail.includes("收到通过通知"))).toBe(true);
+  });
+  it("unsure classifications still ask", async () => {
+    const { d } = setup({ 面试: { category: "面试", scheduledAt: "2026-10-25T10:00:00+08:00", confidence: 0.5 } as any });
+    d.auto = true;
+    expect((await ingestMessage(d, "a", mail("面试安排"))).message.status).toBe("proposed");
   });
 });

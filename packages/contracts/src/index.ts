@@ -1280,6 +1280,15 @@ export const tools = {
     execution: "sync",
     errors: ["NO_MODEL"],
   }),
+  "inbox.unfile": defineTool({
+    name: "inbox.unfile",
+    description: "撤销一封邮件的自动记账（加的环节删掉、申请改回原样）。那之后申请或环节又改过的，不覆盖，提示手动处理。",
+    input: Type.Object({ id: Id }),
+    output: Type.Object({ ok: Type.Boolean() }),
+    effects: { localWrite: true, externalAction: false, dataEgress: false, reversible: false },
+    execution: "sync",
+    errors: ["NOT_FOUND", "NOT_FILED", "CHANGED_SINCE"],
+  }),
   "inbox.replay": defineTool({
     name: "inbox.replay",
     description: "按现在的规则把最近的招聘邮件重新判一遍：各属于哪条申请（或候选）、会做什么改动——只看不写，用来在邮件自动入账前核对。",
