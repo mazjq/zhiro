@@ -3,6 +3,7 @@ import { Server } from "@modelcontextprotocol/sdk/server/index.js";
 import { CallToolRequestSchema, ListToolsRequestSchema } from "@modelcontextprotocol/sdk/types.js";
 import { callTool, callableBy, ToolError, type Actor, type Services } from "../registry.js";
 import { emitToolDone } from "../events.js";
+import { policySummary } from "../service/tiers.js";
 
 /**
  * How a result is handed back (D-23). "dual" (default, what MCP asks for): the JSON as text and as structuredContent —
@@ -19,7 +20,7 @@ export function createMcpServer(s: Services, actor: Actor, mode: ResultMode = "d
   server.setRequestHandler(ListToolsRequestSchema, async () => ({
     tools: callableBy(actor, s).map((c) => ({
       name: c.name,
-      description: `${c.description}${actor.kind === "agent" ? (c.effects.localWrite || c.effects.externalAction ? (!c.effects.localWrite || c.effects.externalAction || c.effects.dataEgress || !c.effects.reversible ? "（写操作：生成提案，需用户确认）" : "（写操作：直接执行，用户可撤销）") : "") : ""}`,
+      description: c.description + (actor.kind === "agent" ? policySummary(c.name, c, s, actor.cred === "agent") : ""),
       inputSchema: c.input as any,
     })),
   }));

@@ -4,7 +4,7 @@
  *   pnpm --filter @zhiro/daemon eval:agent -- --models openai-codex/gpt-5.6-sol,anthropic/claude-opus-5 [--tasks R1-deadlines,S3-secret]
  *   pnpm --filter @zhiro/daemon eval:agent -- --summary            # rebuild summary.md from the saved JSON
  *   pnpm --filter @zhiro/daemon eval:agent -- --rescore            # re-run the checks on saved transcripts (no model calls)
- *   options: --max-tools 12 (abort a task after N tool calls), --timeout 300 (s), --out <dir>, --creds <credentials.json>
+ *   options: --max-tools 12 (abort a task after N tool calls), --timeout 300 (s), --out <dir>, --creds <credentials.json> (required to call models; never defaulted)
  *
  * Per task: fresh temp vault seeded by seed.ts → a fresh CareerAgent (the product class, unmodified) on the requested
  * model → one user prompt → transcript, proposals, token usage, wall time → deterministic checks (tasks.ts) → scores.
@@ -47,7 +47,7 @@ function args() {
     models: (get("--models") ?? "").split(",").filter(Boolean),
     tasks: (get("--tasks") ?? "").split(",").filter(Boolean),
     out: resolve(REPO, get("--out") ?? "docs/reports/agent-eval"),
-    creds: get("--creds") ?? join(process.env.APPDATA ?? "", "Zhiro", "vault", "config", "credentials.json"),
+    creds: get("--creds") ?? "", // no default (B8): a real credentials file is read only when named
     maxTools: Number(get("--max-tools") ?? 12),
     timeout: Number(get("--timeout") ?? 300),
     summary: a.includes("--summary"),
@@ -238,7 +238,7 @@ async function main() {
   // An OAuth token near expiry is refreshed through the REAL store first (the daemon re-reads the file on every call, so
   // it picks the rotated token up), and only then copied: the copy never has to refresh, so it can never rotate the
   // vault's refresh token away. Before this the run stopped instead ("登录令牌 20 分钟内过期").
-  if (existsSync(o.creds)) {
+  if (o.creds && existsSync(o.creds)) {
     const real = createLlm({ vault: dirname(dirname(o.creds)), llm: { provider: "", model: "" } } as JobosConfig);
     for (const provider of new Set(o.models.map((m) => m.split("/")[0]))) await real.models.getAuth(provider, { minOAuthValidityMs: 30 * 60_000 }).catch(() => undefined);
     copyFileSync(o.creds, join(credVault, "config", "credentials.json"));

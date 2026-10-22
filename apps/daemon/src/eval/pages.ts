@@ -1,16 +1,20 @@
 /**
  * 读页基准 (ADR-038): does page.read reach the content a person would reach — not "did it return text". Each case is a
  * real page, the steps a person would take, and facts that must appear. Run against the live daemon:
- *   pnpm --filter @zhiro/daemon eval:pages            # all
- *   pnpm --filter @zhiro/daemon eval:pages -- pipechina   # cases whose id contains the word
+ *   pnpm --filter @zhiro/daemon eval:pages -- --vault <data folder> [--port 8787]              # all
+ *   pnpm --filter @zhiro/daemon eval:pages -- --vault <data folder> pipechina   # cases whose id contains the word
  * Pass = every expected string in the text (or a table); the report is printed and written to docs/reports/page-read/.
  */
 import { readFileSync, mkdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 
-const vault = process.env.JOBOS_VAULT ?? join(process.env.APPDATA ?? "", "Zhiro", "vault");
+// B8: which running daemon (and whose token) is named, never defaulted to the person's own
+const argv = process.argv.slice(2).filter((x) => x !== "--");
+const vi = argv.indexOf("--vault"), vault = vi >= 0 ? argv[vi + 1] : "";
+if (!vault) { console.error("--vault <data folder of the daemon to test> is required (its .daemon-token is read)"); process.exit(2); }
+const pi = argv.indexOf("--port"), port = pi >= 0 ? argv[pi + 1] : "8787";
 const token = readFileSync(join(vault, "config", ".daemon-token"), "utf8").trim();
-const call = (name: string, input: unknown) => fetch(`http://127.0.0.1:8787/api/tools/${name}`, { method: "POST", headers: { "content-type": "application/json", authorization: `Bearer ${token}`, "x-jobos-actor": "cli" }, body: JSON.stringify(input) }).then((r) => r.json());
+const call = (name: string, input: unknown) => fetch(`http://127.0.0.1:${port}/api/tools/${name}`, { method: "POST", headers: { "content-type": "application/json", authorization: `Bearer ${token}`, "x-jobos-actor": "cli" }, body: JSON.stringify(input) }).then((r) => r.json());
 
 interface Case { id: string; goal: string; input: Record<string, unknown>; expect: string[]; forbid?: string[]; expectStatus?: string; then?: { steps: unknown[]; expect: string[] } }
 const CASES: Case[] = [
@@ -25,7 +29,7 @@ const CASES: Case[] = [
   { id: "mp-article", goal: "公众号文章走 HTTP 不开浏览器（或如实报验证）", input: { url: "https://mp.weixin.qq.com/s/placeholder", refresh: true }, expect: [] },
 ];
 
-const only = process.argv.slice(2).find((a) => !a.startsWith("-")) ?? "";
+const only = argv.find((a, i) => !a.startsWith("-") && argv[i - 1] !== "--vault" && argv[i - 1] !== "--port") ?? "";
 const rows: string[] = [];
 let pass = 0, n = 0;
 for (const c of CASES.filter((c) => c.id.includes(only))) {
