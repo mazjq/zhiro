@@ -198,6 +198,8 @@ export default function Inbox() {
                   <div className="mt-2 flex items-center gap-2 flex-wrap">
                     {isPending ? (<><span className="text-xs bg-amber-soft text-amber rounded px-2 py-1">待你确认：{describe(m)}</span><Button tone="primary" onClick={() => decide(m, "approved")}>确认</Button><Button onClick={() => decide(m, "rejected")}>不对，忽略</Button></>)
                       : m.proposalId ? <span className="text-xs text-ink-3">已处理 · {appLabel(m.applicationId)}</span>
+                      : m.status === "filed" ? (<><span className="text-xs text-good">{appLabel(m.applicationId)} · {m.note}</span>
+                          <button className="text-xs text-accent" title="删掉这次加的环节、申请改回原样（之后你又改过的话不会覆盖）" onClick={() => call("inbox.unfile", { id: m.id }).then(() => { setErr(""); load(); }).catch((e) => setErr(e.message))}>记错了，撤销</button></>)
                       : m.applicationId ? <span className="text-xs text-ink-3">{appLabel(m.applicationId)} · {m.note || "这类消息不需要改动申请"}</span>
                       : (<><span className="text-xs text-ink-3">没能确定是哪条申请{apps.length > 1 ? "（同一家公司你可能投了不止一个岗位，或邮件没写岗位）" : ""}：</span>
                           <select className={input} defaultValue="" onChange={(e) => e.target.value && call("inbox.link", { id: m.id, applicationId: e.target.value }).then(load)}>

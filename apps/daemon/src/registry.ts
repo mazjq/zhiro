@@ -35,7 +35,7 @@ import { addDocument, scanFolder, listDocuments, reextract, duplicateCandidates,
 import { existsSync, readFileSync } from "node:fs";
 import { basename } from "node:path";
 
-import { PROVIDERS, loadAccounts, publicAccount, connectAccount, disconnectAccount, pullAll, ingestMessage, listMessages, readMessage, linkMessage, listSkipped, rescueSkipped, peekSkipped, replayMessages, type InboxDeps } from "./service/inbox.js";
+import { PROVIDERS, loadAccounts, publicAccount, connectAccount, disconnectAccount, pullAll, ingestMessage, listMessages, readMessage, linkMessage, listSkipped, rescueSkipped, peekSkipped, replayMessages, unfileMail, type InboxDeps } from "./service/inbox.js";
 import { imapFetcher } from "./service/imap.js";
 import { createHash } from "node:crypto";
 
@@ -79,7 +79,7 @@ import { modelStatus, modelLogin, modelAnswer, modelCancel, modelProvider, model
 /** Credentials and the choice of model are the user's alone: agents may look, never touch. */
 const humanOnly = (a: Actor) => { if (a.kind !== "human") throw new ToolError("FORBIDDEN", "模型与凭据只能由本人在界面里操作"); };
 
-export const inboxDeps = (s: Services): InboxDeps => ({ domain: s.domain, vault: s.config.vault, llm: s.llm });
+export const inboxDeps = (s: Services): InboxDeps => ({ domain: s.domain, vault: s.config.vault, llm: s.llm, auto: s.config.inbox?.auto !== false });
 
 /** Document extraction finishes in the background; when it does, the profile changed, so matching reruns — and the pages hear of both. */
 export const docDeps = (s: Services): Deps => ({ db: s.domain.db, vault: s.config.vault, llm: s.llm, onChanged: () => void rerunAuto(s).then(() => s.onBackgroundChanged?.("documents")) });
@@ -439,6 +439,7 @@ const handlers: { [N in ToolName]: Handler<N> } = {
     return ingestMessage(inboxDeps(s), "paste", { messageId: "paste:" + createHash("sha256").update(text).digest("hex").slice(0, 32), from: i.from ?? "粘贴", subject: i.subject ?? text.split("\n")[0].slice(0, 80), date: new Date().toISOString(), text });
   },
   "inbox.replay": (i, _a, s) => replayMessages(s.domain.db, i.limit ?? 50),
+  "inbox.unfile": (i, _a, s) => unfileMail(inboxDeps(s), i.id),
   "inbox.list": (i, _a, s) => listMessages(s.domain.db, i),
   "inbox.get": (i, _a, s) => readMessage(s.domain.db, i.id),
   "inbox.skipped": (i, _a, s) => listSkipped(s.domain.db, i.limit ?? 100),

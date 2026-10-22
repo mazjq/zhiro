@@ -138,13 +138,13 @@ export function listActions(s: Services, limit = 20): AgentActionT[] {
   return (s.domain.db.prepare("select * from agent_action order by at desc limit ?").all(limit) as any[]).map(row);
 }
 
-export function undoAction(s: Services, id: string, exec: (name: string, input: unknown) => unknown): { ok: boolean; undone: unknown } {
+export async function undoAction(s: Services, id: string, exec: (name: string, input: unknown) => unknown): Promise<{ ok: boolean; undone: unknown }> {
   const r = s.domain.db.prepare("select * from agent_action where id = ?").get(id) as any;
   if (!r) throw new NotFound(`action ${id}`);
   if (r.undone_at) throw new DomainError("ALREADY_UNDONE", "已经撤销过了");
   if (!r.undo_json) throw new DomainError("NOT_UNDOABLE", "这个操作没有自动撤销，请手动改回");
   const inv = JSON.parse(r.undo_json);
-  const undone = exec(inv.name, inv.input);
+  const undone = await exec(inv.name, inv.input); // B29: marked undone only once the undoing has been done
   s.domain.db.prepare("update agent_action set undone_at = ? where id = ?").run(new Date().toISOString(), id);
   return { ok: true, undone };
 }
