@@ -172,3 +172,27 @@ describe("inbox: reminders with an unreliable date", () => {
     expect(proposals(domain)[0].scheduledAt).toBeUndefined();
   });
 });
+
+describe("the mail poll after every mailbox was disconnected and one is connected again (B26)", async () => {
+  const { mkdtempSync, mkdirSync, writeFileSync } = await import("node:fs");
+  const { tmpdir } = await import("node:os");
+  const { join } = await import("node:path");
+  const { openDb } = await import("../db.js");
+  const { Domain } = await import("./domain.js");
+  const { WorkflowEngine } = await import("./workflow.js");
+  const { inboxPoll, scheduleInbox } = await import("../workflows/inbox.js");
+  it("runs again", async () => {
+    const dir = mkdtempSync(join(tmpdir(), "zhiro-b26-"));
+    const db = openDb(join(dir, "t.db"));
+    const workflows = new WorkflowEngine(db);
+    const s: any = { domain: new Domain(db), workflows, config: { vault: dir, feishu: {}, reminders: { daysBefore: [] }, sources: [] } };
+    workflows.register(inboxPoll(s));
+    workflows.start("inbox_poll", "inbox", "inbox_poll:inbox");
+    await workflows.tick(); // no mailbox: the poll ends
+    expect((db.prepare("select state from workflow where kind = 'inbox_poll'").get() as any).state).toBe("completed");
+    mkdirSync(join(dir, "config"), { recursive: true });
+    writeFileSync(join(dir, "config", "mail.json"), JSON.stringify([{ id: "163:a@163.com", provider: "163", email: "a@163.com", authCode: "x", addedAt: "" }]));
+    scheduleInbox(s);
+    expect((db.prepare("select state from workflow where kind = 'inbox_poll'").get() as any).state).toBe("running");
+  });
+});
