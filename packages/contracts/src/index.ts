@@ -154,6 +154,7 @@ export const Proposal = Type.Object({
   execution: Type.Optional(Type.Union([Type.Literal("running"), Type.Literal("interrupted")], { description: "只在待确认的卡上出现。running：本人已同意、事还在做（做完才算 approved，失败回到待确认）；interrupted：做到一半 Zhiro 退出了，可能已部分完成，不会自动重做，由本人核对后再确认或忽略" })),
   executionStartedAt: Type.Optional(Type.String({ description: "这次执行开始的时间（有 execution 时才有）" })),
   context: Type.Optional(Type.Unknown({ description: "company.merge：两家公司的名字、岗位数、是否有官方来源、证据（signals）；有强证据的系统会自动合并，过期的自动作废" })),
+  view: Type.Optional(Type.Object({ state: Type.String({ description: "待处理 / 已完成（要做的事已经是这样了）/ 已过时（这件事不算数了）/ 需补救（过期了但还有用：proposal.renew 重新提出）" }), why: Type.String() })),
 });
 
 /** A write the assistant did at once (ADR-025 「直接做」档); undoable ones carry an inverse call. */
@@ -396,6 +397,24 @@ export const tools = {
     effects: READ,
     execution: "sync",
     errors: [],
+  }),
+  "proposal.dismiss": defineTool({
+    name: "proposal.dismiss",
+    description: "收起确认卡（本人）：已完成、已过时或不需要的卡作废，不执行。",
+    input: Type.Object({ ids: Type.Array(Id) }),
+    output: Type.Object({ dismissed: Type.Number() }),
+    effects: WRITE,
+    execution: "sync",
+    errors: [],
+  }),
+  "proposal.renew": defineTool({
+    name: "proposal.renew",
+    description: "重新提出一张过期但还有用的确认卡（本人）：按现在的情况生成一张新卡等确认，旧卡作废；不会直接执行旧内容。",
+    input: Type.Object({ id: Id }),
+    output: Type.Object({ proposal: Proposal }),
+    effects: WRITE,
+    execution: "sync",
+    errors: ["NOT_FOUND", "NOT_RENEWABLE"],
   }),
   "proposal.decide": defineTool({
     name: "proposal.decide",
