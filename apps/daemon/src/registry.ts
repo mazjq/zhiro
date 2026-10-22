@@ -396,7 +396,7 @@ const handlers: { [N in ToolName]: Handler<N> } = {
     if (i.detail !== "brief") return listPool(s.domain.db, i);
     const limit = i.limit ?? 20, offset = i.offset ?? 0; // the short form pages by 20 companies unless told otherwise
     const r = listPool(s.domain.db, { ...i, limit, offset });
-    return { detail: "brief", total: r.total, hasMore: offset + r.items.length < r.total, items: r.items.map((c) => poolCompanyBrief(c, i.positionsLimit, (i.query ?? "").trim().toLowerCase().split(/\s+/).filter(Boolean))), tagCounts: r.tagCounts }; // the counts first: a long result may be cut in the middle by the client;
+    return { detail: "brief", total: r.total, hasMore: offset + r.items.length < r.total, items: r.items.map((c) => poolCompanyBrief(c, i.positionsLimit, (i.query ?? "").trim().toLowerCase().split(/\s+/).filter(Boolean))), tagCounts: r.tagCounts, hiddenStale: r.hiddenStale }; // the counts first: a long result may be cut in the middle by the client;
   },
   "company.merge": (i, _a, s) => s.domain.mergeCompany(i.fromId, i.intoId),
   // another name a company goes by (the person says so): rows and reports that use it mean this company from now on
