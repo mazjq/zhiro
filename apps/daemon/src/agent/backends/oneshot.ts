@@ -127,7 +127,11 @@ function runOnce(name: OneshotName, ctx: any, pidsFile?: string): Promise<Onesho
       if (!st.text && name === "codex") { try { st.text = readFileSync(join(dir, "last.md"), "utf8").trim(); } catch { /* none */ } }
       rmSync(dir, { recursive: true, force: true, maxRetries: 3, retryDelay: 200 });
       if (why) return reject(new Error(`BACKGROUND_FAILED: ${name}：${why}`));
-      if (st.error && !st.text) return reject(new Error(`BACKGROUND_FAILED: ${name}：${st.error}`));
+      if (st.error && !st.text) {
+        // refused for the allowance: say so in words the caller recognises, and hand on the windows it reported (budget/)
+        const refused = (st.rateLimit as any)?.status === "rejected";
+        return reject(Object.assign(new Error(`BACKGROUND_FAILED: ${name}：${refused ? "usage limit reached：" : ""}${st.error}`), { rateLimit: st.rateLimit }));
+      }
       if (!st.text) return reject(new Error(`BACKGROUND_FAILED: ${name} 没有给出回答${err ? `（${err.trim().split("\n").slice(-2).join(" ").slice(0, 200)}）` : ""}`));
       const u = st.usage ?? { input: 0, output: 0, cacheRead: 0 };
       resolve({ text: st.text, model: st.model, usage: { ...u, total: u.input + u.output + u.cacheRead }, costUsd: st.costUsd, rateLimit: st.rateLimit });

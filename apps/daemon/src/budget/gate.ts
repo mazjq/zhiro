@@ -34,27 +34,47 @@ export async function channelOf(d: GateDeps): Promise<Channel | null> {
 }
 
 const OF: Record<"codex" | "claude", string[]> = { codex: ["codex", "openai-codex"], claude: ["claude", "anthropic"] };
-/** What Zhiro's own model calls used on a channel since midnight (llm_usage). */
-export function spentToday(db: Db, channel: Channel): { tokens: number; cost: number } {
+/** What Zhiro's own model calls used on a channel since midnight (llm_usage); on a key, the built-in model's provider. */
+export function spentToday(db: Db, channel: Channel, apiProvider = ""): { tokens: number; cost: number } {
   const d = new Date(); d.setHours(0, 0, 0, 0);
-  const all = [...OF.codex, ...OF.claude];
-  const where = channel === "api" ? `provider not in (${all.map(() => "?").join(",")})` : `provider in (${OF[channel].map(() => "?").join(",")})`;
-  const r = db.prepare(`select coalesce(sum(total), 0) as t, coalesce(sum(cost), 0) as c from llm_usage where at >= ? and ${where}`).get(d.toISOString(), ...(channel === "api" ? all : OF[channel])) as { t: number; c: number };
+  const ps = channel === "api" ? [apiProvider] : OF[channel];
+  const r = db.prepare(`select coalesce(sum(total), 0) as t, coalesce(sum(cost), 0) as c from llm_usage where at >= ? and provider in (${ps.map(() => "?").join(",")})`).get(d.toISOString(), ...ps) as { t: number; c: number };
   return { tokens: r.t, cost: r.c };
 }
 
 let codexReadAt = 0;
-/** May background work spend now? Codex is asked afresh at most every ten minutes; Claude is read from its own runs. */
-export async function budgetCheck(d: GateDeps, now = Date.now()): Promise<Decision> {
+let codexReading: Promise<void> | null = null;
+/** Ask Codex afresh at most every ten minutes; callers arriving meanwhile wait for the same answer. */
+function refreshCodex(d: GateDeps, now: number): Promise<void> {
+  if (d.config.maintenance || now - codexReadAt <= 10 * 60_000) return codexReading ?? Promise.resolve(); // maintenance mode writes nothing
+  codexReadAt = now;
+  codexReading = readCodexLimits(d.codexLauncher()).then((r) => { if (r?.length) recordReadings(d.db, r); }).finally(() => { codexReading = null; });
+  return codexReading;
+}
+
+/**
+ * May background work spend now? `refresh: false` for a look that must not read anything new (budget.status).
+ * ponytail: no reservation — two held kinds may pass the same check at once, so a window can go one call past the
+ * line; at most two such calls run together (one per kind), each a few thousand tokens.
+ */
+export async function budgetCheck(d: GateDeps, now = Date.now(), opts: { refresh?: boolean; ceiling?: number } = {}): Promise<Decision> {
   const ch = await channelOf(d);
   if (!ch) return { ok: true };
-  if (ch === "codex" && !d.config.maintenance && now - codexReadAt > 10 * 60_000) { // maintenance mode writes nothing
-    codexReadAt = now;
-    const r = await readCodexLimits(d.codexLauncher());
-    if (r?.length) recordReadings(d.db, r);
-  }
+  if (ch === "codex" && opts.refresh !== false) await refreshCodex(d, now);
   const readings = ch === "api" ? [] : latestReadings(d.db, ch);
-  return decide(now, ch, readings, (w) => (ch === "api" ? null : fillPerHour(d.db, ch, w)), spentToday(d.db, ch), budgetSettings(d.config));
+  const set = budgetSettings(d.config);
+  return decide(now, ch, readings, (w) => (ch === "api" ? null : fillPerHour(d.db, ch, w)), spentToday(d.db, ch, d.config.llm.provider), set, opts.ceiling ?? 1 - set.reserve);
+}
+
+/** Sorting mail goes on until a window is nearly empty: a missed test invitation costs more than the reserve. */
+export const MAIL_CEILING = 0.95;
+
+/** Before each model call of background work: held work asks about the screen, tests and the allowance; mail only its own ceiling. */
+export async function callGate(d: GateDeps, kind: string, now = Date.now()): Promise<Decision> {
+  if (kind === "inbox_poll") return budgetCheck(d, now, { ceiling: MAIL_CEILING });
+  if (!HELD.has(kind)) return { ok: true };
+  const held = await backgroundGate(d, kind, now);
+  return held ? { ok: false, ...held } : { ok: true };
 }
 
 /** Before a due workflow starts: why it should wait, and until when; null to run it. */
@@ -74,10 +94,10 @@ export async function backgroundGate(d: GateDeps, kind: string, now = Date.now()
 export async function budgetStatus(d: GateDeps, now = Date.now()) {
   const set = budgetSettings(d.config);
   const channel = await channelOf(d);
-  const decision = await budgetCheck(d, now);
+  const decision = await budgetCheck(d, now, { refresh: false });
   const windows = channel && channel !== "api"
     ? latestReadings(d.db, channel).map((r) => ({ win: r.win, used: r.used, resetsAt: r.resetsAt, readAt: r.at, fillPerHour: fillPerHour(d.db, channel, r.win) }))
     : [];
   const quiet = examQuiet(d.db, now, set.quietBeforeMins, set.quietAfterMins) ?? (await screenBusy(now));
-  return { channel, windows, spentToday: channel ? spentToday(d.db, channel) : { tokens: 0, cost: 0 }, reserve: set.reserve, decision, quiet };
+  return { channel, windows, spentToday: channel ? spentToday(d.db, channel, d.config.llm.provider) : { tokens: 0, cost: 0 }, reserve: set.reserve, decision, quiet };
 }

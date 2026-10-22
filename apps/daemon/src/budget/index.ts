@@ -72,17 +72,24 @@ const label = (r: Reading) => r.win === "five_hour" || r.durationMins === 300 ? 
 const hhmm = (ms: number) => new Date(ms).toLocaleString("zh-CN", { month: "numeric", day: "numeric", hour: "2-digit", minute: "2-digit", hour12: false });
 const tomorrow = (now: number) => { const d = new Date(now); d.setHours(24, 0, 0, 0); return d.getTime(); };
 
-/** Pure: may background work spend on this channel now? `spent` = what Zhiro's own model calls used on it today. */
-export function decide(now: number, channel: Channel, readings: Reading[], fill: (win: string) => number | null, spent: { tokens: number; cost: number }, set: BudgetSettings): Decision {
+/**
+ * Pure: may background work spend on this channel now? `spent` = what Zhiro's own model calls used on it today.
+ * `ceiling`: the share a window may reach (default 1 − reserve; sorting mail goes up to 95%, so a test invitation is not
+ * left unread for the sake of the reserve). A window whose reset has passed says nothing any more; a reading is aged by
+ * the speed its window fills (someone may have used a lot since it was read).
+ */
+export function decide(now: number, channel: Channel, all: Reading[], fill: (win: string) => number | null, spent: { tokens: number; cost: number }, set: BudgetSettings, ceiling = 1 - set.reserve): Decision {
+  const readings = all.filter((r) => !r.resetsAt || Date.parse(r.resetsAt) > now);
   const wait = (until: number, why: string): Decision => ({ ok: false, until: new Date(until).toISOString(), why });
   if (channel === "api") return spent.cost >= set.apiDailyUsd ? wait(tomorrow(now), `今天后台已用 $${spent.cost.toFixed(2)}（上限 $${set.apiDailyUsd}）`) : { ok: true };
   if (!readings.length) return spent.tokens >= set.unknownDailyTokens ? wait(tomorrow(now), `还没读到 ${channel === "codex" ? "Codex" : "Claude"} 的额度，今天后台先只用 ${set.unknownDailyTokens} token`) : { ok: true };
-  const limit = 1 - set.reserve;
+  const limit = ceiling;
   for (const r of readings) {
     const resets = (r.resetsAt && Date.parse(r.resetsAt)) || now + 5 * 3600_000;
-    if (r.used >= limit) return wait(Math.max(resets, now + 60_000), `${label(r)}已用 ${Math.round(r.used * 100)}%（给你留 ${Math.round(set.reserve * 100)}%），${hhmm(resets)} 重置后再做`);
     const rate = fill(r.win);
-    if (rate && r.used + rate * Math.max(0, resets - now) / 3600_000 >= limit) return wait(now + 3600_000, `按最近的用量速度，${label(r)}到 ${hhmm(resets)} 重置前会用过 ${Math.round(limit * 100)}%，一小时后再看`);
+    const used = r.used + (rate ?? 0) * Math.max(0, now - Date.parse(r.at)) / 3600_000; // as it probably is now
+    if (used >= limit) return wait(Math.max(resets, now + 60_000), `${label(r)}已用约 ${Math.round(Math.min(1, used) * 100)}%（给你留 ${Math.round((1 - limit) * 100)}%），${hhmm(resets)} 重置后再做`);
+    if (rate && used + rate * Math.max(0, resets - now) / 3600_000 >= limit) return wait(now + 3600_000, `按最近的用量速度，${label(r)}到 ${hhmm(resets)} 重置前会用过 ${Math.round(limit * 100)}%，一小时后再看`);
   }
   return { ok: true };
 }
@@ -98,6 +105,9 @@ export const backgroundKind = (): string | null => scope.getStore() ?? null;
  * is not here (it is how nothing gets missed, and small), nor research the person started (they asked for it now).
  */
 export const HELD = new Set(["lead_resolve", "capture_recheck"]);
+
+/** A provider's refusal for the allowance (a 429, "usage limit reached"), told apart from other failures. */
+export const isLimitError = (e: unknown): boolean => /usage limit|rate.?limit|\b429\b|quota|too many requests|usage_limit|limit reached/i.test(String((e as any)?.message ?? e));
 
 export class BudgetDeferred extends Error {
   code = "BUDGET_DEFERRED";

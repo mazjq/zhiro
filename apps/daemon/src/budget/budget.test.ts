@@ -95,20 +95,45 @@ describe("waiting is not failing", () => {
 });
 
 describe("only background work asks", () => {
-  const llm = () => {
+  const llm = (harness?: () => Promise<any>) => {
     const l = createLlm({ vault: mkdtempSync(join(tmpdir(), "zhiro-budget-llm-")), llm: { provider: "openai-codex", model: "x" } } as any);
-    let asked = 0;
+    const asked: string[] = [];
     l.route = () => ({ kind: "harness", name: "claude" });
-    l.harness = async () => ({ text: "ok", model: "m", usage: { input: 1, output: 1, cacheRead: 0, total: 2 } });
-    l.gate = async () => { asked++; return { ok: false, until: new Date(NOW + H).toISOString(), why: "周额度已用 75%" }; };
-    return { l, asked: () => asked };
+    l.harness = harness ?? (async () => ({ text: "ok", model: "m", usage: { input: 1, output: 1, cacheRead: 0, total: 2 } }));
+    l.gate = async (kind) => { asked.push(kind); return kind === "lead_resolve" ? { ok: false, until: new Date(NOW + H).toISOString(), why: "周额度已用 75%" } : { ok: true }; };
+    return { l, asked };
   };
   const ctx = { systemPrompt: "", messages: [{ role: "user", content: [{ type: "text", text: "hi" }], timestamp: 0 }] };
-  it("a scheduled lookup is refused; mail sorting and a call the person made are not", async () => {
+  it("a scheduled lookup is refused; mail asks (its own ceiling); research the person started and their own calls do not ask", async () => {
     const { l, asked } = llm();
     await expect(asBackground("lead_resolve", () => l.models.completeSimple({} as any, ctx as any))).rejects.toMatchObject({ code: "BUDGET_DEFERRED" });
     await expect(asBackground("inbox_poll", () => l.models.completeSimple({} as any, ctx as any))).resolves.toBeTruthy();
+    await expect(asBackground("research_run", () => l.models.completeSimple({} as any, ctx as any))).resolves.toBeTruthy();
     await expect(l.models.completeSimple({} as any, ctx as any)).resolves.toBeTruthy();
-    expect(asked()).toBe(1);
+    expect(asked).toEqual(["lead_resolve", "inbox_poll"]);
+  });
+  it("a refusal for the allowance in the middle of background work is a wait, other failures stay failures", async () => {
+    const { l } = llm(async () => { throw new Error("BACKGROUND_FAILED: claude：usage limit reached：Claude AI usage limit reached|1792650600"); });
+    await expect(asBackground("capture_recheck", () => l.models.completeSimple({} as any, ctx as any))).rejects.toMatchObject({ code: "BUDGET_DEFERRED" });
+    const { l: l2 } = llm(async () => { throw new Error("BACKGROUND_FAILED: claude：一分钟没有任何输出"); });
+    await expect(asBackground("capture_recheck", () => l2.models.completeSimple({} as any, ctx as any))).rejects.not.toMatchObject({ code: "BUDGET_DEFERRED" });
+  });
+  it("a gate that throws holds the work instead of letting it through", async () => {
+    const { l } = llm();
+    l.gate = async () => { throw new Error("db locked"); };
+    await expect(asBackground("lead_resolve", () => l.models.completeSimple({} as any, ctx as any))).rejects.toMatchObject({ code: "BUDGET_DEFERRED" });
+  });
+});
+
+describe("old and stale readings", () => {
+  it("a window whose reset has passed says nothing; a reading is aged by how fast its window fills", () => {
+    const old = { ...r("five_hour", 0.9, -1) };
+    expect(decide(NOW, "claude", [old], () => null, { tokens: 0, cost: 0 }, set).ok).toBe(true); // reset already: unknown, small allowance
+    const read3hAgo = { ...r("seven_day", 0.55, 72), at: new Date(NOW - 3 * H).toISOString() };
+    expect(decide(NOW, "claude", [read3hAgo], () => 0.06, { tokens: 0, cost: 0 }, set).ok).toBe(false); // 55% + 3 h × 6%/h = 73%
+  });
+  it("mail goes on up to 95%", () => {
+    expect(decide(NOW, "claude", [r("five_hour", 0.8, 2)], () => null, { tokens: 0, cost: 0 }, set, 0.95).ok).toBe(true);
+    expect(decide(NOW, "claude", [r("five_hour", 0.96, 2)], () => null, { tokens: 0, cost: 0 }, set, 0.95).ok).toBe(false);
   });
 });

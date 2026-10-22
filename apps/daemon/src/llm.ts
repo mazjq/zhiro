@@ -6,7 +6,7 @@ import type { JobosConfig } from "./config.js";
 import type { Db } from "./db.js";
 import { delegateComplete } from "./service/model-jobs.js";
 import { callingAgent } from "./service/usage.js";
-import { backgroundKind, BudgetDeferred, HELD, type Decision } from "./budget/index.js";
+import { backgroundKind, BudgetDeferred, HELD, isLimitError, type Decision } from "./budget/index.js";
 
 /** ADR-032: no model of our own — an external agent answers (llm.pending / llm.reply). Also when nothing is configured. */
 export const EXTERNAL = "external";
@@ -79,7 +79,7 @@ export interface Llm {
   /** Set by the daemon: ask the chosen harness once, with no tools (agent/backends/oneshot.ts). */
   harness?: (name: "claude" | "codex", ctx: any) => Promise<{ text: string; model: string; usage: { input: number; output: number; cacheRead: number; total: number }; costUsd?: number }>;
   /** Set by the daemon (budget/gate.ts): may background work spend the person's allowance now? */
-  gate?: () => Promise<Decision>;
+  gate?: (kind: string) => Promise<Decision>;
 }
 
 export function credentialsPath(vault: string): string {
@@ -108,16 +108,22 @@ export function createLlm(config: JobosConfig): Llm {
     if (to.kind === "unavailable") throw new Error(`BACKGROUND_UNAVAILABLE: ${to.why}`);
     // background work asks before every call, not only when it starts: a run of thirty pages stops where the allowance ends
     const bg = backgroundKind();
-    if (bg && HELD.has(bg) && llm.gate) { const d = await llm.gate(); if (!d.ok) throw new BudgetDeferred(d.until, d.why); }
+    if (bg && (HELD.has(bg) || bg === "inbox_poll") && llm.gate) {
+      // a gate that cannot answer holds the work a little, never lets it through blind
+      const d = await llm.gate(bg).catch((e): Decision => ({ ok: false, until: new Date(Date.now() + 10 * 60_000).toISOString(), why: `查额度出错：${String(e?.message ?? e).slice(0, 80)}` }));
+      if (!d.ok) throw new BudgetDeferred(d.until, d.why);
+    }
+    // the provider refused for the allowance after all (the person used it up meanwhile): a wait, not a failure
+    const limited = (e: unknown): never => { if (bg && isLimitError(e)) throw new BudgetDeferred(new Date(Date.now() + 3600_000).toISOString(), `额度用完了（${String((e as any)?.message ?? e).slice(0, 60)}），一小时后再看`); throw e; };
     if (to.kind === "harness") {
       if (!llm.harness) throw new Error("BACKGROUND_UNAVAILABLE: 后台一次性调用没有接上");
-      const a = await llm.harness(to.name, ctx);
+      const a = await llm.harness(to.name, ctx).catch(limited);
       const msg = { role: "assistant", content: [{ type: "text", text: a.text }], api: "cli", provider: to.name, model: a.model || to.name, stopReason: "stop", timestamp: Date.now(),
         usage: { input: a.usage.input, output: a.usage.output, cacheRead: a.usage.cacheRead, cacheWrite: 0, totalTokens: a.usage.total, cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: a.costUsd ?? 0 } } };
       report(msg, { provider: to.name, id: a.model || to.name }); // not through pi's streams, so counted here
       return msg;
     }
-    return complete(model, ctx, opts);
+    return complete(model, ctx, opts).catch(limited);
   };
   const out = Object.assign(llm, {
     models,

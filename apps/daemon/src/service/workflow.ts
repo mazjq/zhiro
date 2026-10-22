@@ -120,7 +120,7 @@ export class WorkflowEngine {
     const due = this.db.prepare(`select * from workflow where state = 'running' and (next_run_at is null or next_run_at <= ?) and (lease_until is null or lease_until < ?)${kind ? " and kind = ?" : ""} order by next_run_at limit 20`).all(nowIso, nowIso, ...(kind ? [kind] : [])) as any[];
     let ran = 0;
     for (const w of due) {
-      const held = this.gate ? await this.gate(w.kind).catch(() => null) : null;
+      const held = this.gate ? await this.gate(w.kind).catch((e) => ({ until: new Date(Date.now() + 10 * 60_000).toISOString(), why: `检查出错：${String(e?.message ?? e).slice(0, 80)}` })) : null;
       if (held) { this.db.prepare("update workflow set next_run_at = ?, last_error = ?, updated_at = ? where id = ? and state = 'running'").run(held.until, `等待：${held.why}`, now(), w.id); continue; }
       const lease = new Date(Date.parse(nowIso) + 60_000).toISOString();
       const claimed = this.db.prepare("update workflow set lease_until = ? where id = ? and (lease_until is null or lease_until < ?)").run(lease, w.id, nowIso);

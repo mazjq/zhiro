@@ -45,7 +45,7 @@ import { coalesce } from "./service/later.js";
 import { announcer } from "./service/background.js";
 import { enterMaintenance } from "./maintenance.js";
 import { asBackground, claudeReadings, recordReadings } from "./budget/index.js";
-import { backgroundGate, budgetCheck, type GateDeps } from "./budget/gate.js";
+import { backgroundGate, callGate, type GateDeps } from "./budget/gate.js";
 
 // a move of the data directory asked for on the settings page happens here, before anything opens it (ADR-058)
 let config: JobosConfig;
@@ -130,8 +130,12 @@ llm.onUsage = (m, model) => recordUsage(domain.db, m, (model as any).provider ??
 // ADR-057: background model work goes to whoever the settings name; a harness answers it once, with no tools
 llm.route = () => backgroundTarget(services);
 // P5: each Claude run says how full the person's windows are — kept, so background work can see how fast they fill
-llm.harness = async (name, ctx) => { const a = await oneshot(name, ctx, join(config.vault, "chat", "oneshot", "pids.json")); if (a.rateLimit && !maintenance) recordReadings(db, claudeReadings(a.rateLimit)); return a; };
-llm.gate = () => budgetCheck(gateDeps);
+const keepReading = (info: unknown) => { if (info && !maintenance) recordReadings(db, claudeReadings(info)); };
+llm.harness = async (name, ctx) => {
+  try { const a = await oneshot(name, ctx, join(config.vault, "chat", "oneshot", "pids.json")); keepReading(a.rateLimit); return a; }
+  catch (e: any) { keepReading(e?.rateLimit); throw e; } // a refusal reports the windows too: the next check sees them full
+};
+llm.gate = (kind) => callGate(gateDeps, kind);
 if (!maintenance) {
   scheduleInbox(services);
   scheduleLeads(services);
