@@ -64,7 +64,9 @@ function checkFact(inp: any): void {
 import { withPurpose, usageSummary, asAgentCall } from "./service/usage.js";
 import { changesCursor, changesSince } from "./service/changes.js";
 import { readReference } from "./service/apply-reference.js";
-import { backgroundOnModel, describeBackground } from "./agent/route.js";
+import { backgroundOnModel, backgroundTarget, describeBackground } from "./agent/route.js";
+import { budgetStatus, type GateDeps } from "./budget/gate.js";
+import { codexLauncher } from "./agent/backends/codex.js";
 import { chooseModel, followedModel, harnessModel, harnessModels, modelRefused } from "./agent/backends/cli.js";
 import { pendingJobs, replyJob } from "./service/model-jobs.js";
 import { checkResume } from "./service/resume-check.js";
@@ -329,6 +331,7 @@ const handlers: { [N in ToolName]: Handler<N> } = {
   "fact.remove": (i, _a, s) => { const ids = i.ids ?? (i.id ? [i.id] : []); if (!ids.length) throw new DomainError("MISSING_FIELD", "给 id 或 ids"); if (factLabels(s.domain.db, ids).length !== ids.length) throw new NotFound("fact"); for (const id of ids) removeFact(s.domain.db, id); s.onDataChanged?.(); return { ok: true }; },
   "fact.reorder": (i, _a, s) => reorderFacts(s.domain.db, i.ids),
   "profile.gaps": (_i, _a, s) => profileGaps(s.domain.db, s.config.vault),
+  "budget.status": (_i, _a, s) => budgetStatus(gateDepsOf(s)),
   "usage.summary": (_i, _a, s) => usageSummary(s.domain.db),
   "profile.import": (i, _a, s) => {
     if (i.path) { if (!existsSync(i.path)) throw new ToolError("FILE_NOT_FOUND", i.path); return addDocument(docDeps(s), basename(i.path), readFileSync(i.path)); }
@@ -557,6 +560,9 @@ const handlers: { [N in ToolName]: Handler<N> } = {
     } catch (e: any) { return { ok: false, ...base, latencyMs: Date.now() - t0, reply: "", error: String(e?.message ?? e).slice(0, 400) }; }
   },
 };
+
+/** What the background gate needs, from the services (budget/gate.ts). */
+export const gateDepsOf = (s: Services): GateDeps => ({ db: s.domain.db, config: s.config, target: () => backgroundTarget(s), credentialType: async (p) => (await s.llm?.credentials.read(p))?.type, codexLauncher });
 
 /** The audit label. An embedded turn is marked by the server from its credential, so no header can claim or shed it. */
 function actorLabel(a: Actor): string {

@@ -6,6 +6,7 @@ import type { JobosConfig } from "./config.js";
 import type { Db } from "./db.js";
 import { delegateComplete } from "./service/model-jobs.js";
 import { callingAgent } from "./service/usage.js";
+import { backgroundKind, BudgetDeferred, HELD, type Decision } from "./budget/index.js";
 
 /** ADR-032: no model of our own — an external agent answers (llm.pending / llm.reply). Also when nothing is configured. */
 export const EXTERNAL = "external";
@@ -77,6 +78,8 @@ export interface Llm {
   route?: () => { kind: "model" } | { kind: "harness"; name: "claude" | "codex" } | { kind: "waiting" } | { kind: "unavailable"; why: string };
   /** Set by the daemon: ask the chosen harness once, with no tools (agent/backends/oneshot.ts). */
   harness?: (name: "claude" | "codex", ctx: any) => Promise<{ text: string; model: string; usage: { input: number; output: number; cacheRead: number; total: number }; costUsd?: number }>;
+  /** Set by the daemon (budget/gate.ts): may background work spend the person's allowance now? */
+  gate?: () => Promise<Decision>;
 }
 
 export function credentialsPath(vault: string): string {
@@ -103,6 +106,9 @@ export function createLlm(config: JobosConfig): Llm {
     const to = llm.route?.() ?? (isExternal(config.llm.provider) || llm.loggedIn === false ? { kind: "waiting" as const } : { kind: "model" as const });
     if (to.kind === "waiting") return job();
     if (to.kind === "unavailable") throw new Error(`BACKGROUND_UNAVAILABLE: ${to.why}`);
+    // background work asks before every call, not only when it starts: a run of thirty pages stops where the allowance ends
+    const bg = backgroundKind();
+    if (bg && HELD.has(bg) && llm.gate) { const d = await llm.gate(); if (!d.ok) throw new BudgetDeferred(d.until, d.why); }
     if (to.kind === "harness") {
       if (!llm.harness) throw new Error("BACKGROUND_UNAVAILABLE: 后台一次性调用没有接上");
       const a = await llm.harness(to.name, ctx);

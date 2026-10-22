@@ -18,6 +18,7 @@ import { join } from "node:path";
 import { claudeLauncher } from "./claude.js";
 import { codexLauncher } from "./codex.js";
 import { killTree, followedModel, noteModelRefused, afterStdout } from "./cli.js";
+import { lowerPriority } from "../../budget/quiet.js";
 
 export type OneshotName = "claude" | "codex";
 export const ONESHOT_LIMITS = { wallMs: 120_000, idleMs: 60_000, maxStdout: 5_000_000, maxStderr: 20_000, maxImages: 8, maxImageBytes: 5_000_000 };
@@ -25,7 +26,7 @@ const IMAGE_TYPES: Record<string, string> = { "image/png": "png", "image/jpeg": 
 /** Codex features that give it a way to act: commands, files, pictures, browsers, apps. */
 export const CODEX_TOOLS_OFF = ["shell_tool", "unified_exec", "view_image", "apps", "browser_use", "browser_use_external", "computer_use", "image_generation", "sleep_tool", "tool_suggest", "hooks", "goals"];
 
-export interface OneshotAnswer { text: string; model: string; usage: { input: number; output: number; cacheRead: number; total: number }; costUsd?: number }
+export interface OneshotAnswer { text: string; model: string; usage: { input: number; output: number; cacheRead: number; total: number }; costUsd?: number; /** Claude Code's rate_limit_event, when it sent one */ rateLimit?: unknown }
 
 /** What a context holds: the system prompt, the text, the images (each checked against the limits). */
 export function promptParts(ctx: any): { system: string; text: string; images: { data: string; mimeType: string }[]; dropped: number } {
@@ -63,7 +64,7 @@ export function oneshotArgv(name: OneshotName, p: ReturnType<typeof promptParts>
 }
 
 /** Read one line of the harness's output: the answer, the reported model, or a reason to stop the run now. */
-export function oneshotLine(name: OneshotName, line: string, st: { text: string; model: string; usage?: any; costUsd?: number; error?: string; done?: boolean }): string | null {
+export function oneshotLine(name: OneshotName, line: string, st: { text: string; model: string; usage?: any; costUsd?: number; error?: string; done?: boolean; rateLimit?: unknown }): string | null {
   if (!line.trim().startsWith("{")) return null;
   let e: any; try { e = JSON.parse(line); } catch { return null; }
   if (name === "claude") {
@@ -72,6 +73,8 @@ export function oneshotLine(name: OneshotName, line: string, st: { text: string;
       st.model = String(e.model ?? st.model);
     } else if (e.type === "assistant") {
       for (const b of e.message?.content ?? []) { if (b.type === "tool_use") return `它想用工具 ${b.name}`; if (b.type === "text" && b.text) st.text = b.text; }
+    } else if (e.type === "rate_limit_event") {
+      st.rateLimit = e.rate_limit_info; // the person's windows, read for free on every run (budget/)
     } else if (e.type === "result") {
       if (e.is_error) st.error = String(e.result || e.subtype || "出错了").slice(0, 300); else if (typeof e.result === "string" && e.result) st.text = e.result;
       st.costUsd = typeof e.total_cost_usd === "number" ? e.total_cost_usd : undefined;
@@ -112,7 +115,8 @@ function runOnce(name: OneshotName, ctx: any, pidsFile?: string): Promise<Onesho
     const child = spawn(launcher.cmd, [...launcher.args, ...argv.args], { cwd: dir, stdio: ["pipe", "pipe", "pipe"], shell: false, windowsHide: true, detached: process.platform !== "win32", env: { ...process.env, CLAUDECODE: "" } });
     const remember = (add: boolean) => { if (!pidsFile || !child.pid) return; try { const cur = existsSync(pidsFile) ? (JSON.parse(readFileSync(pidsFile, "utf8")) as number[]) : []; mkdirSync(join(pidsFile, ".."), { recursive: true }); writeFileSync(pidsFile, JSON.stringify(add ? [...cur, child.pid] : cur.filter((p) => p !== child.pid))); } catch { /* best effort */ } };
     remember(true);
-    const st: { text: string; model: string; usage?: any; costUsd?: number; error?: string; done?: boolean } = { text: "", model };
+    lowerPriority(child.pid); // background work gives way to whatever the person runs (phase-1 plan v3)
+    const st: { text: string; model: string; usage?: any; costUsd?: number; error?: string; done?: boolean; rateLimit?: unknown } = { text: "", model };
     let out = "", err = "", bytes = 0, finished = false;
     const finish = (why?: string) => {
       if (finished) return;
@@ -126,7 +130,7 @@ function runOnce(name: OneshotName, ctx: any, pidsFile?: string): Promise<Onesho
       if (st.error && !st.text) return reject(new Error(`BACKGROUND_FAILED: ${name}：${st.error}`));
       if (!st.text) return reject(new Error(`BACKGROUND_FAILED: ${name} 没有给出回答${err ? `（${err.trim().split("\n").slice(-2).join(" ").slice(0, 200)}）` : ""}`));
       const u = st.usage ?? { input: 0, output: 0, cacheRead: 0 };
-      resolve({ text: st.text, model: st.model, usage: { ...u, total: u.input + u.output + u.cacheRead }, costUsd: st.costUsd });
+      resolve({ text: st.text, model: st.model, usage: { ...u, total: u.input + u.output + u.cacheRead }, costUsd: st.costUsd, rateLimit: st.rateLimit });
     };
     const wall = setTimeout(() => finish("超过两分钟没答完"), ONESHOT_LIMITS.wallMs);
     let idle = setTimeout(() => finish("一分钟没有任何输出"), ONESHOT_LIMITS.idleMs);

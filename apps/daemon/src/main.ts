@@ -16,6 +16,7 @@ import { codexSpec } from "./agent/backends/codex.js";
 import { dshSpec } from "./agent/backends/acp.js";
 import { oneshot } from "./agent/backends/oneshot.js";
 import { backgroundTarget } from "./agent/route.js";
+import { codexLauncher } from "./agent/backends/codex.js";
 import { join } from "node:path";
 import { spawn } from "node:child_process";
 import { Domain } from "./service/domain.js";
@@ -43,6 +44,8 @@ import { docDeps, dataOf } from "./registry.js";
 import { coalesce } from "./service/later.js";
 import { announcer } from "./service/background.js";
 import { enterMaintenance } from "./maintenance.js";
+import { asBackground, claudeReadings, recordReadings } from "./budget/index.js";
+import { backgroundGate, budgetCheck, type GateDeps } from "./budget/gate.js";
 
 // a move of the data directory asked for on the settings page happens here, before anything opens it (ADR-058)
 let config: JobosConfig;
@@ -93,6 +96,10 @@ const services: Services = {
   onSourcesChanged: () => { if (!maintenance) scheduleSources(dataOf(services)); },
   onInboxChanged: () => { if (!maintenance) scheduleInbox(services); },
 };
+// P5: background work waits while a test is on, the screen is taken, or the person's allowance is short (budget/)
+const gateDeps: GateDeps = { db, config, target: () => backgroundTarget(services), credentialType: async (p) => (await services.llm?.credentials.read(p))?.type, codexLauncher };
+workflows.gate = (kind) => backgroundGate(gateDeps, kind);
+workflows.around = asBackground;
 // a research report filed, a company found, a lead looked up: the pages hear of it (a subscription's pull says so itself)
 workflows.onEnded = (kind) => { if (kind !== "source_scan") announce(kind); };
 workflows.register(deadlineReminder(services));
@@ -122,7 +129,9 @@ llm.db = domain.db; // ADR-032 external-mode jobs
 llm.onUsage = (m, model) => recordUsage(domain.db, m, (model as any).provider ?? config.llm.provider, (model as any).id ?? config.llm.model);
 // ADR-057: background model work goes to whoever the settings name; a harness answers it once, with no tools
 llm.route = () => backgroundTarget(services);
-llm.harness = (name, ctx) => oneshot(name, ctx, join(config.vault, "chat", "oneshot", "pids.json"));
+// P5: each Claude run says how full the person's windows are — kept, so background work can see how fast they fill
+llm.harness = async (name, ctx) => { const a = await oneshot(name, ctx, join(config.vault, "chat", "oneshot", "pids.json")); if (a.rateLimit && !maintenance) recordReadings(db, claudeReadings(a.rateLimit)); return a; };
+llm.gate = () => budgetCheck(gateDeps);
 if (!maintenance) {
   scheduleInbox(services);
   scheduleLeads(services);

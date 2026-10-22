@@ -36,6 +36,7 @@ const LABEL: Record<string, string> = {
   "apply.start": "网申填写", "apply.read": "网申读表", "profile.import": "简历/材料抽取", "profile.scan": "简历/材料抽取", "document.reextract": "简历/材料抽取",
   "resume.save": "简历/材料抽取", "resume.analyze": "简历分析", "inbox.pull": "收件箱分类", "inbox.paste": "收件箱分类", "inbox.poll": "收件箱分类", "inbox.rescue": "收件箱分类",
   "listing.capture": "简章抽取", "chat": "助手", "llm.test": "连通测试", "company.find": "找公司入口",
+  "lead.resolve": "补全岗位信息", "capture.recheck": "简章复查", "fit.deep": "岗位适配细评",
 };
 
 export function usageSummary(db: Db) {
