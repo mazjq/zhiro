@@ -26,5 +26,6 @@ export function inboxPoll(s: Services): WorkflowDef {
 
 /** Idempotent; call at startup and after a mailbox is connected. */
 export function scheduleInbox(s: Services): void {
-  if (loadAccounts(s.config.vault).length) s.workflows.start("inbox_poll", "inbox", "inbox_poll:inbox");
+  // ensure, not start (B26): the poll ends itself when the last mailbox goes, and a later connect must set it going again
+  if (loadAccounts(s.config.vault).length) s.workflows.ensure("inbox_poll", "inbox", "inbox_poll:inbox");
 }
