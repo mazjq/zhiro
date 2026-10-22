@@ -280,7 +280,7 @@ export function getIntel(s: Services, companyId: string) {
 export function readIntel(s: Services, companyId: string) {
   const card = getIntel(s, companyId);
   const kept = card.listing !== null;
-  if (kept && card.stale && !card.refreshing) void refreshIntel(s, companyId).catch(() => {});
+  if (kept && card.stale && !card.refreshing && !s.config.maintenance) void refreshIntel(s, companyId).catch(() => {});
   return { ...card, refreshing: card.refreshing || (kept && card.stale) };
 }
 

@@ -78,7 +78,11 @@ export const RELEVANT_CAMPAIGN = `(exists (select 1 from recommendation r where 
 const CAMPAIGN_SELECT = "select c.*, co.name as company_name from campaign c join company co on co.id = c.company_id";
 
 export class Domain {
-  constructor(public db: Db) {
+  /** Maintenance mode (S1): nothing is written, not even the audit row of a read. */
+  readOnly: boolean;
+  constructor(public db: Db, opts: { readOnly?: boolean } = {}) {
+    this.readOnly = !!opts.readOnly;
+    if (this.readOnly) return;
     // backfill the `norm` column (SQL can't NFKC); no-op once filled. Companies that turn out to share a key are the
     // same employer written twice ("DJI 大疆" / "DJI大疆"): fold the newer into the older.
     const blank = db.prepare("select id, name from company where norm = ''").all() as any[];
@@ -359,6 +363,7 @@ export class Domain {
   }
 
   audit(actor: string, tool: string, input: unknown, ok: boolean, detail = ""): void {
+    if (this.readOnly) return;
     this.db.prepare("insert into audit(id, at, actor, tool, input_json, ok, detail) values (?,?,?,?,?,?,?)").run(ulid(), now(), actor, tool, json.str(input), ok ? 1 : 0, detail);
     poolUnrelatedWrite(this.db);
   }
