@@ -66,6 +66,7 @@ import { changesCursor, changesSince } from "./service/changes.js";
 import { readReference } from "./service/apply-reference.js";
 import { backgroundOnModel, backgroundTarget, describeBackground } from "./agent/route.js";
 import { budgetStatus, type GateDeps } from "./budget/gate.js";
+import { cardView } from "./service/card-state.js";
 import { setupFeishu } from "./workflows/notify.js";
 import { ack as ackNotice, listNotices } from "./notify/center.js";
 import { codexLauncher } from "./agent/backends/codex.js";
@@ -246,9 +247,25 @@ const handlers: { [N in ToolName]: Handler<N> } = {
   // a merge card names both companies and what the data says, so it can be decided at a glance; stale ones are expired first
   "proposal.list": (i, _a, s) => {
     if ((i.decision ?? "pending") === "pending") resolveMergeProposals(s);
-    return { items: s.domain.listProposals(i.decision ?? "pending").map((p) => (p.kind === "company.merge" && (p.payload as any)?.fromId ? { ...p, context: mergeEvidence(s.domain.db, (p.payload as any).fromId, (p.payload as any).intoId) }
+    const cfg = { referenceDoc: s.config.apply?.referenceDoc };
+    return { items: s.domain.listProposals(i.decision ?? "pending").map((p) => (p.decision === "pending" ? { ...p, view: cardView(s.domain.db, p as any, cfg) } : p)).map((p) => (p.kind === "company.merge" && (p.payload as any)?.fromId ? { ...p, context: mergeEvidence(s.domain.db, (p.payload as any).fromId, (p.payload as any).intoId) }
       : p.kind === "fact.remove" ? { ...p, context: { cards: factLabels(s.domain.db, (p.payload as any)?.ids ?? [(p.payload as any)?.id]) } }
       : p.kind === "fact.merge" ? { ...p, context: { merges: ((p.payload as any)?.pairs ?? [p.payload]).map((x: any) => `${factLabels(s.domain.db, [x.fromId])[0] ?? "（已不在）"} → 并入 → ${factLabels(s.domain.db, [x.intoId])[0] ?? "（已不在）"}`) } } : p)) };
+  },
+  "proposal.dismiss": (i, a, s) => {
+    humanOnly(a);
+    let n = 0;
+    for (const id of i.ids) n += Number(s.domain.db.prepare("update proposal set decision = 'expired', decided_at = ? where id = ? and decision = 'pending' and execution is null").run(new Date().toISOString(), id).changes);
+    return { dismissed: n };
+  },
+  "proposal.renew": (i, a, s) => {
+    humanOnly(a);
+    const p = s.domain.listProposals("pending").find((x) => x.id === i.id);
+    if (!p) throw new NotFound(`proposal ${i.id}`);
+    if (cardView(s.domain.db, p as any, { referenceDoc: s.config.apply?.referenceDoc }).state !== "需补救") throw new ToolError("NOT_RENEWABLE", "只有过期但还有用的卡能重新提出");
+    const fresh = s.domain.createProposal(p.kind, p.payload, p.createdBy, p.reason, 72);
+    s.domain.db.prepare("update proposal set decision = 'expired', decided_at = ? where id = ?").run(new Date().toISOString(), p.id);
+    return { proposal: fresh };
   },
   "proposal.decide": async (i, a, s) => {
     // ADR-047: the person's own harness may decide a card it raised itself, when the person set confirmation to happen there
@@ -592,7 +609,7 @@ function executeDirect<N extends ToolName>(name: N, input: ToolInput<N>, actor: 
  *  - agent + write/effect tool → proposal (returned as { proposal }) instead of execution
  *  - audit row for every call
  */
-export const HUMAN_ONLY = new Set(["notify.setup", "notice.ack", "agent.model", "gap.confirm", "model.login", "model.answer", "model.cancel", "model.provider", "model.select", "model.refresh", "inbox.connect", "inbox.disconnect", "history.undo", "agent.mode", "agent.backend", "agent.harnessConfirm", "agent.background", "data.export", "data.move"]);
+export const HUMAN_ONLY = new Set(["notify.setup", "notice.ack", "proposal.dismiss", "proposal.renew", "agent.model", "gap.confirm", "model.login", "model.answer", "model.cancel", "model.provider", "model.select", "model.refresh", "inbox.connect", "inbox.disconnect", "history.undo", "agent.mode", "agent.backend", "agent.harnessConfirm", "agent.background", "data.export", "data.move"]);
 
 /** What an actor may call at all: agents never see the human-only tools or proposal.decide (they would only be refused) — except the person's own harness, when confirmation happens there (ADR-047). */
 export const callableBy = (actor: Actor, s?: Services) => {

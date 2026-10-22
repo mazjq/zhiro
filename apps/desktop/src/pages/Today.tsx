@@ -38,20 +38,32 @@ function Pending() {
     try { await call("proposal.decide", { id: p.id, decision, payloadHash: p.payloadHash }); setErr(""); } catch (e: any) { setErr(FRIENDLY[e.code] ?? e.message); }
     load();
   };
+  // P3: only what still needs the person is listed; what is already so or no longer stands folds into one line
+  const live = items.filter((p) => !p.view || p.view.state === "待处理" || p.view.state === "需补救");
+  const folded = items.filter((p) => p.view && (p.view.state === "已完成" || p.view.state === "已过时"));
+  const dismiss = async () => { try { await call("proposal.dismiss", { ids: folded.map((p) => p.id) }); setErr(""); } catch (e: any) { setErr(e.message); } load(); };
+  const renew = async (p: any) => { try { await call("proposal.renew", { id: p.id }); setErr(""); } catch (e: any) { setErr(e.message); } load(); };
   if (!items.length) return null;
   return (
     <>
-      <h2 className="font-bold mb-2">待你确认 · {items.length}</h2>
+      <h2 className="font-bold mb-2">待你确认 · {live.length}</h2>
       {err && <div className="text-sm text-bad mb-2">{err}</div>}
-      <Card className="mb-7">
-        {items.map((p) => (
+      {folded.length > 0 && (
+        <div className="text-sm text-ink-3 mb-2">
+          另有 {folded.filter((p) => p.view.state === "已完成").length} 张已经办到、{folded.filter((p) => p.view.state === "已过时").length} 张已经不算数的卡
+          <button className="text-accent ml-2" title={folded.map((p) => `${describe(p)}：${p.view.why}`).join("\n")} onClick={dismiss}>全部收起</button>
+        </div>
+      )}
+      {live.length > 0 && <Card className="mb-7">
+        {live.map((p) => (
           <div key={p.id} className="px-4 py-2.5 border-t first:border-t-0 border-line flex items-center gap-2" title={JSON.stringify(p.payload, null, 1)}>
             <div className="flex-1 min-w-0"><div className="text-sm">{describe(p)}</div>{p.execution === "interrupted" && <div className="text-xs text-bad">上次执行到一半被中断，可能已部分完成，请核对后再点</div>}{p.reason && <div className="text-xs text-ink-3 truncate">{p.reason}</div>}</div>
             {p.execution === "running" ? <span className="text-xs text-ink-3">正在执行…</span>
+              : p.view?.state === "需补救" ? <><span className="text-xs text-amber" title={p.view.why}>过期了，还有用</span><Button tone="primary" onClick={() => renew(p)}>重新提出</Button><Button onClick={() => decide(p, "rejected")}>忽略</Button></>
               : <><Button tone="primary" onClick={() => decide(p, "approved")}>确认</Button><Button onClick={() => decide(p, "rejected")}>忽略</Button></>}
           </div>
         ))}
-      </Card>
+      </Card>}
     </>
   );
 }
