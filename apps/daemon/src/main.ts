@@ -42,11 +42,17 @@ import { leadResolve, scheduleLeads } from "./workflows/leads.js";
 import { docDeps, dataOf } from "./registry.js";
 import { coalesce } from "./service/later.js";
 import { announcer } from "./service/background.js";
+import { enterMaintenance } from "./maintenance.js";
 
 // a move of the data directory asked for on the settings page happens here, before anything opens it (ADR-058)
 let config: JobosConfig;
 try { await firstRun(dataDir()); await resolveVault(defaultVaultDir()); config = loadConfig(); }
 catch (e: any) { if (e instanceof VaultUnavailable) { console.error(`[zhiro] ${e.message}`); process.exit(1); } throw e; }
+// S1 maintenance mode: open the data read only — no schedules, no tidying, no writes. For checking an upgrade or a switch
+// of the running program against a copy (or the real folder) without changing a row.
+const maintenance = process.env.ZHIRO_MAINTENANCE === "1" || process.argv.includes("--maintenance");
+config.maintenance = maintenance;
+if (maintenance) { enterMaintenance(); console.log("[zhiro] maintenance mode: read only, nothing scheduled, nothing written, no network"); }
 for (const n of ["claude", "codex"] as const) chooseModel(n, config.agent?.models?.[n] ?? ""); // picked on the settings page
 // one writing process per data directory (a second daemon, or `data watch` already running on it). Without the lock
 // nothing starts: an upgrade or a second writer on the same files is how data gets lost (ADR-050).
@@ -64,15 +70,16 @@ catch (e: any) {
 }
 const auth = new Auth(loadCredentials(config.vault), Date.now, config.vault);
 const db = openDb(dbPath(config.vault));
-stampApp(db);
-const domain = new Domain(db);
+if (!maintenance) stampApp(db);
+const domain = new Domain(db, { readOnly: maintenance });
 // a confirm card whose work was running when the daemon stopped: shown on 今日 as interrupted, never re-run by itself (ADR-062)
-{ const n = domain.interruptRunningProposals(); if (n) console.log(`[zhiro] ${n} confirm card(s) interrupted mid-run, waiting for the person`); }
+if (!maintenance) { const n = domain.interruptRunningProposals(); if (n) console.log(`[zhiro] ${n} confirm card(s) interrupted mid-run, waiting for the person`); }
 const workflows = new WorkflowEngine(db);
 // Follow-up work never runs inside the tool call that caused it: re-matching the pool blocks the event loop for seconds,
 // which the user felt as "关注 takes a second to show". Deferred, a burst recomputes once, and never more than once a
 // minute while scans keep coming in (service/later.ts).
-const later = (fn: () => void) => coalesce(fn);
+// maintenance mode: a follow-up never fires (nothing is written to cause one, and nothing may be written by one)
+const later = (fn: () => void) => (maintenance ? () => {} : coalesce(fn));
 // data changed with nobody calling a tool: the open pages hear of it once the pool shows it (tech-debt 5B)
 const announce = announcer(db);
 const services: Services = {
@@ -80,11 +87,11 @@ const services: Services = {
   // the pool or the profile changed. Tags decide which deadlines get reminders, so recompute them first; the pages hear of it
   // when the posts and their new matches are both in place (announce rebuilds the pool first)
   onDataChanged: later(() => { scheduleRechecks(services); void rerunAuto(services).then(() => { scheduleAllDeadlines(services); announce("matches"); void syncRelevantOfficial(services); }); }),
-  onBackgroundChanged: announce,
+  onBackgroundChanged: maintenance ? () => {} : announce,
   // only what the user cares about changed (关注, 准备申请, a manual tag): the matching itself is unaffected
   onRelevanceChanged: later(() => { scheduleAllDeadlines(services); void syncRelevantOfficial(services); }),
-  onSourcesChanged: () => scheduleSources(dataOf(services)),
-  onInboxChanged: () => scheduleInbox(services),
+  onSourcesChanged: () => { if (!maintenance) scheduleSources(dataOf(services)); },
+  onInboxChanged: () => { if (!maintenance) scheduleInbox(services); },
 };
 // a research report filed, a company found, a lead looked up: the pages hear of it (a subscription's pull says so itself)
 workflows.onEnded = (kind) => { if (kind !== "source_scan") announce(kind); };
@@ -97,15 +104,17 @@ workflows.register(smeRun(services));
 workflows.register(captureRecheck(services));
 workflows.register(inboxPoll(services));
 workflows.register(leadResolve(services));
-scheduleRechecks(services);
-scheduleAllDeadlines(services);
-{ const pr = pruneAutoSources(services); if (pr.before !== pr.after) console.log(`[zhiro] auto sources pruned ${pr.before} -> ${pr.after}`); }
-// evidence-based tidy at start and once a day: orphan campaigns of pruned subscriptions, one unit spelled two ways
-const tidy = () => { try { const t = tidyPool(services); if (t.droppedCampaigns || t.merged.length) console.log(`[zhiro] tidy: ${t.droppedCampaigns} orphan campaigns dropped, merged ${t.merged.map((m) => `${m.from}→${m.into}`).join(", ") || "none"}`); } catch (e: any) { console.error("[zhiro] tidy failed", e?.message ?? e); } };
-setTimeout(tidy, 5_000).unref(); // after the server is listening: browsing never waits for housekeeping
-setInterval(tidy, 24 * 3600_000).unref();
-console.log(`[zhiro] pull sources scheduled: ${scheduleSources(dataOf(services))}`);
-workflows.startPolling();
+if (!maintenance) {
+  scheduleRechecks(services);
+  scheduleAllDeadlines(services);
+  { const pr = pruneAutoSources(services); if (pr.before !== pr.after) console.log(`[zhiro] auto sources pruned ${pr.before} -> ${pr.after}`); }
+  // evidence-based tidy at start and once a day: orphan campaigns of pruned subscriptions, one unit spelled two ways
+  const tidy = () => { try { const t = tidyPool(services); if (t.droppedCampaigns || t.merged.length) console.log(`[zhiro] tidy: ${t.droppedCampaigns} orphan campaigns dropped, merged ${t.merged.map((m) => `${m.from}→${m.into}`).join(", ") || "none"}`); } catch (e: any) { console.error("[zhiro] tidy failed", e?.message ?? e); } };
+  setTimeout(tidy, 5_000).unref(); // after the server is listening: browsing never waits for housekeeping
+  setInterval(tidy, 24 * 3600_000).unref();
+  console.log(`[zhiro] pull sources scheduled: ${scheduleSources(dataOf(services))}`);
+  workflows.startPolling();
+}
 
 const llm = createLlm(config);
 services.llm = llm;
@@ -114,11 +123,13 @@ llm.onUsage = (m, model) => recordUsage(domain.db, m, (model as any).provider ??
 // ADR-057: background model work goes to whoever the settings name; a harness answers it once, with no tools
 llm.route = () => backgroundTarget(services);
 llm.harness = (name, ctx) => oneshot(name, ctx, join(config.vault, "chat", "oneshot", "pids.json"));
-scheduleInbox(services);
-scheduleLeads(services);
-void syncRelevantOfficial(services);
+if (!maintenance) {
+  scheduleInbox(services);
+  scheduleLeads(services);
+  void syncRelevantOfficial(services);
+}
 setTimeout(() => listPool(domain.db), 500); // build the pool cache before the first page asks for it
-resumePending(docDeps(services)); // files left mid-extraction by a restart
+if (!maintenance) resumePending(docDeps(services)); // files left mid-extraction by a restart
 const career = new CareerAgent(services, llm);
 // the drawer's backends (ADR-046): the built-in assistant, or a harness the person has (Claude Code, Codex) run per message
 const launcher = mcpCommand;
@@ -129,7 +140,7 @@ const chat = new ChatHub(services, {
   dsh: cliBackend(services, auth, dshSpec, launcher), // over ACP (acp-bridge.ts)
 });
 services.chat = chat;
-{ const n = reapOrphans(config.vault); if (n) console.log(`[zhiro] chat: killed ${n} process(es) left by an earlier run`); }
+if (!maintenance) { const n = reapOrphans(config.vault); if (n) console.log(`[zhiro] chat: killed ${n} process(es) left by an earlier run`); }
 const app = createApp(services, auth, chat);
 
 serve({ fetch: app.fetch, hostname: config.http.host, port: config.http.port }, (info) => {
@@ -138,8 +149,10 @@ serve({ fetch: app.fetch, hostname: config.http.host, port: config.http.port }, 
   console.log(`[zhiro] open the UI (link good once, 10 minutes): http://${info.address}:${info.port}/api/launch?code=${auth.newLaunch()}`);
   // `zhiro` started at a terminal: open the page too (with a link of its own — the printed one stays good)
   if (process.env.ZHIRO_OPEN === "1") openBrowser(`http://${info.address}:${info.port}/api/launch?code=${auth.newLaunch()}`);
-  try { console.log(`[zhiro] agent directory (open your own agent here): ${writeAgentDir(config.vault, `http://${info.address}:${info.port}`)}`); }
-  catch (e: any) { console.error("[zhiro] could not write the agent directory:", e?.message ?? e); }
+  if (!maintenance) {
+    try { console.log(`[zhiro] agent directory (open your own agent here): ${writeAgentDir(config.vault, `http://${info.address}:${info.port}`)}`); }
+    catch (e: any) { console.error("[zhiro] could not write the agent directory:", e?.message ?? e); }
+  }
 });
 
 process.on("SIGINT", () => { workflows.stopPolling(); db.close(); process.exit(0); });

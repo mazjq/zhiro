@@ -11,6 +11,7 @@ import { notify } from "./service/feishu.js";
 import type { WorkflowEngine } from "./service/workflow.js";
 import type { JobosConfig } from "./config.js";
 import { configFile, updateConfig } from "./config.js";
+import { OUTSIDE_TOOLS } from "./maintenance.js";
 import { emit } from "./events.js";
 import type { Llm } from "./llm.js";
 import { runSource, listSources, addSource, removeSource, previewSource, isLocalPath, type Columns } from "./data/index.js";
@@ -613,6 +614,8 @@ async function callToolHere(name: string, input: unknown, actor: Actor, s: Servi
       const errs = [...Value.Errors(contract.input, inp)].slice(0, 3).map((e) => `${e.path || "/"} ${e.message}`);
       throw new ToolError("BAD_INPUT", `${name} 的参数不对：${errs.join("；")}`);
     }
+    // S1: in maintenance mode only what neither writes nor reaches out runs — the data must stay exactly as it was
+    if (s.config.maintenance && (contract.effects.localWrite || contract.effects.externalAction || contract.effects.dataEgress || OUTSIDE_TOOLS.test(name))) throw new ToolError("MAINTENANCE", "维护模式：只读，暂不执行这个操作");
     const inHarness = mayConfirmInHarness(actor, s);
     // deciding a card and undoing: the person, or (ADR-047) the person's own harness for its own doings — checked in the handlers
     if (name === "proposal.decide" && actor.kind !== "human" && !inHarness) throw new ToolError("FORBIDDEN", "only a human entry point can decide proposals");

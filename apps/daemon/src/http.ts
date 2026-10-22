@@ -170,6 +170,7 @@ export function createApp(s: Services, auth: Auth, chat: ChatHub) {
   app.post("/api/chat/reset", (c) => { chat.reset(); return c.json({ ok: true }); });
   app.post("/api/chat/cancel", (c) => { chat.cancel(); return c.json({ ok: true }); });
   app.post("/api/chat", async (c) => {
+    if (s.config.maintenance) return c.json({ error: "MAINTENANCE", message: "维护模式：暂不对话" }, 503);
     const { text, turnId } = await c.req.json();
     const id = /^[A-Za-z0-9-]{1,40}$/.test(String(turnId ?? "")) ? String(turnId) : undefined; // the window names the turn so it can tell the turn's events from others'
     try {
