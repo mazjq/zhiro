@@ -1,4 +1,5 @@
 import type { Db } from "../db.js";
+import { staleReason } from "./stale.js";
 import { json } from "../db.js";
 import { loadExpectations, judge, statusRank, type ExpStatus, type Verdict } from "./expectations.js";
 import { loadContext, resolvePost, summarize, applyRules, localDay, campaignSaying, type Resolution } from "./deadlines.js";
@@ -10,7 +11,7 @@ const rank = (g: string) => GRADE_RANK[g] ?? 9;
 /** the company line's kind when it has no posts, from what its batch goes by */
 const KIND: Record<string, string> = { date: "date", date_or_until_filled: "date", until_filled: "until_filled", rolling: "rolling" };
 
-export interface PoolQuery { companyId?: string; query?: string; tag?: string; recommendedOnly?: boolean; companyType?: string; city?: string; matchedOnly?: boolean; minTier?: "优先考虑" | "可迁移"; newWithinDays?: number; limit?: number; offset?: number; sort?: "match" | "deadline" | "new"; hideExpectationFail?: boolean }
+export interface PoolQuery { companyId?: string; query?: string; tag?: string; recommendedOnly?: boolean; companyType?: string; city?: string; matchedOnly?: boolean; minTier?: "优先考虑" | "可迁移"; newWithinDays?: number; limit?: number; offset?: number; sort?: "match" | "deadline" | "new"; hideExpectationFail?: boolean; includeStale?: boolean }
 
 
 /**
@@ -65,6 +66,8 @@ function build(db: Db, newWithinDays: number): Pick<NonNullable<typeof cache>, "
   const recsByCompany = new Map<string, any[]>();
   for (const r of recs) (recsByCompany.get(r.company_id) ?? recsByCompany.set(r.company_id, []).get(r.company_id)!).push(r);
   const titleOf = new Map<string, string>(positions.map((p) => [p.id, p.title]));
+  const cohortOf = new Map<string, string>(campaigns.map((c) => [c.id, c.cohort ?? ""]));
+  const today = localDay();
 
   const rows: Row[] = [];
   const counts = new Map<string, number>();
@@ -102,6 +105,9 @@ function build(db: Db, newWithinDays: number): Pick<NonNullable<typeof cache>, "
       const own = twins.length > 0 || dctx.facts.has(`position:${p.id}`) || dctx.overrides.has(`position:${p.id}`), rk = `${p.campaign_id}|${p.closes_at ?? ""}`;
       m.deadline = own ? resolvePost(p, dctx, twins) : resolved.get(rk) ?? resolved.set(rk, resolvePost(p, dctx)).get(rk)!;
       m.closesAt = m.deadline.date;
+      // 过期信息: out of the everyday lists unless held (listPool) — only when every source of the post says so
+      const why = (m.rows as any[]).map((x) => staleReason({ title: x.title, status: x.status, deadline: m.deadline }, cohortOf.get(x.campaign_id) ?? "", today));
+      m.stale = why.every(Boolean) ? why[0] : "";
       delete m.rows;
     }
     // recs are score-desc, so the first row per tag / per title is the best one
@@ -241,6 +247,17 @@ export function listPool(db: Db, q: PoolQuery = {}) {
     if (q.hideExpectationFail && status === "fail") hits.splice(i, 1);
     else verdicts.set(r, { status, score, byPost });
   }
+  // 过期信息 (stale.ts): an old cohort, a deadline over a week gone, a post taken down — left out unless asked; a post the
+  // person holds always stays. A company whose posts are all left out goes too; one with no posts (a sheet row) stays.
+  // The count is of what the switch would bring back: posts the other filters keep.
+  const shown = (p: any) => q.includeStale || !p.stale || p.watched || !!p.applicationState;
+  const kept = (r: Row, p: any) => (!postFilter || postFilter(r, p)) && !(q.hideExpectationFail && verdicts.get(r)?.byPost.get(p.id)?.status === "fail");
+  let hiddenStale = 0;
+  if (!q.includeStale) for (let i = hits.length - 1; i >= 0; i--) {
+    const r = hits[i].r, ps = r.item.positions.filter((p: any) => kept(r, p));
+    hiddenStale += ps.filter((p: any) => !shown(p)).length;
+    if (r.item.positions.length && !ps.some(shown)) hits.splice(i, 1);
+  }
   // default: by match when looking at recommendations, by deadline otherwise. Closed companies always go last;
   // in match order 重点 companies come first, then 符合 before 待核实, then the soft expectations, then the match
   const sort = q.sort ?? (q.recommendedOnly || q.tag ? "match" : "deadline");
@@ -258,7 +275,7 @@ export function listPool(db: Db, q: PoolQuery = {}) {
   const from = q.offset ?? 0;
   const items = hits.slice(from, from + (q.limit ?? 200)).map(({ r, score }) => {
     const vr = verdicts.get(r);
-    const positions = r.item.positions.filter((p: any) => (!postFilter || postFilter(r, p)) && !(q.hideExpectationFail && vr?.byPost.get(p.id)?.status === "fail"))
+    const positions = r.item.positions.filter((p: any) => shown(p) && (!postFilter || postFilter(r, p)) && !(q.hideExpectationFail && vr?.byPost.get(p.id)?.status === "fail"))
       .map((p: any) => ({ ...p, ...(vr?.byPost.has(p.id) ? { expectation: vr.byPost.get(p.id) } : {}) }));
     // by title (the list may be filtered); same-titled posts in several cities share the title's match
     const at = new Map<string, any[]>();
@@ -268,7 +285,7 @@ export function listPool(db: Db, q: PoolQuery = {}) {
     positions.sort((a: any, b: any) => (b.fit?.score ?? -1) - (a.fit?.score ?? -1) || (b.match?.score ?? 0) - (a.match?.score ?? 0) || statusRank(a.expectation?.status) - statusRank(b.expectation?.status));
     return { ...r.item, score, positions, ...(vr ? { expectation: { status: vr.status, score: vr.score } } : {}), ...(rel.has(r) ? { matchedBy: MATCHED_BY[rel.get(r)!] } : {}) };
   });
-  return { items, total: hits.length, tagCounts: cache.tagCounts };
+  return { items, total: hits.length, tagCounts: cache.tagCounts, hiddenStale };
 }
 
 /**
