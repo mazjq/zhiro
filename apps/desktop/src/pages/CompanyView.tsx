@@ -325,6 +325,7 @@ export function CompanyDetail({ c, reload, onWatch, children }: { c: any; reload
             <PostDetails p={p} />
             <div className="flex items-center gap-2">
               <span className="flex-1 cursor-pointer hover:text-accent" title="点开看岗位要求" onClick={() => document.dispatchEvent(new CustomEvent("jobos:post", { detail: p.id }))}>{p.title}{p.cities?.length > 0 && <span className="ml-1.5 text-xs text-ink-3">{p.cities.slice(0, 3).join("/")}</span>}{p.deadline && <span className={`ml-1.5 text-xs ${p.deadline.status === "verified" ? "text-ink-3" : "text-amber"}`} title={p.deadline.say}>{deadlineShort(p.deadline)}</span>}{p.isNew && <span className="ml-1.5"><Chip tone="amber">新</Chip></span>}</span>
+              {p.stale && <span title={`${p.stale}：日常列表里默认不显示（关注或申请过的照样显示）`}><Chip>过期</Chip></span>}
               {p.expectation && p.expectation.status !== "pass" && <span title={p.expectation.reasons.map((r: any) => `${r.field}：${r.evidence}`).join("；")}><Chip tone={p.expectation.status === "unknown" ? "amber" : ""}>{p.expectation.status === "unknown" ? "待核实" : "不符合期望"}</Chip></span>}
               {p.applicationState ? <Chip tone={p.applicationState === "draft" ? "amber" : "good"}>{STATE_LABEL[p.applicationState] ?? p.applicationState}</Chip>
                 : <Button tone={p.watched ? "" : p.match ? "primary" : ""} onClick={() => onWatch(p)}>{p.watched ? "已关注 ✓" : "关注"}</Button>}

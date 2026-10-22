@@ -157,6 +157,8 @@ export default function Jobs({ go }: { go: (p: any) => void }) {
   const [tier, setTier] = useState(""); // 岗位适配度 floor (ADR-034): "" / 强匹配 / 可考虑
   const [city, setCity] = useState("");
   const [coType, setCoType] = useState(""); // 央国企 / 民企 / 外企 …
+  const [showStale, setShowStale] = useState(false); // 过期信息 (往届 / 截止过一周 / 源站撤下) hidden by default
+  const [hiddenStale, setHiddenStale] = useState(0);
   const [showFail, setShowFail] = useState(false); // 期望卡 (ADR-036): 不符合 hidden by default, 待核实 always shown
   const [hasHard, setHasHard] = useState(false);
   const loadHard = () => { call("fact.list", { kind: "preference" }).then((r) => setHasHard(r.items.some((f: any) => f.data?.mode === "硬性"))).catch(() => {}); };
@@ -166,14 +168,14 @@ export default function Jobs({ go }: { go: (p: any) => void }) {
   const more = useRef<HTMLDivElement>(null);
 
   // a search looks through the whole pool: a company the user names must be findable whether or not it was recommended
-  const query_ = () => { const wide = all || !!query.trim(); return { query: query.trim() || undefined, recommendedOnly: !wide, tag: !wide && tag ? tag : undefined, sort: sort || undefined, minTier: tier || undefined, city: city.trim() || undefined, companyType: coType || undefined, hideExpectationFail: !showFail, limit: PAGE }; };
+  const query_ = () => { const wide = all || !!query.trim(); return { query: query.trim() || undefined, recommendedOnly: !wide, tag: !wide && tag ? tag : undefined, sort: sort || undefined, minTier: tier || undefined, city: city.trim() || undefined, companyType: coType || undefined, hideExpectationFail: !showFail, includeStale: showStale || undefined, limit: PAGE }; };
   // quiet = a refresh for a change made elsewhere: the list is not dimmed, it just updates in place
   const load = (rows = PAGE, quiet = false) => {
     const mine = ++seq.current; // a slower, older answer must not overwrite a newer one
     if (!quiet) setLoading(true);
     // keep however many rows are already on screen, so a refresh does not throw the user back to the top
     call("pool.list", { ...query_(), limit: rows })
-      .then((r) => { if (mine !== seq.current) return; setItems(r.items); setTotal(r.total); setTags(r.tagCounts.map((t: any) => [t.tag, t.count])); setSel((s: any) => r.items.find((x: any) => x.companyId === s?.companyId) ?? r.items.find((x: any) => x.companyName === query.trim()) ?? (r.items.length === 1 ? r.items[0] : null)); setErr(""); }) // the company named exactly, or the only one found, is opened: there is nothing else to pick
+      .then((r) => { if (mine !== seq.current) return; setItems(r.items); setTotal(r.total); setHiddenStale(r.hiddenStale ?? 0); setTags(r.tagCounts.map((t: any) => [t.tag, t.count])); setSel((s: any) => r.items.find((x: any) => x.companyId === s?.companyId) ?? r.items.find((x: any) => x.companyName === query.trim()) ?? (r.items.length === 1 ? r.items[0] : null)); setErr(""); }) // the company named exactly, or the only one found, is opened: there is nothing else to pick
       .catch((e) => mine === seq.current && setErr(e.message)).finally(() => mine === seq.current && setLoading(false));
   };
   // the next page, when the bottom of the list scrolls into view
@@ -202,7 +204,7 @@ export default function Jobs({ go }: { go: (p: any) => void }) {
     setWatched(c.companyId, p.id, !p.watched);
     call("position.watch", { positionId: p.id, priority: p.watched ? 0 : 2 }).catch((e) => { setWatched(c.companyId, p.id, p.watched); setErr(e.message); });
   };
-  useEffect(() => { const t = setTimeout(() => load(), query ? 250 : 0); return () => clearTimeout(t); }, [query, all, tag, sort, tier, city, coType, showFail]);
+  useEffect(() => { const t = setTimeout(() => load(), query ? 250 : 0); return () => clearTimeout(t); }, [query, all, tag, sort, tier, city, coType, showFail, showStale]);
   useEffect(loadTags, []);
   const setView = (a: boolean) => { setAll(a); localStorage.setItem(VIEW_KEY, a ? "all" : "rec"); };
   const reload = () => { load(Math.max(PAGE, items.length)); loadTags(); };
@@ -236,6 +238,7 @@ export default function Jobs({ go }: { go: (p: any) => void }) {
         <input value={city} onChange={(e) => setCity(e.target.value)} placeholder="城市" className={`${input} w-24`} title="只看在这个城市的岗位" />
         <select value={sort} onChange={(e) => setSort(e.target.value)} className={input} title="薪资：来源数据里几乎没有（6.8 万个岗位只有 11 个写了），暂不能按薪资排">{SORTS.map(([v, l]) => <option key={v} value={v}>{l}</option>)}</select>
         {hasHard && <label className="text-xs text-ink-2 flex items-center gap-1" title="不符合硬性期望（城市 / 公司类型）或标了「不投」的公司默认不显示；待核实的一直显示"><input type="checkbox" checked={showFail} onChange={(e) => setShowFail(e.target.checked)} />含不符合期望的</label>}
+        <label className="text-xs text-ink-2 flex items-center gap-1" title="往届（标题写的是 26 届）、截止已过一周以上、源站已撤下的岗位默认不显示；关注或申请过的照样显示"><input type="checkbox" checked={showStale} onChange={(e) => setShowStale(e.target.checked)} />含过期信息{!showStale && hiddenStale > 0 && <span className="text-ink-3">（隐藏了 {hiddenStale} 个）</span>}</label>
         <span className="ml-auto text-xs text-ink-3">{total} 家公司</span>
       </div>
       {editing !== undefined && <PresetEditor key={editing?.id ?? "new"} preset={editing} onSaved={(n) => { setTag(n); loadTags(); }} onRemoved={() => { setEditing(undefined); setTag(""); loadTags(); }} onClose={() => setEditing(undefined)} />}
