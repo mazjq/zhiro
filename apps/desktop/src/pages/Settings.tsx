@@ -11,6 +11,21 @@ const k = (n: number) => (n >= 10_000 ? `${(n / 10_000).toFixed(1)} 万` : n.toL
  * sends a first card, and shows 「已在手机上看到」 when Feishu reports it read. The secret is kept in the data folder's
  * settings and never shown again.
  */
+/** 每日简报的时间 (P4). */
+function BriefTime({ cfg }: { cfg: any }) {
+  const [at, setAt] = useState("");
+  const [msg, setMsg] = useState("");
+  useEffect(() => { setAt(cfg?.brief?.at ?? "08:00"); }, [cfg?.brief?.at]);
+  const save = async () => { try { const r = await call("brief.at", { at }); setMsg(`下一份：${new Date(r.next).toLocaleString("zh-CN", { month: "numeric", day: "numeric", hour: "2-digit", minute: "2-digit" })}`); } catch (e: any) { setMsg(e.message); } };
+  return (
+    <Card className="p-5">
+      <div className="font-bold mb-2">每日简报</div>
+      <p className="text-sm text-ink-2 mb-3">每天这个时间生成一份，只讲变化，发到飞书，也在「今日」最上面。</p>
+      <div className="flex items-center gap-2"><input type="time" value={at} onChange={(e) => setAt(e.target.value)} className="border border-line rounded-md px-2 py-1.5 text-sm bg-paper" /><Button onClick={save}>保存</Button>{msg && <span className="text-xs text-ink-3">{msg}</span>}</div>
+    </Card>
+  );
+}
+
 function FeishuCard({ cfg, reload }: { cfg: any; reload: () => void }) {
   const [open, setOpen] = useState(false);
   const [f, setF] = useState({ appId: "", appSecret: "", who: "" });
@@ -439,6 +454,7 @@ export default function Settings() {
           <a className="text-accent text-sm font-mono" href={bookmarkletUrl()} target="_blank" rel="noreferrer">{bookmarkletUrl()}</a>
         </Card>
         <FeishuCard cfg={cfg} reload={load} />
+        <BriefTime cfg={cfg} />
         <DataCard cfg={cfg} />
         <Card className="p-5 col-span-2">
           <div className="flex items-center gap-3">
