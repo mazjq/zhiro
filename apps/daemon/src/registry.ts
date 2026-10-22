@@ -66,6 +66,8 @@ import { changesCursor, changesSince } from "./service/changes.js";
 import { readReference } from "./service/apply-reference.js";
 import { backgroundOnModel, backgroundTarget, describeBackground } from "./agent/route.js";
 import { budgetStatus, type GateDeps } from "./budget/gate.js";
+import { setupFeishu } from "./workflows/notify.js";
+import { ack as ackNotice, listNotices } from "./notify/center.js";
 import { codexLauncher } from "./agent/backends/codex.js";
 import { chooseModel, followedModel, harnessModel, harnessModels, modelRefused } from "./agent/backends/cli.js";
 import { pendingJobs, replyJob } from "./service/model-jobs.js";
@@ -466,6 +468,9 @@ const handlers: { [N in ToolName]: Handler<N> } = {
   "workflow.list": (i, _a, s) => ({ items: s.workflows.list(i.state) }),
   "today.summary": (i, _a, s) => ({ ...s.domain.today(i.days ?? 7), notifyConfigured: !!(s.config.feishu.webhookUrl || s.config.feishu.appId) }),
   "feishu.notify": async (i, _a, s) => notify(s.config.feishu, i),
+  "notify.setup": (i, a, s) => { humanOnly(a); return setupFeishu(s, i); },
+  "notice.list": (i, _a, s) => listNotices(s.domain.db, i.limit ?? 30),
+  "notice.ack": (i, a, s) => { humanOnly(a); return { ok: ackNotice(s.domain.db, i.id) }; },
   "backup.run": (_i, _a, s) => runBackup(s.domain.db, s.config.vault),
   "history.list": (i, _a, s) => ({ items: listActions(s, i.limit ?? 20) }),
   "history.undo": (i, a, s) => {
@@ -585,7 +590,7 @@ function executeDirect<N extends ToolName>(name: N, input: ToolInput<N>, actor: 
  *  - agent + write/effect tool → proposal (returned as { proposal }) instead of execution
  *  - audit row for every call
  */
-export const HUMAN_ONLY = new Set(["agent.model", "gap.confirm", "model.login", "model.answer", "model.cancel", "model.provider", "model.select", "model.refresh", "inbox.connect", "inbox.disconnect", "history.undo", "agent.mode", "agent.backend", "agent.harnessConfirm", "agent.background", "data.export", "data.move"]);
+export const HUMAN_ONLY = new Set(["notify.setup", "notice.ack", "agent.model", "gap.confirm", "model.login", "model.answer", "model.cancel", "model.provider", "model.select", "model.refresh", "inbox.connect", "inbox.disconnect", "history.undo", "agent.mode", "agent.backend", "agent.harnessConfirm", "agent.background", "data.export", "data.move"]);
 
 /** What an actor may call at all: agents never see the human-only tools or proposal.decide (they would only be refused) — except the person's own harness, when confirmation happens there (ADR-047). */
 export const callableBy = (actor: Actor, s?: Services) => {
@@ -612,6 +617,8 @@ async function callToolHere(name: string, input: unknown, actor: Actor, s: Servi
   const contract = (tools as Record<string, ToolContract>)[name];
   if (!contract) throw new ToolError("NOT_FOUND", `unknown tool ${name}`);
   const inp = (input ?? {}) as any;
+  // a secret given to a tool is used, never kept: the audit line says that one was given
+  const audit = (label: string, ok: boolean, detail?: string) => s.domain.audit(label, name, inp?.appSecret ? { ...inp, appSecret: "***" } : inp, ok, detail);
   try {
     // the trust boundary (desktop, HTTP, MCP, the assistant): an input that does not fit the contract is refused with what
     // is wrong, instead of failing deep inside (resume.save with no name died on `undefined.trim()`, 2026-10-07)
@@ -639,7 +646,7 @@ async function callToolHere(name: string, input: unknown, actor: Actor, s: Servi
       const tier = overflow ? "ask" : tierOf(name, contract, inp, s, external);
       if (tier === "ask") {
         const proposal = s.domain.createProposal(name, inp, actorLabel(actor), (inp.note ?? inp.reason ?? "") as string, undefined, actor.turnId);
-        s.domain.audit(actorLabel(actor), name, inp, true, `proposal ${proposal.id}`);
+        audit(actorLabel(actor), true, `proposal ${proposal.id}`);
         const note = inHarness ? "这个操作需要用户同意：向用户复述这件事，用户同意后调 proposal.decide({ id, decision: \"approved\", payloadHash })；不同意则 rejected"
           : actor.cred === "turn" ? "这个操作需要用户确认：已生成确认卡，用户在对话里点确认后才执行"
           : actor.cred === "agent" ? "这个操作需要用户确认：已生成确认卡，请用户到 Zhiro 窗口「今日」点确认"
@@ -654,16 +661,16 @@ async function callToolHere(name: string, input: unknown, actor: Actor, s: Servi
       try { out = await withPurpose(name, String(inp.applicationId ?? inp.id ?? ""), () => executeDirect(name as ToolName, inp, actor, s)); }
       finally { if (external) externalInFlight--; }
       const action = recordAction(s, actorLabel(actor), name, inp, inverse(out), out, actor.turnId);
-      s.domain.audit(actorLabel(actor), name, inp, true, `action ${action.id}`);
+      audit(actorLabel(actor), true, `action ${action.id}`);
       return { ...out, action, ...(inHarness ? { note: "已执行。用户要撤销时调 history.undo({ id: action.id })" } : {}) };
     }
     // the caller will expect to see its own write in the pool; position.watch keeps the pool cache current itself
     if (contract.effects.localWrite && name !== "position.watch") poolDirty();
     const out = await withPurpose(name, String(inp.applicationId ?? inp.id ?? ""), () => executeDirect(name as ToolName, inp, actor, s));
-    s.domain.audit(actorLabel(actor), name, inp, true);
+    audit(actorLabel(actor), true);
     return out;
   } catch (e: any) {
-    s.domain.audit(actorLabel(actor), name, inp, false, String(e?.message ?? e));
+    audit(actorLabel(actor), false, String(e?.message ?? e));
     // ADR-032: no model of our own — an agent gets the prompt to answer itself, then calls the tool again
     if (e?.code === "MODEL_DELEGATED" && e.job && actor.kind === "agent")
       return { needsModel: { jobId: e.job.id, kind: e.job.kind, purpose: e.job.purpose, systemPrompt: e.job.system, user: e.job.user, next: "按 systemPrompt 的要求作答后调 llm.reply({jobId, text})，再重新调用本工具（参数不变）" } };

@@ -14,17 +14,18 @@ import type { Db } from "../db.js";
 const QUIET_KINDS = new Set(["笔试", "测评", "面试", "一面", "二面", "三面", "终面", "HR面", "群面", "电话面"]);
 const hm = (ms: number) => new Date(ms).toLocaleTimeString("zh-CN", { hour: "2-digit", minute: "2-digit", hour12: false });
 
-/** A test or interview whose quiet span holds `now`, said in a line; null when none. */
-export function examQuiet(db: Db, now: number, beforeMins: number, afterMins: number): string | null {
+/** The test or interview whose quiet span holds `now` — its stage and a line saying so; null when none. */
+export function examInQuiet(db: Db, now: number, beforeMins: number, afterMins: number): { stageId: string; why: string } | null {
   const from = new Date(now - afterMins * 60_000 - 86400_000).toISOString().slice(0, 10);
-  const rows = db.prepare("select kind, scheduled_at from stage where scheduled_at >= ? and (result is null or result = '')").all(from) as { kind: string; scheduled_at: string }[];
+  const rows = db.prepare("select id, kind, scheduled_at from stage where scheduled_at >= ? and (result is null or result = '')").all(from) as { id: string; kind: string; scheduled_at: string }[];
   for (const r of rows) {
     const at = Date.parse(r.scheduled_at);
     if (!Number.isFinite(at) || !(QUIET_KINDS.has(r.kind) || /面|笔试|测评/.test(r.kind))) continue;
-    if (now >= at - beforeMins * 60_000 && now <= at + afterMins * 60_000) return `${r.kind}（${hm(at)} 开始）安静中，到 ${hm(at + afterMins * 60_000)}`;
+    if (now >= at - beforeMins * 60_000 && now <= at + afterMins * 60_000) return { stageId: r.id, why: `${r.kind}（${hm(at)} 开始）安静中，到 ${hm(at + afterMins * 60_000)}` };
   }
   return null;
 }
+export const examQuiet = (db: Db, now: number, beforeMins: number, afterMins: number): string | null => examInQuiet(db, now, beforeMins, afterMins)?.why ?? null;
 
 const STATE: Record<number, string> = { 2: "有全屏应用在运行", 3: "游戏在全屏运行", 4: "演示模式" };
 let cached: { at: number; why: string | null } | null = null;
