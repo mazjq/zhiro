@@ -1383,7 +1383,7 @@ export const tools = {
     input: Type.Object({ limit: Type.Optional(Type.Number({ default: 30 })) }),
     output: Type.Object({
       items: Type.Array(Type.Object({ id: Type.String(), kind: Type.String(), urgency: Type.String(), title: Type.String(), lines: Type.Array(Type.String()), state: Type.String(), waitingFor: Type.String(), createdAt: Type.String(), sentAt: Type.Union([Type.String(), Type.Null()]), readAt: Type.Union([Type.String(), Type.Null()]), pressed: Type.Number(), error: Type.String() })),
-      counts: Type.Object({ unsent: Type.Number(), notConfigured: Type.Number(), unread: Type.Number() }),
+      counts: Type.Object({ unsent: Type.Number(), notConfigured: Type.Number(), erring: Type.Number(), failed: Type.Number(), unread: Type.Number() }),
     }),
     effects: READ,
     execution: "sync",

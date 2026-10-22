@@ -11,10 +11,13 @@ function NoticeLine({ go }: { go: (p: string) => void }) {
   const load = () => { latest("n", call("notice.list", { limit: 1 })).then((r) => setC(r.counts)).catch(() => {}); };
   useEffect(load, []);
   useOnDataChange(load);
-  if (!c || (!c.unsent && !c.unread)) return null;
+  if (!c || (!c.unsent && !c.unread && !c.failed)) return null;
+  const otherUnsent = c.unsent - c.notConfigured;
   return (
     <Card className="mb-6 px-4 py-3 border-amber">
       {c.notConfigured > 0 && <div className="text-sm"><b className="text-amber">{c.notConfigured} 条提醒没送出去</b>：飞书还没接通。<button className="text-accent ml-1" onClick={() => go("settings")}>去接通</button></div>}
+      {otherUnsent > 0 && <div className="text-sm"><b className="text-amber">{otherUnsent} 条提醒还在等着发</b>{c.erring > 0 ? `（其中 ${c.erring} 条发送出错，会自动重试）` : "（笔试安静中，结束后发）"}</div>}
+      {c.failed > 0 && <div className="text-sm"><b className="text-bad">{c.failed} 条提醒发送失败</b>：重试了 10 次还是不行，看看飞书应用的权限。<button className="text-accent ml-1" onClick={() => go("settings")}>去设置</button></div>}
       {c.unread > 0 && <div className="text-sm"><b className="text-amber">{c.unread} 条提醒你还没看</b>（笔试面试、截止）：打开手机飞书的「Zhiro 职路」看一眼。</div>}
     </Card>
   );

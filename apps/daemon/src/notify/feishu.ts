@@ -4,12 +4,16 @@
  * phone call). A group webhook cannot say whether anyone read it, so it is not used for notices that must be confirmed.
  * Plain fetch; the tenant token is kept until a few minutes before it expires.
  */
+import { createHash } from "node:crypto";
+
 const BASE = "https://open.feishu.cn/open-apis";
 
 export interface FeishuApp { appId: string; appSecret: string }
 export interface Card { title: string; lines: string[]; url?: string; tone?: "red" | "orange" | "blue" | "green" }
 
 const tokens = new Map<string, { token: string; until: number }>();
+/** The cache key: the app and a hash of its secret — a changed secret is never answered by the old one's token. */
+const keyOf = (app: FeishuApp) => `${app.appId}:${createHash("sha256").update(app.appSecret).digest("hex").slice(0, 12)}`;
 
 async function api(app: FeishuApp, method: string, path: string, body?: unknown): Promise<any> {
   const res = await fetch(BASE + path, { method, headers: { "content-type": "application/json; charset=utf-8", authorization: `Bearer ${await token(app)}` }, body: body === undefined ? undefined : JSON.stringify(body) });
@@ -19,9 +23,9 @@ async function api(app: FeishuApp, method: string, path: string, body?: unknown)
 }
 
 /** The app's tenant token; also how a wrong App ID / Secret is found out. */
-export async function token(app: FeishuApp): Promise<string> {
-  const k = app.appId, hit = tokens.get(k);
-  if (hit && hit.until > Date.now()) return hit.token;
+export async function token(app: FeishuApp, fresh = false): Promise<string> {
+  const k = keyOf(app), hit = tokens.get(k);
+  if (hit && hit.until > Date.now() && !fresh) return hit.token;
   const res = await fetch(`${BASE}/auth/v3/tenant_access_token/internal`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ app_id: app.appId, app_secret: app.appSecret }) });
   const out: any = await res.json().catch(() => ({}));
   if (!out.tenant_access_token) throw Object.assign(new Error(`FEISHU_AUTH: App ID 或 App Secret 不对（${String(out.msg ?? res.status).slice(0, 80)}）`), { code: "FEISHU_AUTH" });
@@ -44,8 +48,9 @@ export function card(c: Card) {
 }
 
 /** A private card to `openId`; the message id, to ask later whether it was read. */
-export async function sendCard(app: FeishuApp, openId: string, c: Card): Promise<string> {
-  const d = await api(app, "POST", "/im/v1/messages?receive_id_type=open_id", { receive_id: openId, msg_type: "interactive", content: JSON.stringify(card(c)) });
+export async function sendCard(app: FeishuApp, openId: string, c: Card, dedupe?: string): Promise<string> {
+  // uuid: Feishu sends at most one message per uuid within an hour — a retry after a lost answer is not a second card
+  const d = await api(app, "POST", "/im/v1/messages?receive_id_type=open_id", { receive_id: openId, msg_type: "interactive", content: JSON.stringify(card(c)), ...(dedupe ? { uuid: dedupe.slice(0, 50) } : {}) });
   if (!d.message_id) throw Object.assign(new Error("FEISHU_SEND: 没拿到消息 id"), { code: "FEISHU_ERROR" });
   return d.message_id;
 }
