@@ -99,5 +99,7 @@ export async function budgetStatus(d: GateDeps, now = Date.now()) {
     ? latestReadings(d.db, channel).map((r) => ({ win: r.win, used: r.used, resetsAt: r.resetsAt, readAt: r.at, fillPerHour: fillPerHour(d.db, channel, r.win) }))
     : [];
   const quiet = examQuiet(d.db, now, set.quietBeforeMins, set.quietAfterMins) ?? (await screenBusy(now));
-  return { channel, windows, spentToday: channel ? spentToday(d.db, channel, d.config.llm.provider) : { tokens: 0, cost: 0 }, reserve: set.reserve, decision, quiet };
+  // this look reads nothing new; the gate itself reads Codex's allowance first, so "no" here is not the last word (B32)
+  const said = channel === "codex" && !windows.length && !decision.ok ? { ...decision, why: `${decision.why}（这里只看已有读数；后台开工前会先读一次 Codex 额度再判断）` } : decision;
+  return { channel, windows, spentToday: channel ? spentToday(d.db, channel, d.config.llm.provider) : { tokens: 0, cost: 0 }, reserve: set.reserve, decision: said, quiet };
 }
