@@ -117,22 +117,42 @@ export async function classify(llm: Llm, m: RawMail): Promise<Classified> {
 const bigrams = (s: string) => { const t = companyKey(s); const out = new Set<string>(); for (let i = 0; i < t.length - 1; i++) out.add(t.slice(i, i + 2)); return out; };
 const overlap = (a: string, b: string) => { const x = bigrams(a), y = bigrams(b); if (!x.size || !y.size) return 0; let n = 0; for (const g of x) if (y.has(g)) n++; return n / Math.min(x.size, y.size); };
 
+/** A company name without its legal tail and its place-name head: 「中国石油集团工程技术研究院有限公司」 → 「石油集团工程技术研究院」. */
+const coreName = (n: string) => companyKey(n).replace(/(股份|集团|科技|技术)?(有限|有限责任)?(公司)?$/u, "").replace(/^(中国|中)/u, "");
+/** Categories that only happen after applying: they are about an application already sent, not one still being prepared. */
+const AFTER_SENDING = new Set(["测评", "笔试", "面试", "面试改期", "面试取消", "通过", "offer", "拒信"]);
+
 /**
- * Company first (names, aliases, either containing the other). With several applications at that company the job title
- * decides — and when it can't (no title in the mail, or nothing close), return null: a wrong guess would file an
- * interview under the wrong application, asking the user costs one click.
+ * Which application a mail is about, and the ones it could be about when that cannot be told (P2a, B2, B4):
+ *   1. the company by name or alias, either containing the other; else by a close name (two-character pieces, ≥ 0.6) —
+ *      a close name alone is only a candidate, it needs the job title to agree as well;
+ *   2. several applications there: the job title decides (clearly ahead of the next);
+ *   3. still several: a test, an interview, a result can only be about one already sent — if exactly one is, it is that.
+ * Anything else is left for the person, with the candidates kept: a wrong guess would file an interview under the
+ * wrong application, a question costs one click.
  */
-export function linkApplication(db: Db, company: string, position: string): string | null {
-  if (!company) return null;
-  const key = companyKey(company);
-  const apps = db.prepare(`select a.id, p.title, co.name, co.aliases from application a join position p on p.id = a.position_id
+export function linkCandidates(db: Db, company: string, position: string, category = ""): { id: string | null; candidates: string[] } {
+  if (!company) return { id: null, candidates: [] };
+  const key = companyKey(company), core = coreName(company);
+  const apps = db.prepare(`select a.id, a.state, p.title, co.name, co.aliases from application a join position p on p.id = a.position_id
     join campaign c on c.id = a.campaign_id join company co on co.id = c.company_id where a.state not in ('closed', 'cancelled')`).all() as any[];
-  const mine = apps.filter((a) => [a.name, ...json.parse(a.aliases, [] as string[])].some((n: string) => { const k = companyKey(n); return k === key || (key.length >= 2 && (k.includes(key) || key.includes(k))); }));
-  if (mine.length <= 1) return mine[0]?.id ?? null;
-  if (!position) return null;
-  const ranked = mine.map((a) => ({ id: a.id as string, s: overlap(a.title, position) })).sort((x, y) => y.s - x.s);
-  return ranked[0].s >= 0.5 && ranked[0].s > ranked[1].s ? ranked[0].id : null;
+  const names = (a: any) => [a.name, ...json.parse(a.aliases, [] as string[])] as string[];
+  const exact = apps.filter((a) => names(a).some((n) => { const k = companyKey(n); return k === key || (key.length >= 2 && (k.includes(key) || key.includes(k))); }));
+  const close = exact.length ? [] : apps.filter((a) => names(a).some((n) => overlap(coreName(n), core) >= 0.6));
+  const titled = (list: any[]) => {
+    if (!position) return null;
+    const ranked = list.map((a) => ({ id: a.id as string, s: overlap(a.title, position) })).sort((x, y) => y.s - x.s);
+    return ranked[0] && ranked[0].s >= 0.5 && (ranked.length === 1 || ranked[0].s > ranked[1].s) ? ranked[0].id : null;
+  };
+  if (close.length) return { id: titled(close), candidates: close.map((a) => a.id) }; // a close name: only with the title
+  if (exact.length <= 1) return { id: exact[0]?.id ?? null, candidates: exact.map((a) => a.id) };
+  const byTitle = titled(exact);
+  if (byTitle) return { id: byTitle, candidates: exact.map((a) => a.id) };
+  const sent = AFTER_SENDING.has(category) ? exact.filter((a) => a.state === "submitted" || a.state === "in_process") : [];
+  return { id: sent.length === 1 ? sent[0].id : null, candidates: exact.map((a) => a.id) };
 }
+/** The application a mail is about, or null (linkCandidates without the candidates). */
+export const linkApplication = (db: Db, company: string, position: string, category = ""): string | null => linkCandidates(db, company, position, category).id;
 
 // ---------- message → stored row → proposal
 export interface InboxDeps { domain: Domain; vault: string; llm?: Llm; onChanged?: () => void }
@@ -141,7 +161,7 @@ function msgRow(r: any) {
   return { id: r.id as string, account: r.account as string, from: r.sender as string, subject: r.subject as string, receivedAt: r.received_at as string, category: r.category as string, round: r.round as string,
     company: r.company as string, position: r.position as string, scheduledAt: (r.scheduled_at ?? null) as string | null, link: r.link as string, summary: r.summary as string,
     confidence: r.confidence as number, applicationId: (r.application_id ?? null) as string | null, proposalId: (r.proposal_id ?? null) as string | null, status: r.status as string,
-    note: r.note as string, folder: r.folder as string };
+    note: r.note as string, folder: r.folder as string, candidates: json.parse(r.candidates_json ?? "[]", [] as string[]) };
 }
 
 const INTERVIEW_KINDS = ["面试", ...ROUNDS];
@@ -185,40 +205,82 @@ function decide(db: Db, c: Classified, applicationId: string, subject: string): 
   return { note: "" };
 }
 
-/** Same text arriving twice (mailbox + paste, or a forwarded copy) must not be stored or proposed twice. */
-const contentKey = (m: RawMail) => createHash("sha256").update(companyKey(m.subject) + "|" + companyKey(m.text).slice(0, 600)).digest("hex").slice(0, 40);
+/** Same text arriving twice (mailbox + paste, or a forwarded copy) must not be stored or proposed twice. The whole text
+ * counts (B31): two notices that open alike and differ further down are two mails. */
+const contentKey = (m: RawMail) => createHash("sha256").update(companyKey(m.subject) + "|" + companyKey(m.text)).digest("hex").slice(0, 40);
 
 export async function ingestMessage(d: InboxDeps, account: string, m: RawMail) {
   const db = d.domain.db;
   const key = contentKey(m);
   const known = db.prepare("select * from message where message_id = ? or content_key = ?").get(m.messageId, key) as any;
+  if (known?.status === "unclassified") { // kept earlier, not classified yet: this is the moment to try again
+    await classifyKept(d, known.id, m);
+    d.onChanged?.();
+    return { message: msgRow(db.prepare("select * from message where id = ?").get(known.id)), added: false };
+  }
   if (known) return { message: msgRow(known), added: false };
-  if (!d.llm) throw new DomainError("NO_MODEL", "未配置模型，无法分类");
-  // ref = the mail's date: a mail whose classification waits for an external agent (ADR-032) keeps the pull looking back to it
-  const c = await withPurpose(currentPurpose().purpose, m.date, () => classify(d.llm!, m));
-  // the model call took seconds: a parallel pull may have stored the same mail meanwhile
-  const raced = db.prepare("select * from message where message_id = ? or content_key = ?").get(m.messageId, key) as any;
-  if (raced) return { message: msgRow(raced), added: false };
-
+  // kept before anything can fail (B30): no model, a short allowance or an error leaves it waiting, never lost
   const id = ulid();
   const dir = join(d.vault, "inbox"); mkdirSync(dir, { recursive: true });
   const bodyPath = join(dir, id + ".txt");
   writeFileSync(bodyPath, `From: ${m.from}\nSubject: ${m.subject}\nDate: ${m.date}\n\n${m.text}`, "utf8");
   if (m.html) writeFileSync(join(dir, id + ".html"), m.html, "utf8");
   if (m.eml) writeFileSync(join(dir, id + ".eml"), m.eml);
-
-  const applicationId = c.category === "其他" ? null : linkApplication(db, c.company, c.position);
-  let proposalId: string | null = null, note = "";
-  if (applicationId) {
-    const r = decide(db, c, applicationId, m.subject);
-    if ("note" in r) note = r.note;
-    else proposalId = d.domain.createProposal(r.kind, r.payload, "system:inbox", `来自「${m.subject.slice(0, 60)}」：${c.summary}`.slice(0, 300), 24 * 14).id;
-  }
-  db.prepare(`insert or ignore into message(id, account, message_id, content_key, sender, subject, received_at, body_path, category, round, company, position, scheduled_at, link, summary, confidence, application_id, proposal_id, status, note, folder, created_at)
-    values (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`).run(id, account, m.messageId, key, m.from, m.subject, m.date, bodyPath, c.category, c.round, c.company, c.position, c.scheduledAt, c.link, c.summary, c.confidence, applicationId, proposalId, proposalId ? "proposed" : "new", note, m.folder ?? "", now());
+  const kept = db.prepare(`insert or ignore into message(id, account, message_id, content_key, sender, subject, received_at, body_path, category, status, note, folder, created_at)
+    values (?,?,?,?,?,?,?,?, '', 'unclassified', '', ?, ?)`).run(id, account, m.messageId, key, m.from, m.subject, m.date, bodyPath, m.folder ?? "", now());
+  if (!kept.changes) return { message: msgRow(db.prepare("select * from message where message_id = ? or content_key = ?").get(m.messageId, key)), added: false }; // a parallel pull kept it first
   db.prepare("delete from mail_skipped where message_id = ?").run(m.messageId);
+  await classifyKept(d, id, m);
   d.onChanged?.();
   return { message: msgRow(db.prepare("select * from message where id = ?").get(id)), added: true };
+}
+
+/** Classify a kept mail and file what it asks for. Throws when the model cannot answer now; the mail stays kept. */
+async function classifyKept(d: InboxDeps, id: string, m: RawMail) {
+  const db = d.domain.db;
+  if (!d.llm) throw new DomainError("NO_MODEL", "未配置模型，邮件已保存，等能分类时再处理");
+  // ref = the mail's date: a mail whose classification waits for an external agent (ADR-032) keeps the pull looking back to it
+  const c = await withPurpose(currentPurpose().purpose, m.date, () => classify(d.llm!, m));
+  const link = c.category === "其他" ? { id: null, candidates: [] as string[] } : linkCandidates(db, c.company, c.position, c.category);
+  let proposalId: string | null = null, note = "", status = "new";
+  if (link.id) {
+    const r = decide(db, c, link.id, m.subject);
+    if ("note" in r) note = r.note;
+    else { proposalId = d.domain.createProposal(r.kind, r.payload, "system:inbox", `来自「${m.subject.slice(0, 60)}」：${c.summary}`.slice(0, 300), 24 * 14).id; status = "proposed"; }
+  } else if (c.category !== "其他" && link.candidates.length !== 1) {
+    status = "unlinked"; // which application: the person picks (inbox.link); a test in it is reminded of meanwhile
+    note = link.candidates.length ? `可能是 ${link.candidates.length} 条申请之一，请在收件箱里选` : "没找到对应的申请";
+  }
+  db.prepare(`update message set category = ?, round = ?, company = ?, position = ?, scheduled_at = ?, link = ?, summary = ?, confidence = ?, application_id = ?,
+    proposal_id = ?, status = ?, note = ?, candidates_json = ? where id = ?`).run(c.category, c.round, c.company, c.position, c.scheduledAt, c.link, c.summary, c.confidence,
+    link.id, proposalId, status, note, JSON.stringify(link.candidates), id);
+}
+
+/** Mail kept but not classified yet (no model then, a short allowance, an error): tried again at each pull, oldest first. */
+export async function classifyWaiting(d: InboxDeps, limit = 20): Promise<{ done: number; errors: string[] }> {
+  const rows = d.domain.db.prepare("select * from message where status = 'unclassified' order by received_at limit ?").all(limit) as any[];
+  const out = { done: 0, errors: [] as string[] };
+  for (const r of rows) {
+    const text = existsSync(r.body_path) ? readFileSync(r.body_path, "utf8").replace(/^[\s\S]*?\n\n/, "") : "";
+    try { await classifyKept(d, r.id, { messageId: r.message_id, from: r.sender, subject: r.subject, date: r.received_at, text, folder: r.folder }); out.done++; }
+    catch (e: any) { out.errors.push(`「${String(r.subject).slice(0, 30)}」：${e?.message ?? e}`); if (e?.code === "BUDGET_DEFERRED" || e?.code === "MODEL_DELEGATED") break; }
+  }
+  return out;
+}
+
+/**
+ * inbox.replay: what the current rules would do with the recent mail — which application, and what change — written
+ * nowhere. For looking over before mail is filed on its own (P2b).
+ */
+export function replayMessages(db: Db, limit = 50) {
+  const rows = db.prepare("select * from message where status != 'unclassified' and category != '其他' order by received_at desc limit ?").all(limit) as any[];
+  return { items: rows.map((r) => {
+    const c: Classified = { category: r.category, round: r.round, isReminder: false, company: r.company, position: r.position, scheduledAt: r.scheduled_at, link: r.link, summary: r.summary, confidence: r.confidence };
+    const link = linkCandidates(db, c.company, c.position, c.category);
+    const would = link.id ? decide(db, c, link.id, r.subject) : null;
+    return { messageId: r.id as string, subject: r.subject as string, receivedAt: r.received_at as string, category: c.category, company: c.company, linkedNow: (r.application_id ?? null) as string | null,
+      wouldLink: link.id, candidates: link.candidates, wouldDo: would && !("note" in would) ? { tool: would.kind, input: would.payload } : null, note: would && "note" in would ? would.note : link.id ? "" : link.candidates.length ? "分不清是哪条申请" : "没找到对应的申请" };
+  }) };
 }
 
 export function listMessages(db: Db, q: { category?: string; includeOther?: boolean; limit?: number } = {}) {
@@ -246,7 +308,7 @@ export function linkMessage(d: InboxDeps, id: string, applicationId: string) {
     if ("note" in res) note = res.note;
     else proposalId = d.domain.createProposal(res.kind, res.payload, "system:inbox", `来自「${String(r.subject).slice(0, 60)}」：${r.summary}`.slice(0, 300), 24 * 14).id;
   }
-  db.prepare("update message set application_id = ?, proposal_id = ?, status = ?, note = ? where id = ?").run(applicationId, proposalId, proposalId ? "proposed" : r.status, note, id);
+  db.prepare("update message set application_id = ?, proposal_id = ?, status = ?, note = ?, candidates_json = '[]' where id = ?").run(applicationId, proposalId, proposalId ? "proposed" : r.status === "unlinked" ? "new" : r.status, note, id);
   return { message: msgRow(db.prepare("select * from message where id = ?").get(id)) };
 }
 
@@ -269,12 +331,14 @@ export function pullAll(d: InboxDeps, fetcher: MailFetcher): Promise<PullResult>
     const out: PullResult = { accounts: 0, fetched: 0, recruiting: 0, added: 0, proposals: 0, skipped: 0, errors: [] };
     try {
       const db = d.domain.db;
+      const waiting = await classifyWaiting(d);
+      out.errors.push(...waiting.errors);
       for (const a of loadAccounts(d.vault)) {
         out.accounts++;
         try {
           const last = (db.prepare("select max(t) as t from (select max(received_at) as t from message where account = ? union all select max(received_at) from mail_skipped where account = ?)").get(a.id, a.id) as any)?.t as string | null;
-          const waiting = oldestWaitingMail(db);
-          const since = new Date(Math.min(last ? Date.parse(last) - 86400_000 : Date.now() - 14 * 86400_000, waiting ? Date.parse(waiting) - 3600_000 : Infinity));
+          const delegated = oldestWaitingMail(db);
+          const since = new Date(Math.min(last ? Date.parse(last) - 86400_000 : Date.now() - 14 * 86400_000, delegated ? Date.parse(delegated) - 3600_000 : Infinity));
           const mails = await fetcher(a, since);
           out.fetched += mails.length;
           const applied = appliedCompanyKeys(db);

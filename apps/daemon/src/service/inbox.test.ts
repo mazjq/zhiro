@@ -135,13 +135,36 @@ describe("inbox: every kind of notice maps to the right change", () => {
     expect(shown.find((m) => m.subject === "请补充材料")!.folder).toBe("垃圾箱");
   });
 
-  it("two applications at one company: a mail that does not name the job is left for the user to place", async () => {
-    const { domain, d, control } = setup({ 笔试通知: { category: "笔试", position: "" }, 嵌入式笔试: { category: "笔试", position: "嵌入式软件工程师" } });
+  it("two applications at one company: a test without a job title is about the one already sent (B2); with both sent it is left for the user, candidates kept", async () => {
+    const { domain, d, control } = setup({ 笔试通知: { category: "笔试", position: "" }, 第二次笔试: { category: "笔试", position: "" }, 嵌入式笔试: { category: "笔试", position: "嵌入式软件工程师" } });
     const embedded = domain.createApplication(domain.listPositions({ query: "嵌入式" }).items[0].id);
-    const vague = await ingestMessage(d, "a", mail("笔试通知"));
-    expect(vague.message).toMatchObject({ applicationId: null, proposalId: null });
+    // one sent, one still being prepared: a written test can only be about the sent one
+    expect((await ingestMessage(d, "a", mail("笔试通知"))).message.applicationId).toBe(control.id);
     expect((await ingestMessage(d, "a", mail("嵌入式笔试安排"))).message.applicationId).toBe(embedded.id);
-    expect(linkMessage(d, vague.message.id, control.id).message.proposalId).toBeTruthy();
+    // both sent and no title: the user places it; the candidates are kept
+    domain.updateApplication({ id: embedded.id, state: "submitted" });
+    const vague = await ingestMessage(d, "a", mail("第二次笔试"));
+    expect(vague.message).toMatchObject({ applicationId: null, proposalId: null, status: "unlinked" });
+    expect(new Set(vague.message.candidates)).toEqual(new Set([control.id, embedded.id]));
+    expect(linkMessage(d, vague.message.id, embedded.id).message).toMatchObject({ applicationId: embedded.id });
+  });
+
+  it("a company written differently is found by a close name only when the job title agrees too (B4)", async () => {
+    const { domain, d, control } = setup({ 资格审查: { category: "通过", company: "中国武汉华中数控集团有限公司", position: "运动控制算法工程师" }, 无岗位: { category: "通过", company: "中国武汉华中数控集团有限公司", position: "" } });
+    expect((await ingestMessage(d, "a", mail("资格审查通过"))).message.applicationId).toBe(control.id);
+    expect((await ingestMessage(d, "a", mail("无岗位通知"))).message).toMatchObject({ applicationId: null, candidates: [control.id] });
+    void domain;
+  });
+
+  it("a mail is kept before it is classified: no model, it waits; the next pull classifies it (B30)", async () => {
+    const { domain, d } = setup({ 一面邀请: { category: "面试", round: "一面" } });
+    const llm = d.llm;
+    d.llm = undefined;
+    await expect(ingestMessage(d, "a", mail("一面邀请"))).rejects.toMatchObject({ code: "NO_MODEL" });
+    expect(listMessages(domain.db, { includeOther: true }).items.map((m) => m.status)).toEqual(["unclassified"]);
+    d.llm = llm;
+    await pullAll(d, async () => []);
+    expect(listMessages(domain.db).items[0]).toMatchObject({ category: "面试", status: "proposed" });
   });
 
   it("the original mail can be read back: text, HTML and the raw .eml", async () => {
