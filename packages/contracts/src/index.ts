@@ -800,11 +800,11 @@ export const tools = {
   "brief.at": defineTool({
     name: "brief.at",
     description: "设每日简报的时间（本人），本地时间 HH:MM。",
-    input: Type.Object({ at: Type.String({ pattern: "^\\d{1,2}:\\d{2}$" }) }),
+    input: Type.Object({ at: Type.String({ pattern: "^([01]?\\d|2[0-3]):[0-5]\\d$", description: "0–23 点、0–59 分，如 8:00、21:30" }) }),
     output: Type.Object({ at: Type.String(), next: Type.String() }),
     effects: WRITE,
     execution: "sync",
-    errors: [],
+    errors: ["BAD_INPUT"],
   }),
   "brief.make": defineTool({
     name: "brief.make",

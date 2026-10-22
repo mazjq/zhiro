@@ -69,7 +69,7 @@ import { budgetStatus, type GateDeps } from "./budget/gate.js";
 import { cardView } from "./service/card-state.js";
 import { tx } from "./db.js";
 import { latestBrief, runBrief } from "./daily/brief.js";
-import { nextAt } from "./workflows/daily.js";
+import { nextAt, normalizeAt } from "./workflows/daily.js";
 import { setupFeishu } from "./workflows/notify.js";
 import { ack as ackNotice, listNotices } from "./notify/center.js";
 import { codexLauncher } from "./agent/backends/codex.js";
@@ -361,12 +361,14 @@ const handlers: { [N in ToolName]: Handler<N> } = {
   "brief.today": (_i, _a, s) => ({ brief: latestBrief(s.domain.db) }),
   "brief.at": (i, a, s) => {
     humanOnly(a);
-    updateConfig(s.config.vault, (doc) => { doc.brief = { ...(doc.brief ?? {}), at: i.at }; });
-    s.config.brief = { ...(s.config.brief ?? {}), at: i.at };
+    const at = normalizeAt(i.at);
+    if (!at) throw new ToolError("BAD_INPUT", "时间要写成 0–23 点、0–59 分，如 8:00");
+    updateConfig(s.config.vault, (doc) => { doc.brief = { ...(doc.brief ?? {}), at }; });
+    s.config.brief = { ...(s.config.brief ?? {}), at };
     // the waiting run wakes at the new hour
-    const next = new Date(nextAt(i.at)).toISOString();
+    const next = new Date(nextAt(at)).toISOString();
     s.domain.db.prepare("update workflow set next_run_at = ?, checkpoint_json = ? where kind = 'daily_brief' and state = 'running'").run(next, JSON.stringify({ next }));
-    return { at: i.at, next };
+    return { at, next };
   },
   "brief.make": (_i, a, s) => { humanOnly(a); const b = runBrief(s.domain.db); s.domain.db.prepare("update brief_run set seen_at = ? where id = ?").run(new Date().toISOString(), b.id); return { id: b.id }; },
   "usage.summary": (_i, _a, s) => usageSummary(s.domain.db),
