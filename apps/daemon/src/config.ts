@@ -7,6 +7,8 @@ import { dataDir } from "./datadir.js";
 
 export interface JobosConfig {
   vault: string;
+  /** S1: started with --maintenance / ZHIRO_MAINTENANCE=1 — read only: no schedules, no tidying, no writes (set at start, never in jobos.yaml) */
+  maintenance?: boolean;
   http: { host: string; port: number };
   /** forBackground (ADR-057): the background tidying uses this built-in model instead of the chosen harness; on unless turned off */
   llm: { provider: string; model: string; thinking?: string; forBackground?: boolean };
