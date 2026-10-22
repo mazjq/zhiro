@@ -32,6 +32,9 @@ export interface Listed { campaignIds: string[]; positionIds: string[] }
  */
 const sourceKey = (aggregate: boolean, l: Listing) => (aggregate || /#\d+$/.test(l.externalId) || l.externalId === l.url || l.externalId === l.title ? "" : l.externalId);
 
+/** How long after claims began (v45) a post nobody has claimed may close: every daily subscription has read by then. */
+export const CLAIMS_SETTLE_MS = 48 * 3600_000;
+
 /** A subscription's snapshots are named `<24-char time>-<configId>.json`; only its own, not another id that ends the same. */
 const ownSnapshots = (dir: string, configId: string) => readdirSync(dir).filter((f) => f.slice(25) === `${configId}.json`).sort();
 const SNAPSHOT_KEEP = 7;
@@ -164,6 +167,10 @@ export function ingest(store: { db: Db }, vault: string, sourceId: string, confi
       const gone = (db.prepare("select distinct campaign_id id from source_listing where provider = ? and content_path like ? and campaign_id is not null").all(sourceId, `%-${configId}.json`) as { id: string }[]).map((r) => r.id);
       const claimed = (db.prepare("select distinct p.campaign_id id from position_seen s join position p on p.id = s.position_id where s.config_id = ? and s.seen_at < ?").all(configId, started) as { id: string }[]).map((r) => r.id);
       const ids = [...new Set([...campaigns, ...gone, ...claimed])];
+      // the first two days of claims every daily subscription reads at least once; until then a post nobody has claimed
+      // yet may be another channel's whose listing row is this one's (rows are shared): it waits
+      const since = (db.prepare("select value from meta where key = 'claims_since'").get() as { value: string } | undefined)?.value ?? "";
+      const settled = since !== "" && Date.parse(since) < Date.parse(started) - CLAIMS_SETTLE_MS ? 1 : 0;
       inChunks(ids, (part, q) => {
         // a post closes when no other subscription claims it, and it was this one's: claimed by it before, or — not
         // claimed by anyone yet (from before claims were kept) — filed by no other subscription
@@ -171,8 +178,8 @@ export function ingest(store: { db: Db }, vault: string, sourceId: string, confi
           and status = 'open' and last_seen_at < ? and id not in (select position_id from application where state != 'cancelled')
           and not exists (select 1 from position_seen s where s.position_id = position.id and s.config_id != ?)
           and (exists (select 1 from position_seen s where s.position_id = position.id and s.config_id = ?)
-            or not exists (select 1 from source_listing l where l.position_id = position.id and (l.provider != ? or l.content_path not like ?)))`)
-          .run(now(), ...part, started, configId, configId, sourceId, `%-${configId}.json`).changes);
+            or (? and not exists (select 1 from source_listing l where l.position_id = position.id and (l.provider != ? or l.content_path not like ?))))`)
+          .run(now(), ...part, started, configId, configId, settled, sourceId, `%-${configId}.json`).changes);
         db.prepare(`delete from position_seen where config_id = ? and seen_at < ? and position_id in (select id from position where campaign_id in (${q}))`).run(configId, started, ...part);
       });
     }
