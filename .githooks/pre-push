@@ -1,9 +1,14 @@
 #!/bin/sh
-# Installed by `pnpm install` (git config core.hooksPath .githooks). Branches named local/* hold what stays on one
-# machine (D-31) and are never pushed.
+# Installed by `pnpm install` (git config core.hooksPath .githooks).
+# Branches named local/* hold what stays on one machine (D-31) and are never pushed. Every commit being pushed is
+# checked line by line, with the e-mail it gives: once pushed, even a commit that a later one undoes is public.
+zero=0000000000000000000000000000000000000000
 while read local_ref local_sha remote_ref remote_sha; do
   case "$local_ref" in
     refs/heads/local/*) echo "refusing to push $local_ref: local/* branches stay on this machine (D-31)" >&2; exit 1 ;;
   esac
+  [ "$local_sha" = "$zero" ] && continue
+  if [ "$remote_sha" = "$zero" ]; then range="origin/main..$local_sha"; else range="$remote_sha..$local_sha"; fi
+  node scripts/check-clean.mjs --commits "$range" || exit 1
 done
 exit 0
