@@ -98,7 +98,9 @@ export function createApp(s: Services, auth: Auth, chat: ChatHub) {
   const dist = UI_DIST;
   if (existsSync(join(dist, "index.html"))) {
     app.get("/app", (c) => c.redirect("/app/"));
-    app.get("/app/", (c) => c.html(readFileSync(join(dist, "index.html"), "utf8"))); // read per request so a UI rebuild shows up without restarting the daemon
+    // read per request so a UI rebuild shows up without restarting the daemon; it carries the computer's zone, for a
+    // browser that cannot name it (env.ts: Windows' Alberta zone, 2026)
+    app.get("/app/", (c) => c.html(readFileSync(join(dist, "index.html"), "utf8").replace("<head>", `<head><meta name="zhiro-tz" content="${(process.env.TZ ?? "").replace(/[^\w/+-]/g, "")}">`)));
     app.use("/app/*", serveStatic({ root: dist, rewriteRequestPath: (p) => p.replace(/^\/app/, "") }));
   }
 

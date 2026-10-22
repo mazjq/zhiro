@@ -6,7 +6,7 @@ import { H1, Card, Chip, Button, Empty } from "../ui";
 const input = "px-3 py-1.5 border border-line rounded-md bg-paper text-sm min-w-0";
 const TONE: Record<string, "good" | "accent" | "amber" | "bad" | ""> = { 面试: "good", offer: "good", 通过: "good", 笔试: "accent", 测评: "accent", 面试改期: "amber", 待办: "amber", 面试取消: "bad", 拒信: "bad" };
 const when = (s: string | null) => (s ? s.slice(5, 16).replace("T", " ") : "");
-const local = (iso: string) => { const d = new Date(iso); return `${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")} ${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`; };
+const local = (iso: string) => new Date(iso).toLocaleString("zh-CN", { month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit", hour12: false }).replace("/", "-"); // the computer's zone (zone.ts)
 
 /** Connect 163 / QQ with an IMAP 授权码. The code goes straight to the daemon and is never shown again. */
 function Accounts({ onChanged }: { onChanged: () => void }) {
