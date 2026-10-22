@@ -219,3 +219,24 @@ describe("the mail poll after every mailbox was disconnected and one is connecte
     expect((db.prepare("select state from workflow where kind = 'inbox_poll'").get() as any).state).toBe("running");
   });
 });
+
+describe("inbox: the same employer written another way", () => {
+  it("「DJI 大疆」 is 「大疆创新」; a mail placed by hand teaches the name", async () => {
+    const { domain, d } = setup({ 大疆笔试: { category: "笔试", company: "DJI 大疆", position: "" }, 新写法: { category: "测评", company: "Hznc HR", position: "" } });
+    const L = (title: string, id: string) => ({ externalId: id, url: "https://e.com", title, company: "深圳市大疆创新科技有限公司", locations: ["深圳"], publisher: "大疆", grade: "官方" as const, isOriginal: true, confidence: 1 });
+    const { ingest } = await import("../data/index.js");
+    ingest(domain, d.vault, "moka", "dji", [L("控制算法工程师", "d1"), L("数字管理研发工程师", "d2")]);
+    const dji = (t: string) => domain.listPositions({ query: t, limit: 50 } as any).items.find((p: any) => /大疆/.test(p.companyName ?? ""))!.id;
+    const ctrl = domain.createApplication(dji("控制算法工程师"));
+    domain.updateApplication({ id: ctrl.id, state: "submitted" });
+    domain.createApplication(dji("数字管理")); // a draft at the same company
+    expect((await ingestMessage(d, "a", mail("大疆笔试邀请"))).message.applicationId).toBe(ctrl.id);
+    // a way of writing nothing recognises: placed by hand, then learnt
+    const first = await ingestMessage(d, "a", mail("新写法测评"));
+    expect(first.message.applicationId).toBeNull();
+    const hz = listMessages(domain.db).items.find((m) => m.subject === "新写法测评")!;
+    const control = (domain.db.prepare("select a.id from application a join position p on p.id = a.position_id where p.title = '运动控制算法工程师'").get() as any).id;
+    linkMessage(d, hz.id, control);
+    expect((await ingestMessage(d, "a", mail("新写法测评二", "另一封"))).message.applicationId).toBe(control);
+  });
+});

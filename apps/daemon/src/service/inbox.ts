@@ -119,6 +119,14 @@ const overlap = (a: string, b: string) => { const x = bigrams(a), y = bigrams(b)
 
 /** A company name without its legal tail and its place-name head: 「中国石油集团工程技术研究院有限公司」 → 「石油集团工程技术研究院」. */
 const coreName = (n: string) => companyKey(n).replace(/(股份|集团|科技|技术)?(有限|有限责任)?(公司)?$/u, "").replace(/^(中国|中)/u, "");
+/**
+ * The Chinese core of a name: no Latin brand, no legal or generic tail — 「DJI 大疆」 → 「大疆」, 「大疆创新科技有限公司」 →
+ * 「大疆」. Two names whose cores contain one another (two characters at least) are taken for the same employer.
+ */
+const GENERIC = /(股份有限公司|有限责任公司|有限公司|集团|股份|公司|创新|科技|技术|智能|信息|控股|中国|中)/gu;
+const cnCore = (n: string) => n.replace(/[^\u4e00-\u9fff]/gu, "").replace(GENERIC, "");
+const sameCore = (a: string, b: string) => { const x = cnCore(a), y = cnCore(b); return x.length >= 2 && y.length >= 2 && (x.includes(y) || y.includes(x)); };
+
 /** Categories that only happen after applying: they are about an application already sent, not one still being prepared. */
 const AFTER_SENDING = new Set(["测评", "笔试", "面试", "面试改期", "面试取消", "通过", "offer", "拒信"]);
 
@@ -137,7 +145,7 @@ export function linkCandidates(db: Db, company: string, position: string, catego
   const apps = db.prepare(`select a.id, a.state, p.title, co.name, co.aliases from application a join position p on p.id = a.position_id
     join campaign c on c.id = a.campaign_id join company co on co.id = c.company_id where a.state not in ('closed', 'cancelled')`).all() as any[];
   const names = (a: any) => [a.name, ...json.parse(a.aliases, [] as string[])] as string[];
-  const exact = apps.filter((a) => names(a).some((n) => { const k = companyKey(n); return k === key || (key.length >= 2 && (k.includes(key) || key.includes(k))); }));
+  const exact = apps.filter((a) => names(a).some((n) => { const k = companyKey(n); return k === key || (key.length >= 2 && (k.includes(key) || key.includes(k))) || sameCore(n, company); }));
   const close = exact.length ? [] : apps.filter((a) => names(a).some((n) => overlap(coreName(n), core) >= 0.6));
   const titled = (list: any[]) => {
     if (!position) return null;
@@ -309,6 +317,14 @@ export function linkMessage(d: InboxDeps, id: string, applicationId: string) {
     else proposalId = d.domain.createProposal(res.kind, res.payload, "system:inbox", `来自「${String(r.subject).slice(0, 60)}」：${r.summary}`.slice(0, 300), 24 * 14).id;
   }
   db.prepare("update message set application_id = ?, proposal_id = ?, status = ?, note = ?, candidates_json = '[]' where id = ?").run(applicationId, proposalId, proposalId ? "proposed" : r.status === "unlinked" ? "new" : r.status, note, id);
+  // the person said which company this mail's way of writing it means: kept as that company's alias, so the next mail
+  // written the same way is placed without asking
+  const co = db.prepare("select co.id, co.name, co.aliases from application a join campaign c on c.id = a.campaign_id join company co on co.id = c.company_id where a.id = ?").get(applicationId) as any;
+  const said = String(r.company ?? "").trim();
+  if (co && said && companyKey(said) !== companyKey(co.name)) {
+    const aliases = json.parse(co.aliases, [] as string[]);
+    if (!aliases.some((x: string) => companyKey(x) === companyKey(said))) db.prepare("update company set aliases = ? where id = ?").run(JSON.stringify([...aliases, said]), co.id);
+  }
   return { message: msgRow(db.prepare("select * from message where id = ?").get(id)) };
 }
 
