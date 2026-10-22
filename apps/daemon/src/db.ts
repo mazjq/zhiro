@@ -451,6 +451,11 @@ export const MIGRATIONS: string[] = [
   `
   alter table message add column filed_json text;
   `,
+  // v44: P4 — each morning's brief kept whole, and what each item looked like when last shown (only changes are told)
+  `
+  create table brief_run (id text primary key, at text not null, since text not null, brief_json text not null, seen_at text);
+  create table brief_item (key text primary key, hash text not null, first_at text not null, last_at text not null, run_id text not null);
+  `,
 ];
 
 /**
