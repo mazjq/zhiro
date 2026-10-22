@@ -2,7 +2,7 @@
  * 调研对比 (vault/research/2026-10-01-research-benchmark.md): the assistant runs the same single message dots / Muse got,
  * with its own tools only (page.read, pool.list, listing.capture …). Output = the answer plus a tool log, to be scored
  * by hand against the answer key like the other two.
- *   pnpm --filter @zhiro/daemon eval:research -- --model anthropic/claude-opus-5-5 --prompt <file> --out <file> [--max-tools 200] [--timeout 2700]
+ *   pnpm --filter @zhiro/daemon eval:research -- --vault <data folder> --model anthropic/claude-opus-5-5 --prompt <file> --out <file> [--with-pool] [--max-tools 200] [--timeout 2700]
  * A fresh temp vault (seed.ts) and chrome profile: no login state, the person's real vault is only read for credentials.
  */
 import { mkdtempSync, readFileSync, writeFileSync, mkdirSync, copyFileSync, existsSync, rmSync } from "node:fs";
@@ -19,7 +19,9 @@ const spec = get("--model", "anthropic/claude-opus-5-5"), [provider, ...rest] = 
 const promptPath = get("--prompt", ""), out = get("--out", "");
 const maxTools = Number(get("--max-tools", "200")), timeout = Number(get("--timeout", "2700"));
 if (!promptPath || !out) { console.error("--prompt and --out are required"); process.exit(2); }
-const realVault = join(process.env.APPDATA ?? "", "Zhiro", "vault");
+// B8: the data folder whose credentials (and, with --with-pool, database) are read is named, never defaulted
+const realVault = get("--vault", "");
+if (!realVault) { console.error("--vault <data folder> is required: its credentials are read (and with --with-pool a copy of its database is made)"); process.exit(2); }
 
 const dir = mkdtempSync(join(tmpdir(), "jobos-bench-"));
 // the folder can hold a copy of the real database (--with-pool) and was never removed: ~0.7 GB a run (2026-10-14)

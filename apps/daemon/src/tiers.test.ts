@@ -106,3 +106,33 @@ describe("tool list per actor", () => {
     expect(agent).toContain("apply.start"); // ADR-032
   });
 });
+
+describe("what an agent is told before calling says what tierOf does (B7)", async () => {
+  const { policySummary } = await import("./service/tiers.js");
+  const { tools } = await import("@zhiro/contracts");
+  const say = (s: Services, name: string) => policySummary(name, (tools as any)[name], s);
+  it("default: the application browser runs at once, a reference document asks, a read says nothing", () => {
+    const { s } = setup();
+    expect(say(s, "apply.start")).toBe("（写操作：直接执行）");
+    expect(say(s, "apply.open")).toBe("（直接执行）");
+    expect(say(s, "apply.read")).toBe("（直接执行）");
+    expect(say(s, "apply.reference")).toContain("需用户确认");
+    expect(say(s, "position.list")).toBe("");
+    expect(say(s, "position.watch")).toContain("可撤销");
+    expect(say(s, "application.update")).toContain("已投递");
+  });
+  it("conservative: every write asks", async () => {
+    const { s } = setup();
+    await callTool("agent.mode", { mode: "conservative" }, HUMAN, s);
+    for (const n of ["apply.start", "apply.open", "position.watch", "application.update", "source.add"]) expect(say(s, n)).toContain("需用户确认");
+  });
+  it("an undo is promised only where undoPlan has one", () => {
+    const { s } = setup();
+    for (const n of Object.keys(tools)) if (say(s, n).includes("可撤销")) expect(["position.watch", "recommend.tag", "recommend.untag", "application.create", "application.update", "fact.upsert", "fact.restore", "preset.save"]).toContain(n);
+  });
+});
+
+it("config.get names the config file with this platform's separators (B9)", async () => {
+  const { s } = setup();
+  expect(((await callTool("config.get", {}, HUMAN, s)) as any).config.configFile).toBe(join(s.config.vault, "config", "jobos.yaml"));
+});

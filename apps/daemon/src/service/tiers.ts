@@ -43,6 +43,28 @@ export function tierOf(name: string, c: ToolContract, inp: any, s: Services, byA
   return "do";
 }
 
+/** Writes whose effect depends on the input — said as such, never guessed (application.update: its state; source.add: a file or a link). */
+const BY_INPUT: Record<string, string> = {
+  "application.update": "（写操作：把申请改成已投递 / 流程中 / 已结束，或改一条已投递的申请，需用户确认；其余直接执行，用户可撤销）",
+  "source.add": "（写操作：本机文件需用户确认；网址直接执行）",
+};
+/** The tools undoPlan can reverse: only these may promise an undo. Keep in step with undoPlan's cases. */
+const UNDOABLE = new Set(["position.watch", "recommend.tag", "recommend.untag", "application.create", "application.update", "fact.upsert", "fact.restore", "preset.save"]);
+
+/**
+ * What an agent is told, before calling, about one tool: the same rule tierOf applies (B7 — the MCP list used to guess
+ * from effects and said 「需确认」 of apply.start, which runs at once). "" for a read. Past the write budget of a turn any
+ * write becomes a card too; that is said once in the skill, not on every tool.
+ */
+export function policySummary(name: string, c: ToolContract, s: Services, byAgent = false): string {
+  const e = c.effects;
+  if (!e.localWrite && !e.externalAction && !e.dataEgress) return "";
+  if (agentMode(s) !== "conservative" && BY_INPUT[name]) return BY_INPUT[name];
+  if (tierOf(name, c, {}, s, byAgent) === "ask") return "（需用户确认：生成确认卡）";
+  if (!e.localWrite) return "（直接执行）";
+  return UNDOABLE.has(name) ? "（写操作：直接执行，用户可撤销）" : "（写操作：直接执行）";
+}
+
 type Inverse = { name: string; input: unknown } | null;
 
 /** Capture what an undo needs BEFORE the write; the inverse call is built once the output is known. */
