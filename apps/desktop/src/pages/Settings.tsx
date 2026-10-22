@@ -6,6 +6,47 @@ import ModelService from "./ModelService";
 
 const k = (n: number) => (n >= 10_000 ? `${(n / 10_000).toFixed(1)} 万` : n.toLocaleString());
 
+/**
+ * 飞书提醒 (P1): the app's ID and secret and the person's phone or e-mail go in here once; Zhiro finds the person,
+ * sends a first card, and shows 「已在手机上看到」 when Feishu reports it read. The secret is kept in the data folder's
+ * settings and never shown again.
+ */
+function FeishuCard({ cfg, reload }: { cfg: any; reload: () => void }) {
+  const [open, setOpen] = useState(false);
+  const [f, setF] = useState({ appId: "", appSecret: "", who: "" });
+  const [busy, setBusy] = useState(false);
+  const [msg, setMsg] = useState("");
+  const [test, setTest] = useState<any>(null);
+  const setup = async () => {
+    setBusy(true); setMsg("正在检查应用、找到你、发测试消息…");
+    try { const r = await call("notify.setup", f); setF({ appId: "", appSecret: "", who: "" }); setOpen(false); setMsg("测试消息已发出：在手机飞书里打开「Zhiro 职路」看一眼"); setTest({ id: r.noticeId }); reload(); }
+    catch (e: any) { setMsg(String(e.message).replace(/^[A-Z_]{4,}: /, "")); } finally { setBusy(false); }
+  };
+  // after the test is sent: ask every few seconds whether Feishu reports it read
+  useEffect(() => {
+    if (!test?.id || test.readAt) return;
+    const t = setInterval(() => call("notice.list", { limit: 10 }).then((r) => { const n = r.items.find((x: any) => x.id === test.id); if (n) setTest(n); }).catch(() => {}), 5000);
+    return () => clearInterval(t);
+  }, [test?.id, test?.readAt]);
+  const input = "w-full border border-line rounded-md px-2 py-1.5 text-sm bg-paper";
+  return (
+    <Card className="p-5">
+      <div className="flex items-center gap-2 mb-2"><div className="font-bold">飞书提醒</div>{cfg?.feishu?.configured ? <Chip tone="good">已接通</Chip> : <Chip tone="amber">未接通</Chip>}</div>
+      <p className="text-sm text-ink-2 mb-3">笔试面试、截止、投递进展发到你的飞书私聊；你在手机上看过才算送到，没看会按紧急程度再提醒你。</p>
+      {test && <div className="text-sm mb-2">{test.readAt ? <Chip tone="good">已在手机上看到 ✓</Chip> : test.state === "sent" ? <Chip tone="amber">已发出，等你在手机上看一眼…</Chip> : <Chip>{test.state}</Chip>}</div>}
+      {msg && <div className="text-sm text-ink-2 mb-2">{msg}</div>}
+      {!open ? <Button onClick={() => setOpen(true)}>{cfg?.feishu?.configured ? "重新接通" : "接通飞书"}</Button> : (
+        <div className="space-y-2">
+          <input className={input} placeholder="App ID（cli_ 开头）" value={f.appId} onChange={(e) => setF({ ...f, appId: e.target.value })} />
+          <input className={input} type="password" autoComplete="off" placeholder="App Secret（飞书开放平台「凭证与基础信息」里复制）" value={f.appSecret} onChange={(e) => setF({ ...f, appSecret: e.target.value })} />
+          <input className={input} placeholder="你登录飞书用的手机号或邮箱" value={f.who} onChange={(e) => setF({ ...f, who: e.target.value })} />
+          <div className="flex gap-2"><Button tone="primary" disabled={busy || !f.appId || !f.appSecret || !f.who} onClick={setup}>接通并发测试</Button><Button onClick={() => setOpen(false)}>取消</Button></div>
+        </div>
+      )}
+    </Card>
+  );
+}
+
 /** What the background tidying is (said on the page because the person asked). */
 const BACKGROUND_WORK = [
   "收件箱分类：判断邮件是笔试、面试、offer、拒信还是别的，抽出公司和时间",
@@ -384,7 +425,6 @@ export default function Settings() {
   };
   const autoCount = src.configured.filter((c: any) => c.auto).length;
   const said = (error: string) => error.replace(/^[A-Z_]{4,}: /, "").slice(0, 60);
-  const testFeishu = async () => { try { await call("feishu.notify", { title: "Zhiro 测试", lines: ["飞书通知已接通 ✅"] }); setMsg("已发送"); } catch (e: any) { setMsg(e.message); } };
   return (
     <>
       <H1>配置</H1>
@@ -398,11 +438,7 @@ export default function Settings() {
           <p className="text-sm text-ink-2 mb-3">把页面里的按钮拖到书签栏，在招聘页点它即可入库。</p>
           <a className="text-accent text-sm font-mono" href={bookmarkletUrl()} target="_blank" rel="noreferrer">{bookmarkletUrl()}</a>
         </Card>
-        <Card className="p-5">
-          <div className="flex items-center gap-2 mb-2"><div className="font-bold">飞书通知</div>{cfg?.feishu?.configured ? <Chip tone="good">已配置</Chip> : <Chip tone="amber">未配置</Chip>}</div>
-          <p className="text-sm text-ink-2 mb-3">截止提醒和进展发到你的飞书。</p>
-          <Button onClick={testFeishu} disabled={!cfg?.feishu?.configured}>发一条测试</Button>
-        </Card>
+        <FeishuCard cfg={cfg} reload={load} />
         <DataCard cfg={cfg} />
         <Card className="p-5 col-span-2">
           <div className="flex items-center gap-3">

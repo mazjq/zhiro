@@ -1,6 +1,6 @@
 import type { WorkflowDef } from "../service/workflow.js";
 import type { Services } from "../registry.js";
-import { notify } from "../service/feishu.js";
+import { enqueue } from "../notify/center.js";
 import { resolveFor, sayDate, type Resolution } from "../service/deadlines.js";
 
 /**
@@ -21,9 +21,14 @@ export function deadlineReminder(s: Services): WorkflowDef {
   const days = [...new Set([...MILESTONES, ...s.config.reminders.daysBefore])].sort((a, b) => b - a);
   const sent = (key: string) => !!db.prepare("select 1 from reminder_sent where key = ?").get(key);
   const mark = (key: string) => void db.prepare("insert or ignore into reminder_sent(key, sent_at) values (?, ?)").run(key, new Date().toISOString());
-  /** Not configured counts as said: the reminder shows on the 今日 page either way. Any other failure is retried. */
-  const send = async (title: string, lines: string[]): Promise<string | null> => {
-    try { await notify(s.config.feishu, { title, lines }); return null; } catch (e: any) { return e?.code === "NOT_CONFIGURED" ? null : String(e.message); }
+  /**
+   * Filed with the notice center (notify/center.ts), which sends it and makes sure it is read. Filing is what is kept
+   * here: an unconfigured channel leaves the notice unsent and the 今日 page says so — never taken as said (B1).
+   */
+  let current = { id: "", date: null as string | null, left: Infinity };
+  const send = async (title: string, lines: string[], key: string): Promise<string | null> => {
+    enqueue(db, { key: `deadline:${key}`, kind: "deadline", urgency: current.left <= 1 ? "today" : "info", title, lines, refKind: "position", refId: current.id, dueAt: current.date ? current.date + "T23:59:59+08:00" : null });
+    return null;
   };
   return {
     kind: "deadline_reminder",
@@ -33,17 +38,18 @@ export function deadlineReminder(s: Services): WorkflowDef {
         const p = db.prepare(`select p.title, co.name company from position p join campaign c on c.id = p.campaign_id join company co on co.id = c.company_id where p.id = ? and ${HELD}`).get(id) as { title: string; company: string } | undefined;
         const r = resolveFor(db, [id]).get(id);
         if (!p || !r || r.expired) return { type: "done" };
+        current = { id, date: r.date ?? null, left: r.date ? Math.ceil((Date.parse(r.date + "T23:59:59+08:00") - Date.now()) / DAY) : Infinity };
         const name = `「${p.title}」`;
         if (!r.date) {
           if (!asap(r)) return { type: "done" }; // nothing to remind of; 待核实 on the 今日 page carries it
           const week = `asap|${id}|${Math.floor(Date.now() / (7 * DAY))}`;
-          if (!sent(week)) { const err = await send(`宜尽早投递 · ${p.company}`, [`${name}${r.say}`, "状态：**未投递**"]); if (err) return { type: "fail", error: err, retryInMs: 30 * 60_000 }; mark(week); }
+          if (!sent(week)) { const err = await send(`宜尽早投递 · ${p.company}`, [`${name}${r.say}`, "状态：**未投递**"], week); if (err) return { type: "fail", error: err, retryInMs: 30 * 60_000 }; mark(week); }
           return { type: "sleep", until: new Date(Date.now() + 7 * DAY).toISOString() };
         }
         // the day changed since the person was last told one: say so once
         if (!sent(`known|${id}|${r.date}`)) {
           const prev = db.prepare("select key from reminder_sent where key like ? order by sent_at desc limit 1").get(`known|${id}|%`) as { key: string } | undefined;
-          if (prev) { const err = await send(`截止已更新 · ${p.company}`, [`${name}的截止由 ${sayDate(prev.key.split("|")[2])} 改为 **${sayDate(r.date)}**`, r.say]); if (err) return { type: "fail", error: err, retryInMs: 30 * 60_000 }; }
+          if (prev) { const err = await send(`截止已更新 · ${p.company}`, [`${name}的截止由 ${sayDate(prev.key.split("|")[2])} 改为 **${sayDate(r.date)}**`, r.say], `known|${id}|${r.date}`); if (err) return { type: "fail", error: err, retryInMs: 30 * 60_000 }; }
           mark(`known|${id}|${r.date}`);
         }
         const left = Math.ceil((Date.parse(r.date + "T23:59:59+08:00") - Date.now()) / DAY);
@@ -51,7 +57,7 @@ export function deadlineReminder(s: Services): WorkflowDef {
         // the nearest milestone reached; the ones passed on the way are settled with it (first seen at 5 days: one T-7, not T-14 then T-7)
         const due = [...days].reverse().find((d) => left <= d);
         if (due != null && !sent(`${id}|${r.date}|${due}`)) {
-          const err = await send(`截止提醒 · ${p.company}`, [`${name}**${sayDate(r.date)}**截止（${left <= 0 ? "今天" : `剩 ${left} 天`}）`, r.say, "状态：**未投递**"]);
+          const err = await send(`截止提醒 · ${p.company}`, [`${name}**${sayDate(r.date)}**截止（${left <= 0 ? "今天" : `剩 ${left} 天`}）`, r.say, "状态：**未投递**"], `${id}|${r.date}|${due}`);
           if (err) return { type: "fail", error: err, retryInMs: 30 * 60_000 };
           for (const d of days) if (d >= due) mark(`${id}|${r.date}|${d}`);
         }

@@ -4,6 +4,22 @@ import { useLatest, useOnDataChange } from "../refresh";
 import { H1, Card, Chip, Button, Empty, deadlineTone } from "../ui";
 import { describeProposal, FRIENDLY } from "../describe";
 
+/** Notices that did not reach the person: said first on the page, never left to look delivered (B1). */
+function NoticeLine({ go }: { go: (p: string) => void }) {
+  const [c, setC] = useState<any>(null);
+  const latest = useLatest();
+  const load = () => { latest("n", call("notice.list", { limit: 1 })).then((r) => setC(r.counts)).catch(() => {}); };
+  useEffect(load, []);
+  useOnDataChange(load);
+  if (!c || (!c.unsent && !c.unread)) return null;
+  return (
+    <Card className="mb-6 px-4 py-3 border-amber">
+      {c.notConfigured > 0 && <div className="text-sm"><b className="text-amber">{c.notConfigured} 条提醒没送出去</b>：飞书还没接通。<button className="text-accent ml-1" onClick={() => go("settings")}>去接通</button></div>}
+      {c.unread > 0 && <div className="text-sm"><b className="text-amber">{c.unread} 条提醒你还没看</b>（笔试面试、截止）：打开手机飞书的「Zhiro 职路」看一眼。</div>}
+    </Card>
+  );
+}
+
 /** 待确认: what an agent or the inbox wants to write, said the way the user would say it, decided right here. */
 function Pending() {
   const [items, setItems] = useState<any[]>([]);
@@ -49,6 +65,7 @@ export default function Today({ go }: { go: (p: any) => void }) {
   return (
     <>
       <H1 sub={today}>今日</H1>
+      <NoticeLine go={go} />
       <Pending />
 
       {data.nextActions.length > 0 && (
