@@ -95,6 +95,9 @@ export function dropOrphanCampaigns(s: Services, only?: string): number {
     db.exec("delete from gone_path; delete from gone_campaign");
     const add = db.prepare("insert into gone_path values (?)");
     for (const p of mine) add.run(p);
+    // a subscription that is gone lists nothing any more (B34)
+    const unclaim = db.prepare("delete from position_seen where config_id = ?");
+    for (const id of gone.keys()) unclaim.run(id);
     // a campaign something else still feeds (another subscription, a captured page — by the campaign or by one of its
     // posts) is alive; one a person holds a post of (关注, an application) stays whoever fed it
     db.exec(`insert into gone_campaign select distinct campaign_id from source_listing where campaign_id is not null and content_path in (select path from gone_path);
