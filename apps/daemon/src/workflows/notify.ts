@@ -4,7 +4,7 @@ import { updateConfig } from "../config.js";
 import { DomainError } from "../service/domain.js";
 import { budgetSettings } from "../budget/index.js";
 import { examInQuiet } from "../budget/quiet.js";
-import { deliver, enqueue, noticeStages, stageStands, type Channel, type DeliverOptions } from "../notify/center.js";
+import { deliver, enqueue, mailStands, noticeMail, noticeStages, stageStands, type Channel, type DeliverOptions } from "../notify/center.js";
 import { findUser, readers, sendCard, token, urgent, type FeishuApp } from "../notify/feishu.js";
 
 const EVERY_MIN = 2;
@@ -34,6 +34,8 @@ const options = (s: Services): DeliverOptions => {
     relevant: (kind: string, id: string) =>
       kind === "stage" ? stageStands(db, id)
       : kind === "position" ? !db.prepare("select 1 from application where position_id = ? and state in ('submitted', 'in_process', 'closed')").get(id)
+      : kind === "message" ? mailStands(db, id)
+      : kind === "message-which" ? !!db.prepare("select 1 from message where id = ? and status = 'unlinked'").get(id)
       : true,
   };
 };
@@ -46,6 +48,7 @@ export function noticeDeliver(s: Services): WorkflowDef {
     steps: {
       deliver: async () => {
         noticeStages(s.domain.db);
+        noticeMail(s.domain.db);
         const r = await deliver(s.domain.db, feishuChannel(s), Date.now(), options(s));
         if (r.sent || r.read) s.onBackgroundChanged?.("notices");
         return { type: "sleep", until: new Date(Date.now() + EVERY_MIN * 60_000).toISOString(), checkpoint: { last: new Date().toISOString(), ...r } };

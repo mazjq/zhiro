@@ -201,7 +201,9 @@ export default function Inbox() {
                       : m.applicationId ? <span className="text-xs text-ink-3">{appLabel(m.applicationId)} · {m.note || "这类消息不需要改动申请"}</span>
                       : (<><span className="text-xs text-ink-3">没能确定是哪条申请{apps.length > 1 ? "（同一家公司你可能投了不止一个岗位，或邮件没写岗位）" : ""}：</span>
                           <select className={input} defaultValue="" onChange={(e) => e.target.value && call("inbox.link", { id: m.id, applicationId: e.target.value }).then(load)}>
-                            <option value="">选择已有申请…</option>{apps.filter((a) => a.application.state !== "closed").map((a) => <option key={a.application.id} value={a.application.id}>{a.companyName} · {a.title}</option>)}
+                            <option value="">选择已有申请…</option>
+                            {/* the applications this mail could be about come first */}
+                            {[...apps.filter((a) => a.application.state !== "closed")].sort((x, y) => Number((m.candidates ?? []).includes(y.application.id)) - Number((m.candidates ?? []).includes(x.application.id))).map((a) => <option key={a.application.id} value={a.application.id}>{(m.candidates ?? []).includes(a.application.id) ? "★ " : ""}{a.companyName} · {a.title}</option>)}
                           </select>
                           <button className="text-xs text-accent" onClick={() => setCreating(creating === m.id ? "" : m.id)}>这家还没记过申请</button></>)}
                   </div>
