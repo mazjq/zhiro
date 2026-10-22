@@ -12,7 +12,11 @@ describe("stale posts", () => {
   it("an earlier cohort, a deadline over a week gone, a post taken down; the rest stays", () => {
     expect(staleReason({ title: "26届校招：营销管培生" }, "2027届", T)).toBe("往届：标题写的是 26 届");
     expect(staleReason({ title: "鲸英领袖生(2027届/2026届应届生)" }, "2027届", T)).toBe("");
-    expect(staleReason({ title: "营养顾问培训生（26届可投）" }, "2026届、2027届", T)).toBe("往届：标题写的是 26 届");
+    expect(staleReason({ title: "营养顾问培训生（26届可投）" }, "2026届、2027届", T)).toBe(""); // earlier ones may also apply
+    expect(staleReason({ title: "管培生（26届及以后）" }, "2027届", T)).toBe("");
+    expect(staleReason({ title: "算法工程师" }, "2026届", T)).toBe("往届批次：26 届"); // last season's batch
+    expect(staleReason({ title: "算法工程师" }, "2026届、2027届", T)).toBe("");
+    expect(staleReason({ title: "算法工程师" }, "2026届", "2026-05-10")).toBe(""); // in May 2026 that batch is the current one
     expect(staleReason({ title: "控制算法工程师" }, "", T)).toBe("");
     expect(staleReason({ title: "控制算法工程师", deadline: { expired: true, date: "2026-10-10" } }, "2027届", T)).toBe("截止（2026-10-10）已过一周以上");
     expect(staleReason({ title: "控制算法工程师", deadline: { expired: true, date: "2026-10-18" } }, "2027届", T)).toBe(""); // 补录 may still come
