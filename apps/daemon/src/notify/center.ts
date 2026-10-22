@@ -181,7 +181,9 @@ const EXAM_MAIL = "('笔试', '测评', '面试', '面试改期')";
 export function mailStands(db: Db, messageId: string): boolean {
   const m = db.prepare(`select application_id, scheduled_at, category from message where id = ? and category in ${EXAM_MAIL} and scheduled_at is not null`).get(messageId) as any;
   if (!m) return false;
-  if (m.application_id && db.prepare("select 1 from stage where application_id = ? and scheduled_at = ?").get(m.application_id, m.scheduled_at)) return false;
+  // a stage of that kind on the application: it reminds from now on — also after a move, which the mail knows nothing of
+  const kind = m.category === "面试改期" ? null : m.category === "面试" ? null : m.category;
+  if (m.application_id && db.prepare(`select 1 from stage where application_id = ? and (scheduled_at = ? or ${kind ? "kind = ?" : "(kind like '%面%')"})`).get(m.application_id, m.scheduled_at, ...(kind ? [kind] : []))) return false;
   if (m.application_id && db.prepare("select 1 from application where id = ? and state in ('closed', 'cancelled')").get(m.application_id)) return false;
   return true;
 }

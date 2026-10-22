@@ -185,3 +185,17 @@ describe("a test written in a mail (B2)", () => {
     expect((db.prepare("select state from notice where ref_kind = 'message' and ref_id = 'm1'").get() as any).state).toBe("cancelled");
   });
 });
+
+describe("a test moved after its mail", () => {
+  it("once the application has a stage of that kind the old mail's time is not reminded of", async () => {
+    const { s, app } = await world();
+    const db = s.domain.db;
+    const { noticeMail } = await import("./center.js");
+    const at = new Date(T0 + 20 * H).toISOString(), moved = new Date(T0 + 22 * H).toISOString();
+    db.prepare(`insert into message(id, account, message_id, received_at, created_at, category, company, scheduled_at, status, application_id)
+      values ('m2', 'a', '<m2>', ?, ?, '笔试', '楚天智驾', ?, 'new', ?)`).run(new Date(T0).toISOString(), new Date(T0).toISOString(), at, app.chutian);
+    db.prepare("insert into stage(id, application_id, kind, scheduled_at, created_at) values ('s8', ?, '笔试', ?, '')").run(app.chutian, moved);
+    noticeMail(db, T0);
+    expect((db.prepare("select count(*) as n from notice where ref_id = 'm2' and state = 'pending'").get() as any).n).toBe(0);
+  });
+});

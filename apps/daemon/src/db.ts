@@ -443,6 +443,9 @@ export const MIGRATIONS: string[] = [
   // v42: P2a — a mail that could be about more than one application keeps its candidates until the person picks
   `
   alter table message add column candidates_json text not null default '[]';
+  alter table message add column classify_attempts integer not null default 0;
+  alter table message add column classify_next_at text;
+  alter table message add column is_reminder integer;
   `,
 ];
 

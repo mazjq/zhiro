@@ -4,7 +4,7 @@ import { existsSync, mkdirSync, readFileSync, writeFileSync, chmodSync } from "n
 import { join } from "node:path";
 import { parseJsonWithRepair, contentText } from "@earendil-works/pi-ai";
 import type { Db } from "../db.js";
-import { json, now } from "../db.js";
+import { json, now, tx } from "../db.js";
 import type { Llm } from "../llm.js";
 import { DomainError, NotFound, companyKey, type Domain } from "./domain.js";
 import { withPurpose, currentPurpose } from "./usage.js";
@@ -156,7 +156,8 @@ export function linkCandidates(db: Db, company: string, position: string, catego
   if (exact.length <= 1) return { id: exact[0]?.id ?? null, candidates: exact.map((a) => a.id) };
   const byTitle = titled(exact);
   if (byTitle) return { id: byTitle, candidates: exact.map((a) => a.id) };
-  const sent = AFTER_SENDING.has(category) ? exact.filter((a) => a.state === "submitted" || a.state === "in_process") : [];
+  // only when the mail names no job: a title that matches none of them is not a reason to pick the sent one
+  const sent = AFTER_SENDING.has(category) && !position.trim() ? exact.filter((a) => a.state === "submitted" || a.state === "in_process") : [];
   return { id: sent.length === 1 ? sent[0].id : null, candidates: exact.map((a) => a.id) };
 }
 /** The application a mail is about, or null (linkCandidates without the candidates). */
@@ -216,13 +217,15 @@ function decide(db: Db, c: Classified, applicationId: string, subject: string): 
 /** Same text arriving twice (mailbox + paste, or a forwarded copy) must not be stored or proposed twice. The whole text
  * counts (B31): two notices that open alike and differ further down are two mails. */
 const contentKey = (m: RawMail) => createHash("sha256").update(companyKey(m.subject) + "|" + companyKey(m.text)).digest("hex").slice(0, 40);
+/** The key mail stored before v42 carries (the first 600 characters): still looked up, so an upgrade never stores a mail twice. */
+const legacyKey = (m: RawMail) => createHash("sha256").update(companyKey(m.subject) + "|" + companyKey(m.text).slice(0, 600)).digest("hex").slice(0, 40);
 
 export async function ingestMessage(d: InboxDeps, account: string, m: RawMail) {
   const db = d.domain.db;
   const key = contentKey(m);
-  const known = db.prepare("select * from message where message_id = ? or content_key = ?").get(m.messageId, key) as any;
-  if (known?.status === "unclassified") { // kept earlier, not classified yet: this is the moment to try again
-    await classifyKept(d, known.id, m);
+  const known = db.prepare("select * from message where message_id = ? or content_key in (?, ?)").get(m.messageId, key, legacyKey(m)) as any;
+  if (known?.status === "unclassified" && (!known.classify_next_at || known.classify_next_at <= now())) { // kept earlier, not classified yet, its turn has come
+    await classifyTurn(d, known.id, m);
     d.onChanged?.();
     return { message: msgRow(db.prepare("select * from message where id = ?").get(known.id)), added: false };
   }
@@ -236,9 +239,9 @@ export async function ingestMessage(d: InboxDeps, account: string, m: RawMail) {
   if (m.eml) writeFileSync(join(dir, id + ".eml"), m.eml);
   const kept = db.prepare(`insert or ignore into message(id, account, message_id, content_key, sender, subject, received_at, body_path, category, status, note, folder, created_at)
     values (?,?,?,?,?,?,?,?, '', 'unclassified', '', ?, ?)`).run(id, account, m.messageId, key, m.from, m.subject, m.date, bodyPath, m.folder ?? "", now());
-  if (!kept.changes) return { message: msgRow(db.prepare("select * from message where message_id = ? or content_key = ?").get(m.messageId, key)), added: false }; // a parallel pull kept it first
+  if (!kept.changes) return { message: msgRow(db.prepare("select * from message where message_id = ? or content_key in (?, ?)").get(m.messageId, key, legacyKey(m))), added: false }; // a parallel pull kept it first
   db.prepare("delete from mail_skipped where message_id = ?").run(m.messageId);
-  await classifyKept(d, id, m);
+  await classifyTurn(d, id, m);
   d.onChanged?.();
   return { message: msgRow(db.prepare("select * from message where id = ?").get(id)), added: true };
 }
@@ -249,28 +252,48 @@ async function classifyKept(d: InboxDeps, id: string, m: RawMail) {
   if (!d.llm) throw new DomainError("NO_MODEL", "未配置模型，邮件已保存，等能分类时再处理");
   // ref = the mail's date: a mail whose classification waits for an external agent (ADR-032) keeps the pull looking back to it
   const c = await withPurpose(currentPurpose().purpose, m.date, () => classify(d.llm!, m));
-  const link = c.category === "其他" ? { id: null, candidates: [] as string[] } : linkCandidates(db, c.company, c.position, c.category);
-  let proposalId: string | null = null, note = "", status = "new";
-  if (link.id) {
-    const r = decide(db, c, link.id, m.subject);
-    if ("note" in r) note = r.note;
-    else { proposalId = d.domain.createProposal(r.kind, r.payload, "system:inbox", `来自「${m.subject.slice(0, 60)}」：${c.summary}`.slice(0, 300), 24 * 14).id; status = "proposed"; }
-  } else if (c.category !== "其他" && link.candidates.length !== 1) {
-    status = "unlinked"; // which application: the person picks (inbox.link); a test in it is reminded of meanwhile
-    note = link.candidates.length ? `可能是 ${link.candidates.length} 条申请之一，请在收件箱里选` : "没找到对应的申请";
-  }
-  db.prepare(`update message set category = ?, round = ?, company = ?, position = ?, scheduled_at = ?, link = ?, summary = ?, confidence = ?, application_id = ?,
-    proposal_id = ?, status = ?, note = ?, candidates_json = ? where id = ?`).run(c.category, c.round, c.company, c.position, c.scheduledAt, c.link, c.summary, c.confidence,
-    link.id, proposalId, status, note, JSON.stringify(link.candidates), id);
+  // the model took seconds: only the run that still finds the mail unclassified files anything (a paste and a pull at
+  // once, or a person placing it meanwhile) — claimed, decided and filed in one transaction
+  tx(db, () => {
+    if (!db.prepare("select 1 from message where id = ? and status = 'unclassified'").get(id)) return;
+    const link = c.category === "其他" ? { id: null, candidates: [] as string[] } : linkCandidates(db, c.company, c.position, c.category);
+    let proposalId: string | null = null, note = "", status = "new";
+    if (link.id) {
+      const r = decide(db, c, link.id, m.subject);
+      if ("note" in r) note = r.note;
+      else { proposalId = d.domain.createProposal(r.kind, r.payload, "system:inbox", `来自「${m.subject.slice(0, 60)}」：${c.summary}`.slice(0, 300), 24 * 14).id; status = "proposed"; }
+    } else if (c.category !== "其他") {
+      status = "unlinked"; // which application: the person picks (inbox.link); a test in it is reminded of meanwhile
+      note = link.candidates.length > 1 ? `可能是 ${link.candidates.length} 条申请之一，请在收件箱里选` : link.candidates.length ? "公司名对不太上，请在收件箱里确认是不是这条申请" : "没找到对应的申请";
+    }
+    db.prepare(`update message set category = ?, round = ?, company = ?, position = ?, scheduled_at = ?, link = ?, summary = ?, confidence = ?, application_id = ?,
+      proposal_id = ?, status = ?, note = ?, candidates_json = ?, is_reminder = ?, classify_next_at = null where id = ?`).run(c.category, c.round, c.company, c.position, c.scheduledAt, c.link, c.summary, c.confidence,
+      link.id, proposalId, status, note, JSON.stringify(link.candidates), c.isReminder ? 1 : 0, id);
+  });
 }
 
-/** Mail kept but not classified yet (no model then, a short allowance, an error): tried again at each pull, oldest first. */
+/** One try at classifying a kept mail; a failure waits longer each time (5 min, 10, 20 … up to 6 h) and lets others go first. */
+async function classifyTurn(d: InboxDeps, id: string, m: RawMail) {
+  try { await classifyKept(d, id, m); }
+  catch (e: any) {
+    // no model, or the answer is coming from the person's agent: nothing was spent, the next chance is taken as it comes
+    if (e?.code === "NO_MODEL" || e?.code === "MODEL_DELEGATED") throw e;
+    const r = d.domain.db.prepare("select classify_attempts from message where id = ?").get(id) as { classify_attempts: number } | undefined;
+    const n = (r?.classify_attempts ?? 0) + 1;
+    // a deferral says when it may try again; anything else backs off
+    const next = e?.code === "BUDGET_DEFERRED" && e.until ? e.until : new Date(Date.now() + Math.min(6 * 3600_000, 5 * 60_000 * 2 ** (n - 1))).toISOString();
+    d.domain.db.prepare("update message set classify_attempts = ?, classify_next_at = ?, note = ? where id = ? and status = 'unclassified'").run(n, next, `还没分类：${String(e?.message ?? e).slice(0, 120)}`, id);
+    throw e;
+  }
+}
+
+/** Mail kept but not classified yet, whose turn has come: tried again at each pull, the ones tried least first. */
 export async function classifyWaiting(d: InboxDeps, limit = 20): Promise<{ done: number; errors: string[] }> {
-  const rows = d.domain.db.prepare("select * from message where status = 'unclassified' order by received_at limit ?").all(limit) as any[];
+  const rows = d.domain.db.prepare("select * from message where status = 'unclassified' and (classify_next_at is null or classify_next_at <= ?) order by classify_attempts, received_at limit ?").all(now(), limit) as any[];
   const out = { done: 0, errors: [] as string[] };
   for (const r of rows) {
     const text = existsSync(r.body_path) ? readFileSync(r.body_path, "utf8").replace(/^[\s\S]*?\n\n/, "") : "";
-    try { await classifyKept(d, r.id, { messageId: r.message_id, from: r.sender, subject: r.subject, date: r.received_at, text, folder: r.folder }); out.done++; }
+    try { await classifyTurn(d, r.id, { messageId: r.message_id, from: r.sender, subject: r.subject, date: r.received_at, text, folder: r.folder }); out.done++; }
     catch (e: any) { out.errors.push(`「${String(r.subject).slice(0, 30)}」：${e?.message ?? e}`); if (e?.code === "BUDGET_DEFERRED" || e?.code === "MODEL_DELEGATED") break; }
   }
   return out;
@@ -283,11 +306,11 @@ export async function classifyWaiting(d: InboxDeps, limit = 20): Promise<{ done:
 export function replayMessages(db: Db, limit = 50) {
   const rows = db.prepare("select * from message where status != 'unclassified' and category != '其他' order by received_at desc limit ?").all(limit) as any[];
   return { items: rows.map((r) => {
-    const c: Classified = { category: r.category, round: r.round, isReminder: false, company: r.company, position: r.position, scheduledAt: r.scheduled_at, link: r.link, summary: r.summary, confidence: r.confidence };
+    const c: Classified = { category: r.category, round: r.round, isReminder: r.is_reminder === 1, company: r.company, position: r.position, scheduledAt: r.scheduled_at, link: r.link, summary: r.summary, confidence: r.confidence };
     const link = linkCandidates(db, c.company, c.position, c.category);
     const would = link.id ? decide(db, c, link.id, r.subject) : null;
     return { messageId: r.id as string, subject: r.subject as string, receivedAt: r.received_at as string, category: c.category, company: c.company, linkedNow: (r.application_id ?? null) as string | null,
-      wouldLink: link.id, candidates: link.candidates, wouldDo: would && !("note" in would) ? { tool: would.kind, input: would.payload } : null, note: would && "note" in would ? would.note : link.id ? "" : link.candidates.length ? "分不清是哪条申请" : "没找到对应的申请" };
+      wouldLink: link.id, candidates: link.candidates, wouldDo: would && !("note" in would) ? { tool: would.kind, input: would.payload } : null, note: (r.is_reminder == null ? "（旧邮件没存是否为提醒，按非提醒回放）" : "") + (would && "note" in would ? would.note : link.id ? "" : link.candidates.length ? "分不清是哪条申请" : "没找到对应的申请") };
   }) };
 }
 

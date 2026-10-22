@@ -240,3 +240,21 @@ describe("inbox: the same employer written another way", () => {
     expect((await ingestMessage(d, "a", mail("新写法测评二", "另一封"))).message.applicationId).toBe(control);
   });
 });
+
+describe("inbox: review fixes (PR #28)", () => {
+  it("a mail that names a job none of them is is left for the user, not put under the one sent", async () => {
+    const { domain, d } = setup({ 审计笔试: { category: "笔试", position: "财务审计专员" } });
+    domain.createApplication(domain.listPositions({ query: "嵌入式" }).items[0].id); // a draft beside the sent one
+    expect((await ingestMessage(d, "a", mail("审计笔试通知"))).message).toMatchObject({ applicationId: null, status: "unlinked" });
+  });
+  it("a classification that fails after asking the model waits longer each time; the others are not held up", async () => {
+    const { domain, d } = setup({});
+    d.llm = { model: () => ({ input: ["text"] }), models: { completeSimple: async () => { throw new Error("upstream 500"); } } } as any;
+    await expect(ingestMessage(d, "a", mail("一面邀请"))).rejects.toThrow("upstream 500");
+    const r = domain.db.prepare("select status, classify_attempts, classify_next_at from message").get() as any;
+    expect(r).toMatchObject({ status: "unclassified", classify_attempts: 1 });
+    expect(Date.parse(r.classify_next_at)).toBeGreaterThan(Date.now() + 60_000);
+    const { classifyWaiting } = await import("./inbox.js");
+    expect((await classifyWaiting(d)).done).toBe(0); // not its turn yet
+  });
+});
