@@ -1,4 +1,5 @@
 import { spawn } from "node:child_process";
+import { lowerPriority } from "../budget/quiet.js";
 import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync, openSync, statSync } from "node:fs";
 import { join } from "node:path";
 import { nodeArgs } from "../paths.js";
@@ -104,6 +105,7 @@ function startDetached(dir: string, cmd: string, args: string[], prompt: string,
   const child = spawn(cmd, args, { cwd: dir, stdio: ["pipe", out, err], detached: true, shell: false, windowsHide: true, env: { ...process.env, CLAUDECODE: "" } });
   child.stdin!.write(prompt);
   child.stdin!.end();
+  lowerPriority(child.pid); // research runs in the background: the person's own programs come first
   if (child.pid) writeFileSync(join(dir, "pid.txt"), String(child.pid), "utf8");
   child.on("error", (e) => writeFileSync(join(dir, "spawn-error.txt"), String(e), "utf8"));
   child.on("exit", (code) => writeFileSync(join(dir, "exit.txt"), String(code ?? -1), "utf8"));

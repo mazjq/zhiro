@@ -1,4 +1,5 @@
 import { createHash } from "node:crypto";
+import { withPurpose } from "../service/usage.js";
 import type { WorkflowDef } from "../service/workflow.js";
 import type { Services } from "../registry.js";
 import { now } from "../db.js";
@@ -42,9 +43,10 @@ export function captureRecheck(s: Services): WorkflowDef {
         }
         if (checkpoint?.hash && s.llm) {
           try {
-            const ex = await extractNotice(s.llm, text, url, title);
+            const ex = await withPurpose("capture.recheck", campaignId, () => extractNotice(s.llm!, text, url, title));
             if (ex.isRecruitment && ex.company) ingest(s.domain, s.config.vault, "capture", campaignId, noticeToListings(ex, url, "capture"));
           } catch (e: any) {
+            if (e?.code === "BUDGET_DEFERRED") throw e; // waits; the page is read again then (B18 / budget/)
             recordFailedRun(s.domain, "capture", campaignId, `recheck extract: ${String(e?.message ?? e).slice(0, 200)}`);
           }
         }

@@ -100,6 +100,7 @@ export async function capture(domain: Domain, vault: string, input: CaptureInput
       how = `LLM 抽取${ex.notes ? "；" + ex.notes : ""}${ex.qrCodes?.length ? `；二维码 ${ex.qrCodes.length} 个` : ""}`;
     } catch (e: any) {
       if (e?.code === "MODEL_DELEGATED") throw e; // ADR-032: the answer comes later, from the agent
+      if (e?.code === "BUDGET_DEFERRED") throw e; // the allowance is short: wait, never file a rough guess instead (budget/)
       listings = heuristicListings(text, title, input.url);
       how = `LLM 抽取失败（${String(e?.message ?? e).slice(0, 80)}），已用启发式`;
     }

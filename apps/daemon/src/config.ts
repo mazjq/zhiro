@@ -28,6 +28,13 @@ export interface JobosConfig {
   pages?: { dailyBudget?: number };
   /** 网申: the person's own 「系统填写」 document (.docx), read at every run and preferred for what it covers (apply-reference.ts) */
   apply?: { referenceDoc?: string };
+  /**
+   * P5: background model work and the person's allowance. reserve: the share of every window left for the person (0.3);
+   * apiDailyUsd: what background work may spend a day on an API key; unknownDailyTokens: a day's background tokens on a
+   * subscription whose windows have not been read yet; quietBeforeMins / quietAfterMins: around a written test, an
+   * assessment or an interview nothing opens on this computer.
+   */
+  background?: { reserve?: number; apiDailyUsd?: number; unknownDailyTokens?: number; quietBeforeMins?: number; quietAfterMins?: number };
   /** the application season: applications since this date count against a company's exploration slots (ADR-036) */
   season?: { key?: string; since?: string };
   /** configured data-source instances; see sources/types.ts SourceConfig */

@@ -422,6 +422,12 @@ export const MIGRATIONS: string[] = [
   `
   create table peer_snapshot (key text primary key, fetched_at text not null, data_json text not null);
   `,
+  // v40: P5 — what the person's model allowance looked like when it was read (Codex app-server, Claude Code's
+  // rate_limit_event): one row per window per reading, so background work can see how fast each window fills
+  `
+  create table budget_reading (id integer primary key, at text not null, channel text not null, win text not null, used real not null, resets_at text, duration_mins integer);
+  create index budget_reading_win on budget_reading(channel, win, at);
+  `,
 ];
 
 /**
