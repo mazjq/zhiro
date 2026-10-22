@@ -93,6 +93,8 @@ function compare(source: string, seed: Listing[][], next: Listing[], tweak?: (db
   const a = openDb(join(dir, "a.db"));
   for (const s of seed) fullRewrite(a, source, "cfg", s);
   tweak?.(a);
+  // the seed was filed without claims: past the first two days, as a library is once every subscription has read (B34)
+  a.prepare("update meta set value = ? where key = 'claims_since'").run(new Date(Date.now() - 3 * 86400_000).toISOString());
   a.exec(`vacuum into '${join(dir, "b.db").replace(/'/g, "''")}'`);
   const b = openDb(join(dir, "b.db"));
   const since = now();
