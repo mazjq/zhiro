@@ -100,7 +100,7 @@ function NewApplication({ m, done }: { m: any; done: () => void }) {
     const t = setTimeout(() => call("company.search", { query: q, limit: 6 }).then((r) => setCompanies(r.items)).catch(() => {}), 150);
     return () => clearTimeout(t);
   }, [q]);
-  const pick = (c: any) => call("pool.list", { companyId: c.companyId, limit: 1 }).then((r) => setPositions(r.items[0]?.positions ?? []));
+  const pick = (c: any) => call("pool.list", { companyId: c.companyId, limit: 1, includeStale: true }).then((r) => setPositions(r.items[0]?.positions ?? []));
   const create = async (p: any) => {
     try {
       const id = p.applicationState ? (await call("application.list")).items.find((a: any) => a.application.positionId === p.id)?.application.id : (await call("application.create", { positionId: p.id, channel: "官网", note: "由收件箱里的通知补建" })).application.id;

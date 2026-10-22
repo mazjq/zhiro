@@ -463,7 +463,9 @@ describe("closed batches", () => {
     ingest(domain, dir, "csv", "old", [listing({ grade: "校方转载", isOriginal: false, batch: "春招", validThrough: "2020-05-31", url: "https://mp.weixin.qq.com/s/poster" })]);
     ingest(domain, dir, "sheet", "now", [listing({ grade: "聚合", isOriginal: false, url: "https://app.mokahr.com/campus-recruitment/x/1#/jobs" })]);
     ingest(domain, dir, "csv", "old", [listing({ company: "只有旧批次", grade: "官方", validThrough: "2020-05-31" })]);
-    const { items } = (await callTool("pool.list", {}, HUMAN, s)) as any;
+    // a company whose posts all closed long ago is 过期信息, left out by default (stale.ts); asked for, it sorts last
+    expect(((await callTool("pool.list", {}, HUMAN, s)) as any).items.map((x: any) => x.companyName)).toEqual(["示例汽车"]);
+    const { items } = (await callTool("pool.list", { includeStale: true }, HUMAN, s)) as any;
     expect(items.map((x: any) => [x.companyName, x.expired])).toEqual([["示例汽车", false], ["只有旧批次", true]]);
     expect(items[0].closesAt).toBeNull();
     expect(items[0].applyUrl).toContain("mokahr");
