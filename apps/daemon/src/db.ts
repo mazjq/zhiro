@@ -456,6 +456,12 @@ export const MIGRATIONS: string[] = [
   create table brief_run (id text primary key, at text not null, since text not null, brief_json text not null, seen_at text);
   create table brief_item (key text primary key, hash text not null, first_at text not null, last_at text not null, run_id text not null);
   `,
+  // v45: which subscriptions list each post now — a full read closes only what no subscription lists any more (B34:
+  // two 国聘 channels feeding one batch closed each other's posts). Empty at first: filled as each subscription reads.
+  `
+  create table position_seen (position_id text not null references position(id) on delete cascade, config_id text not null, seen_at text not null, primary key (position_id, config_id)) without rowid;
+  create index position_seen_config on position_seen(config_id);
+  `,
 ];
 
 /**
