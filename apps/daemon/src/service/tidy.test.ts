@@ -41,6 +41,17 @@ describe("evidence-based tidy (2026-10-01)", () => {
     expect(domain.db.prepare("select co.name, l.external_id from source_listing l join campaign c on c.id = l.campaign_id join company co on co.id = c.company_id").all()).toEqual([{ name: "甲", external_id: "k1" }]);
     expect(domain.db.prepare("select count(*) n from position").get()).toEqual({ n: 1 });
   });
+  it("a post a live subscription lists is kept though its listing row is another's; once both are gone, nothing is left over (B34)", () => {
+    const { dir, domain, s } = setup([{ id: "ig-b", source: "iguopin" }]);
+    const full = (cfg: string, ls: Listing[]) => ingest(domain, dir, "iguopin", cfg, ls, { closeUnseen: true });
+    full("ig-a", [listing({ externalId: "p1" })]);
+    full("ig-b", [listing({ externalId: "p1" })]); // the same row (b's listing changed nothing): only b's claim
+    expect(dropOrphanCampaigns(s, "ig-a")).toBe(0); // a is gone; b still lists the post
+    expect(domain.db.prepare("select count(*) n from position").get()).toEqual({ n: 1 });
+    s.config.sources = [];
+    expect(dropOrphanCampaigns(s, "ig-b")).toBe(1); // b gone too: the batch goes, though no listing row named b
+    expect(domain.db.prepare("select (select count(*) from position) p, (select count(*) from position_seen) c").get()).toEqual({ p: 0, c: 0 });
+  });
   it("a sheet of thousands of companies is cleared in seconds (it took 20 s for this many, 19 minutes for the user's sheet of 1 万)", () => {
     const { dir, domain, s } = setup([]);
     const rows: Listing[] = [];

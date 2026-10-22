@@ -82,7 +82,18 @@ export function dropOrphanCampaigns(s: Services, only?: string): number {
   const paths = db.prepare("select content_path path, min(provider) provider from source_listing where content_path != '' group by content_path").all() as { path: string; provider: string }[];
   const gone = new Map<string, string>(), mine: string[] = []; // subscription id → reader kind; their snapshot paths
   for (const p of paths) { const id = configIdOf(p.path); if (id && pullKinds.has(p.provider) && !configured.has(id) && (!only || id === only)) { gone.set(id, p.provider); mine.push(p.path); } }
-  if (!mine.length) return 0;
+  // a subscription removed or switched off lists nothing any more: its claims go, so the others' full reads can close
+  // what it alone kept open (B34) — whether or not it left listing rows of its own
+  const live = new Set(s.config.sources.filter((c) => c.enabled !== false).map((c) => c.id));
+  const unclaim = db.prepare("delete from position_seen where config_id = ?");
+  const claimedBy = db.prepare("select distinct p.campaign_id id from position_seen s join position p on p.id = s.position_id where s.config_id = ?");
+  const released: string[] = []; // the campaigns they claimed posts of: checked like the ones their listing rows name
+  for (const { id } of db.prepare("select distinct config_id id from position_seen").all() as { id: string }[]) {
+    if (live.has(id) || (only && id !== only)) continue;
+    released.push(...(claimedBy.all(id) as { id: string }[]).map((r) => r.id));
+    unclaim.run(id);
+  }
+  if (!mine.length && !released.length) return 0;
 
   // Whole sets per statement, every gone subscription in one transaction: the cost is a few passes over the listing
   // table however many campaigns or subscriptions there are. Going campaign by campaign took 19 minutes, the daemon
@@ -97,10 +108,13 @@ export function dropOrphanCampaigns(s: Services, only?: string): number {
     for (const p of mine) add.run(p);
     // a campaign something else still feeds (another subscription, a captured page — by the campaign or by one of its
     // posts) is alive; one a person holds a post of (关注, an application) stays whoever fed it
-    db.exec(`insert into gone_campaign select distinct campaign_id from source_listing where campaign_id is not null and content_path in (select path from gone_path);
+    const cand = db.prepare("insert or ignore into gone_campaign values (?)");
+    for (const id of released) cand.run(id);
+    db.exec(`insert or ignore into gone_campaign select distinct campaign_id from source_listing where campaign_id is not null and content_path in (select path from gone_path);
       delete from source_listing where campaign_id is not null and content_path in (select path from gone_path);
       delete from gone_campaign where id in (select campaign_id from source_listing where campaign_id is not null)
         or id in (select p.campaign_id from source_listing l join position p on p.id = l.position_id)
+        or id in (select p.campaign_id from position_seen s join position p on p.id = s.position_id)
         or id in (select campaign_id from position where watch_priority > 0)
         or id in (select p.campaign_id from application a join position p on p.id = a.position_id)
         or id in (select campaign_id from application where campaign_id is not null);

@@ -456,13 +456,20 @@ export const MIGRATIONS: string[] = [
   create table brief_run (id text primary key, at text not null, since text not null, brief_json text not null, seen_at text);
   create table brief_item (key text primary key, hash text not null, first_at text not null, last_at text not null, run_id text not null);
   `,
+  // v45: which subscriptions list each post now — a full read closes only what no subscription lists any more (B34:
+  // two 国聘 channels feeding one batch closed each other's posts). Empty at first: filled as each subscription reads.
+  `
+  create table position_seen (position_id text not null references position(id) on delete cascade, config_id text not null, seen_at text not null, primary key (position_id, config_id)) without rowid;
+  create index position_seen_config on position_seen(config_id);
+  insert into meta(key, value) values ('claims_since', strftime('%Y-%m-%dT%H:%M:%fZ', 'now'));
+  `,
 ];
 
 /**
  * Tables whose row count a migration changes on purpose, by the version it brings the database to. The upgrade check
  * (upgrade.ts) holds every other table to the count it had before. Empty: v1–v35 were never upgraded through it.
  */
-export const COUNTS_MAY_CHANGE: Record<number, string[]> = {};
+export const COUNTS_MAY_CHANGE: Record<number, string[]> = { 45: ["meta"] };
 
 export const SCHEMA_VERSION = MIGRATIONS.length;
 
