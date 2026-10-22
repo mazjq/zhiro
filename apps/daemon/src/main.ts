@@ -8,7 +8,7 @@ import { resolveVault, VaultUnavailable } from "./move.js";
 import { dataDir, firstRun } from "./datadir.js";
 import { Auth, loadCredentials } from "./auth.js";
 import { writeAgentDir } from "./agent/agent-dir.js";
-import { mcpCommand } from "./paths.js";
+import { BUNDLED, ROOT, mcpCommand } from "./paths.js";
 import { ChatHub, builtinBackend } from "./agent/backend.js";
 import { chooseModel, cliBackend, reapOrphans } from "./agent/backends/cli.js";
 import { claudeSpec } from "./agent/backends/claude.js";
@@ -17,7 +17,7 @@ import { dshSpec } from "./agent/backends/acp.js";
 import { oneshot } from "./agent/backends/oneshot.js";
 import { backgroundTarget } from "./agent/route.js";
 import { codexLauncher } from "./agent/backends/codex.js";
-import { join } from "node:path";
+import { join, resolve, sep } from "node:path";
 import { spawn } from "node:child_process";
 import { Domain } from "./service/domain.js";
 import { WorkflowEngine } from "./service/workflow.js";
@@ -49,6 +49,8 @@ import { asBackground, claudeReadings, recordReadings } from "./budget/index.js"
 import { backgroundGate, callGate, type GateDeps } from "./budget/gate.js";
 
 // a move of the data directory asked for on the settings page happens here, before anything opens it (ADR-058)
+// data and code apart: a data folder inside the program's own folder would end up in a commit or a package one day
+{ const d = resolve(dataDir().dir), code = resolve(ROOT); if (!BUNDLED && (d === code || d.startsWith(code + sep)) && process.env.ZHIRO_ALLOW_DATA_IN_CODE !== "1") { console.error(`[zhiro] 数据目录 ${d} 在程序目录里面，不启动：把数据放到程序目录之外（--data <文件夹> 或 ZHIRO_DATA）`); process.exit(1); } }
 let config: JobosConfig;
 try { await firstRun(dataDir()); await resolveVault(defaultVaultDir()); config = loadConfig(); }
 catch (e: any) { if (e instanceof VaultUnavailable) { console.error(`[zhiro] ${e.message}`); process.exit(1); } throw e; }

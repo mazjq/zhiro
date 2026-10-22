@@ -9,7 +9,10 @@ Read [CONTRIBUTING.md](CONTRIBUTING.md) and [docs/contrib/architecture.md](docs/
    edit someone's `jobos.db`, `config/` keys or `credentials.json`; never write the database directly — business writes
    go through the tools (`callTool`).
 2. **Commit anything personal or secret**: real names, resumes, application details, keys, links to private sheets,
-   paths on your machine. Tests use made-up data (`apps/daemon/src/eval/seed.ts`). `pnpm check:clean` must pass.
+   paths on your machine. Tests use made-up data (`apps/daemon/src/eval/seed.ts`). `pnpm check:clean` must pass —
+   and so must every commit you push (the pre-push hook and CI run `check-clean --commits`: a key committed and then
+   deleted is still public once pushed). Commit as your GitHub noreply address, never a personal e-mail.
+   Data and code stay apart: the daemon refuses a data folder inside the program's own folder.
 3. **Make the program act irreversibly on its own**: no pressing *Submit*, no sending, no deleting the person's data
    without a confirm card the person decides.
 4. **Edit a shipped migration.** Append to `MIGRATIONS` in `apps/daemon/src/db.ts`, then

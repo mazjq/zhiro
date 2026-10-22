@@ -28,6 +28,9 @@ jobs:
       - run: pnpm install --frozen-lockfile
       - name: No personal data or keys in the repository
         run: node scripts/check-clean.mjs
+      - name: Nor in any commit of this pull request, nor in who the commits say wrote them
+        if: github.event_name == 'pull_request'
+        run: node scripts/check-clean.mjs --commits "origin/${{ github.base_ref }}..HEAD"
       - uses: gitleaks/gitleaks-action@v2
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
