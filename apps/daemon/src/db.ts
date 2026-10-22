@@ -428,6 +428,18 @@ export const MIGRATIONS: string[] = [
   create table budget_reading (id integer primary key, at text not null, channel text not null, win text not null, used real not null, resets_at text, duration_mins integer);
   create index budget_reading_win on budget_reading(channel, win, at);
   `,
+  // v41: P1 — notices that must reach the person, with the proof that they did (sent, read, how often pressed)
+  `
+  create table notice (
+    id text primary key, key text not null unique, kind text not null, urgency text not null, title text not null,
+    body text not null default '[]', url text not null default '', ref_kind text not null default '', ref_id text not null default '',
+    due_at text, created_at text not null, state text not null default 'pending', blocked_reason text not null default '',
+    message_id text, sent_at text, read_at text, acked_via text not null default '', level integer not null default 0,
+    attempts integer not null default 0, next_at text, last_error text not null default ''
+  );
+  create index notice_due on notice(state, next_at);
+  create index notice_ref on notice(ref_kind, ref_id);
+  `,
 ];
 
 /**

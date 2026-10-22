@@ -34,6 +34,8 @@ export interface JobosConfig {
    * subscription whose windows have not been read yet; quietBeforeMins / quietAfterMins: around a written test, an
    * assessment or an interview nothing opens on this computer.
    */
+  /** P1: how the notice center may press about an unread notice — sms on unless turned off, a phone call only when turned on */
+  notify?: { sms?: boolean; phone?: boolean };
   background?: { reserve?: number; apiDailyUsd?: number; unknownDailyTokens?: number; quietBeforeMins?: number; quietAfterMins?: number };
   /** the application season: applications since this date count against a company's exploration slots (ADR-036) */
   season?: { key?: string; since?: string };
