@@ -40,6 +40,7 @@ import { tidyPool } from "./service/tidy.js";
 import { listPool } from "./service/pool.js";
 import { inboxPoll, scheduleInbox } from "./workflows/inbox.js";
 import { noticeDeliver, scheduleNotices } from "./workflows/notify.js";
+import { dailyBrief, scheduleBrief } from "./workflows/daily.js";
 import { leadResolve, scheduleLeads } from "./workflows/leads.js";
 import { docDeps, dataOf } from "./registry.js";
 import { coalesce } from "./service/later.js";
@@ -115,6 +116,7 @@ workflows.register(captureRecheck(services));
 workflows.register(inboxPoll(services));
 workflows.register(leadResolve(services));
 workflows.register(noticeDeliver(services));
+workflows.register(dailyBrief(services));
 if (!maintenance) {
   scheduleRechecks(services);
   scheduleAllDeadlines(services);
@@ -144,6 +146,7 @@ if (!maintenance) {
   scheduleInbox(services);
   scheduleLeads(services);
   scheduleNotices(services);
+  scheduleBrief(services);
   void syncRelevantOfficial(services);
 }
 setTimeout(() => listPool(domain.db), 500); // build the pool cache before the first page asks for it
