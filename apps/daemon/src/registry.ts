@@ -68,6 +68,8 @@ import { backgroundOnModel, backgroundTarget, describeBackground } from "./agent
 import { budgetStatus, type GateDeps } from "./budget/gate.js";
 import { cardView } from "./service/card-state.js";
 import { tx } from "./db.js";
+import { latestBrief, runBrief } from "./daily/brief.js";
+import { nextAt, normalizeAt } from "./workflows/daily.js";
 import { setupFeishu } from "./workflows/notify.js";
 import { ack as ackNotice, listNotices } from "./notify/center.js";
 import { codexLauncher } from "./agent/backends/codex.js";
@@ -356,6 +358,19 @@ const handlers: { [N in ToolName]: Handler<N> } = {
   "fact.reorder": (i, _a, s) => reorderFacts(s.domain.db, i.ids),
   "profile.gaps": (_i, _a, s) => profileGaps(s.domain.db, s.config.vault),
   "budget.status": (_i, _a, s) => budgetStatus(gateDepsOf(s)),
+  "brief.today": (_i, _a, s) => ({ brief: latestBrief(s.domain.db) }),
+  "brief.at": (i, a, s) => {
+    humanOnly(a);
+    const at = normalizeAt(i.at);
+    if (!at) throw new ToolError("BAD_INPUT", "时间要写成 0–23 点、0–59 分，如 8:00");
+    updateConfig(s.config.vault, (doc) => { doc.brief = { ...(doc.brief ?? {}), at }; });
+    s.config.brief = { ...(s.config.brief ?? {}), at };
+    // the waiting run wakes at the new hour
+    const next = new Date(nextAt(at)).toISOString();
+    s.domain.db.prepare("update workflow set next_run_at = ?, checkpoint_json = ? where kind = 'daily_brief' and state = 'running'").run(next, JSON.stringify({ next }));
+    return { at, next };
+  },
+  "brief.make": (_i, a, s) => { humanOnly(a); const b = runBrief(s.domain.db); s.domain.db.prepare("update brief_run set seen_at = ? where id = ?").run(new Date().toISOString(), b.id); return { id: b.id }; },
   "usage.summary": (_i, _a, s) => usageSummary(s.domain.db),
   "profile.import": (i, _a, s) => {
     if (i.path) { if (!existsSync(i.path)) throw new ToolError("FILE_NOT_FOUND", i.path); return addDocument(docDeps(s), basename(i.path), readFileSync(i.path)); }
@@ -614,7 +629,7 @@ function executeDirect<N extends ToolName>(name: N, input: ToolInput<N>, actor: 
  *  - agent + write/effect tool → proposal (returned as { proposal }) instead of execution
  *  - audit row for every call
  */
-export const HUMAN_ONLY = new Set(["notify.setup", "notice.ack", "proposal.dismiss", "proposal.renew", "agent.model", "gap.confirm", "model.login", "model.answer", "model.cancel", "model.provider", "model.select", "model.refresh", "inbox.connect", "inbox.disconnect", "history.undo", "agent.mode", "agent.backend", "agent.harnessConfirm", "agent.background", "data.export", "data.move"]);
+export const HUMAN_ONLY = new Set(["brief.at", "brief.make", "notify.setup", "notice.ack", "proposal.dismiss", "proposal.renew", "agent.model", "gap.confirm", "model.login", "model.answer", "model.cancel", "model.provider", "model.select", "model.refresh", "inbox.connect", "inbox.disconnect", "history.undo", "agent.mode", "agent.backend", "agent.harnessConfirm", "agent.background", "data.export", "data.move"]);
 
 /** What an actor may call at all: agents never see the human-only tools or proposal.decide (they would only be refused) — except the person's own harness, when confirmation happens there (ADR-047). */
 export const callableBy = (actor: Actor, s?: Services) => {

@@ -4,6 +4,36 @@ import { useLatest, useOnDataChange } from "../refresh";
 import { H1, Card, Chip, Button, Empty, deadlineTone } from "../ui";
 import { describeProposal, FRIENDLY } from "../describe";
 
+/** 今天的简报 (P4): what changed since the last one, made each morning at the person's hour. */
+function BriefCard({ go }: { go: (p: string) => void }) {
+  const [b, setB] = useState<any>(null);
+  const [busy, setBusy] = useState(false);
+  const latest = useLatest();
+  const load = () => { latest("b", call("brief.today", {})).then((r) => setB(r.brief)).catch(() => {}); };
+  useEffect(load, []);
+  useOnDataChange(load);
+  const make = async () => { setBusy(true); try { await call("brief.make", {}); load(); } finally { setBusy(false); } };
+  const part = (title: string, xs: any[]) => xs?.length ? (
+    <div className="mb-2"><div className="text-xs text-ink-3 mb-1">{title} · {xs.length}</div>
+      {xs.map((x: any) => (
+        <div key={x.key} className="text-sm py-0.5 flex gap-2 items-baseline">
+          <span className="flex-1 hover:text-accent cursor-pointer" title={x.why} onClick={() => x.link && go(x.link.page)}>{x.text}</span>
+          {x.url && <a className="text-xs text-accent shrink-0" href={x.url} target="_blank" rel="noreferrer">打开</a>}
+        </div>))}
+    </div>) : null;
+  const empty = b && !b.must.length && !b.fresh.length && !b.found.length && !b.hanging.length;
+  return (
+    <Card className="mb-6 px-4 py-3">
+      <div className="flex items-center gap-2 mb-2"><div className="font-bold">今天的简报</div>
+        {b && <span className="text-xs text-ink-3">{new Date(b.at).toLocaleString("zh-CN", { month: "numeric", day: "numeric", hour: "2-digit", minute: "2-digit" })} 生成，只讲上一份以来的变化</span>}
+        <button className="ml-auto text-xs text-accent disabled:opacity-40" disabled={busy} onClick={make}>现在生成一份</button></div>
+      {!b ? <div className="text-sm text-ink-3">还没有简报：每天早上按你设的时间生成（配置页可改）。</div>
+        : empty ? <div className="text-sm text-ink-3">上一份以来没有新变化。</div>
+        : <>{part("今天必须做", b.must)}{part("新出现的", b.fresh)}{part("重新找过的", b.found)}{part("悬着的", b.hanging)}</>}
+    </Card>
+  );
+}
+
 /** Notices that did not reach the person: said first on the page, never left to look delivered (B1). */
 function NoticeLine({ go }: { go: (p: string) => void }) {
   const [c, setC] = useState<any>(null);
@@ -81,6 +111,7 @@ export default function Today({ go }: { go: (p: any) => void }) {
     <>
       <H1 sub={today}>今日</H1>
       <NoticeLine go={go} />
+      <BriefCard go={go} />
       <Pending />
 
       {data.nextActions.length > 0 && (
