@@ -461,6 +461,7 @@ export const MIGRATIONS: string[] = [
   `
   create table position_seen (position_id text not null references position(id) on delete cascade, config_id text not null, seen_at text not null, primary key (position_id, config_id)) without rowid;
   create index position_seen_config on position_seen(config_id);
+  insert into meta(key, value) values ('claims_since', strftime('%Y-%m-%dT%H:%M:%fZ', 'now'));
   `,
 ];
 
@@ -468,7 +469,7 @@ export const MIGRATIONS: string[] = [
  * Tables whose row count a migration changes on purpose, by the version it brings the database to. The upgrade check
  * (upgrade.ts) holds every other table to the count it had before. Empty: v1–v35 were never upgraded through it.
  */
-export const COUNTS_MAY_CHANGE: Record<number, string[]> = {};
+export const COUNTS_MAY_CHANGE: Record<number, string[]> = { 45: ["meta"] };
 
 export const SCHEMA_VERSION = MIGRATIONS.length;
 

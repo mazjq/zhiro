@@ -35,7 +35,11 @@ describe("which subscriptions list a post", () => {
     read("ch-a", ["1", "2"]);
     read("ch-b", ["3"]);
     db.prepare("delete from position_seen").run(); // as it is the first time the upgraded build runs
-    read("ch-a", ["1"]); // b's post 3 stays (b filed it); a's own post 2 closes
+    read("ch-a", ["1"]); // in the first two days nothing unclaimed closes: 2 may be b's under a shared listing row
+    expect(open()).toEqual(["岗位1", "岗位2", "岗位3"]);
+    db.prepare("delete from position_seen").run();
+    db.prepare("update meta set value = ? where key = 'claims_since'").run(new Date(Date.now() - 3 * 86400_000).toISOString());
+    read("ch-a", ["1"]); // later: b's post 3 stays (b filed it); a's own post 2 closes
     expect(open()).toEqual(["岗位1", "岗位3"]);
   });
 });
