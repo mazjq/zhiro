@@ -19,8 +19,30 @@ describe("what a card is now", () => {
     expect(cardView(db, { kind: "application.update", payload: { id: a.id, state: a.state }, expiresAt: future }).state).toBe("已完成");
     expect(cardView(db, { kind: "application.update", payload: { id: a.id, nextAction: "问 HR" }, expiresAt: future }).state).toBe("待处理");
     expect(cardView(db, { kind: "application.update", payload: { id: a.id, nextAction: "问 HR" }, expiresAt: past }).state).toBe("需补救");
-    expect(cardView(db, { kind: "stage.add", payload: { applicationId: a.id, kind: "笔试", scheduledAt: past }, expiresAt: future }).state).toBe("已过时");
+    expect(cardView(db, { kind: "stage.add", payload: { applicationId: a.id, kind: "复试", scheduledAt: past }, expiresAt: future }).state).toBe("待处理"); // backfilling a past stage stands
     expect(cardView(db, { kind: "application.update", payload: { id: "nope" }, expiresAt: future }).state).toBe("已过时");
+  });
+
+  it("judges by what the card asks: corrections on an ended application, every asked field, pair by pair, interrupted runs", async () => {
+    const { s, app } = await world();
+    const db = s.domain.db;
+    const one = db.prepare("select * from stage where application_id = ? and kind = '一面'").get(app.chutian) as any;
+    expect(cardView(db, { kind: "stage.add", payload: { applicationId: app.chutian, kind: "一面", scheduledAt: one.scheduled_at, link: one.link }, expiresAt: future }).state).toBe("已完成");
+    expect(cardView(db, { kind: "stage.add", payload: { applicationId: app.chutian, kind: "一面", scheduledAt: one.scheduled_at, link: "https://other.example.com" }, expiresAt: future }).state).toBe("待处理");
+    expect(cardView(db, { kind: "stage.add", payload: { applicationId: app.chutian, kind: "一面" }, expiresAt: future }).state).toBe("待处理"); // no time: cannot tell two apart
+    db.prepare("update application set state = 'closed' where id = ?").run(app.chutian);
+    expect(cardView(db, { kind: "application.update", payload: { id: app.chutian, closeReason: "笔试未过" }, expiresAt: future }).state).toBe("待处理");
+    expect(cardView(db, { kind: "application.update", payload: { id: app.chutian, state: "in_process" }, expiresAt: future }).state).toBe("待处理");
+    expect(cardView(db, { kind: "stage.add", payload: { applicationId: app.chutian, kind: "二面", scheduledAt: future }, expiresAt: future }).state).toBe("已过时");
+    const [f1, f2, f3] = (db.prepare("select id from fact limit 3").all() as any[]).map((r) => r.id);
+    const mixed = cardView(db, { kind: "fact.merge", payload: { pairs: [{ fromId: f1, intoId: f2 }, { fromId: f3, intoId: "gone" }] }, expiresAt: future });
+    expect(mixed.state).toBe("待处理");
+    expect(mixed.why).toContain("1 项");
+    expect(cardView(db, { kind: "fact.merge", payload: { pairs: [{ fromId: f3, intoId: "gone" }] }, expiresAt: future }).state).toBe("已过时");
+    const cut = s.domain.createProposal("application.update", { id: app.chutian, nextAction: "补材料" }, "agent:mcp", "", -1);
+    db.prepare("update proposal set execution = 'interrupted' where id = ?").run(cut.id);
+    expect(cardView(db, { kind: "application.update", payload: { id: app.chutian, nextAction: "补材料" }, expiresAt: past, execution: "interrupted" }).state).toBe("待处理");
+    await expect(callTool("proposal.renew", { id: cut.id }, HUMAN, s)).rejects.toMatchObject({ code: "NOT_RENEWABLE" });
   });
 
   it("the list carries the view; folded cards are put away; a run-out card is raised again as a new one, not run", async () => {

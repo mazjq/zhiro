@@ -67,6 +67,7 @@ import { readReference } from "./service/apply-reference.js";
 import { backgroundOnModel, backgroundTarget, describeBackground } from "./agent/route.js";
 import { budgetStatus, type GateDeps } from "./budget/gate.js";
 import { cardView } from "./service/card-state.js";
+import { tx } from "./db.js";
 import { setupFeishu } from "./workflows/notify.js";
 import { ack as ackNotice, listNotices } from "./notify/center.js";
 import { codexLauncher } from "./agent/backends/codex.js";
@@ -262,10 +263,14 @@ const handlers: { [N in ToolName]: Handler<N> } = {
     humanOnly(a);
     const p = s.domain.listProposals("pending").find((x) => x.id === i.id);
     if (!p) throw new NotFound(`proposal ${i.id}`);
-    if (cardView(s.domain.db, p as any, { referenceDoc: s.config.apply?.referenceDoc }).state !== "需补救") throw new ToolError("NOT_RENEWABLE", "只有过期但还有用的卡能重新提出");
-    const fresh = s.domain.createProposal(p.kind, p.payload, p.createdBy, p.reason, 72);
-    s.domain.db.prepare("update proposal set decision = 'expired', decided_at = ? where id = ?").run(new Date().toISOString(), p.id);
-    return { proposal: fresh };
+    // a card that ever started running keeps its record: it is checked by the person, not copied clean (cardView says 待处理)
+    if (p.execution || cardView(s.domain.db, p as any, { referenceDoc: s.config.apply?.referenceDoc }).state !== "需补救") throw new ToolError("NOT_RENEWABLE", "只有过期但还有用、且没执行过的卡能重新提出");
+    // the new card is checked again when approved (hash, expiry, the tool's own input checks); old and new change together
+    return tx(s.domain.db, () => {
+      const fresh = s.domain.createProposal(p.kind, p.payload, p.createdBy, p.reason, 72);
+      s.domain.db.prepare("update proposal set decision = 'expired', decided_at = ? where id = ? and decision = 'pending'").run(new Date().toISOString(), p.id);
+      return { proposal: fresh };
+    });
   },
   "proposal.decide": async (i, a, s) => {
     // ADR-047: the person's own harness may decide a card it raised itself, when the person set confirmation to happen there
