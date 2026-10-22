@@ -357,7 +357,8 @@ export class Domain {
     const nextActions = (this.db.prepare(`select a.id, a.next_action, a.next_action_at, co.name as company_name from application a join campaign c on c.id = a.campaign_id join company co on co.id = c.company_id
       where a.next_action != '' and a.state not in ('closed', 'cancelled') order by a.next_action_at is null, a.next_action_at`).all() as any[])
       .map((r) => ({ applicationId: r.id, companyName: r.company_name, nextAction: r.next_action, nextActionAt: r.next_action_at }));
-    const workflowsRunning = (this.db.prepare("select count(*) as n from workflow where state = 'running'").get() as any).n as number;
+    // working right now (holding a lease) — not the ones queued or asleep until their next time (B6: was 1,869)
+    const workflowsRunning = (this.db.prepare("select count(*) as n from workflow where state = 'running' and lease_until > ?").get(now()) as any).n as number;
     const reminders = (this.db.prepare("select count(*) as n from workflow where state = 'running' and kind = 'deadline_reminder'").get() as any).n as number;
     return { deadlines, verify, pendingProposals, nextActions, workflowsRunning, reminders };
   }

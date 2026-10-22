@@ -1426,7 +1426,7 @@ export const tools = {
       verify: Type.Array(Type.Object({ companyId: Id, companyName: Type.String(), positionId: Type.Union([Id, Type.Null()], { description: "null 表示手工标记的公司还没选岗位" }), title: Type.String(), cities: Type.Array(Type.String()), closesAt: Type.Union([Type.String(), Type.Null()]), daysLeft: Type.Union([Type.Number(), Type.Null()]), applied: Type.Boolean(), say: Type.String({ description: "这条截止怎么说（含来源与分歧）" }), verified: Type.Boolean(), conflict: Type.Boolean(), grade: Type.String(), url: Type.String(), why: Type.String({ description: "为什么要核实；deadlines 里为空" }) })),
       pendingProposals: Type.Number(),
       nextActions: Type.Array(Type.Object({ applicationId: Id, companyName: Type.String(), nextAction: Type.String(), nextActionAt: Type.Union([Type.String(), Type.Null()]) })),
-      workflowsRunning: Type.Number(),
+      workflowsRunning: Type.Number({ description: "此刻正在执行的后台任务数（不含排队和定时等着的）" }),
       reminders: Type.Number({ description: "已排好的截止提醒数（只针对用户关心的项目）" }),
       notifyConfigured: Type.Boolean({ description: "飞书是否已配置；未配置时提醒不会发出" }),
     }),
