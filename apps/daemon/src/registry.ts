@@ -10,7 +10,7 @@ import { locationInfo, requestMove, cancelMove } from "./move.js";
 import { notify } from "./service/feishu.js";
 import type { WorkflowEngine } from "./service/workflow.js";
 import type { JobosConfig } from "./config.js";
-import { updateConfig } from "./config.js";
+import { configFile, updateConfig } from "./config.js";
 import { emit } from "./events.js";
 import type { Llm } from "./llm.js";
 import { runSource, listSources, addSource, removeSource, previewSource, isLocalPath, type Columns } from "./data/index.js";
@@ -528,7 +528,7 @@ const handlers: { [N in ToolName]: Handler<N> } = {
       chat: { backend: backendOf(s), backends: s.chat?.status() ?? {}, harnessConfirm: harnessConfirm(s), agentDir: join(s.config.vault, "agent"), models: { claude: followedModel("claude"), codex: followedModel("codex"), refused: { claude: modelRefused("claude"), codex: modelRefused("codex") }, own: { claude: harnessModel("claude"), codex: harnessModel("codex") }, chosen: s.config.agent?.models ?? {}, choices: { claude: harnessModels("claude"), codex: harnessModels("codex") } } },
       background: { useModel: backgroundOnModel(s), doneBy: describeBackground(s) },
       applyReference: s.config.apply?.referenceDoc ?? "",
-      configFile: s.config.vault + "\\config\\jobos.yaml",
+      configFile: configFile(s.config.vault),
     },
   }),
   "model.status": (_i, _a, s) => modelStatus(s),
