@@ -217,7 +217,8 @@ export const Message = Type.Object({
   category: Type.String({ description: "投递确认/测评/笔试/面试/面试改期/面试取消/通过/offer/拒信/待办/其他" }), round: Type.String({ description: "一面/二面/三面/终面/技术面/综合面/HR面，或空" }),
   company: Type.String(), position: Type.String(), note: Type.String({ description: "没有生成提案时的原因，例如是已记录环节的提醒邮件" }), folder: Type.String({ description: "空=收件箱；垃圾箱=在垃圾邮件文件夹里找到的" }),
   scheduledAt: Type.Union([Type.String(), Type.Null()]), link: Type.String(), summary: Type.String(), confidence: Type.Number(),
-  applicationId: Type.Union([Id, Type.Null()]), proposalId: Type.Union([Id, Type.Null()]), status: Type.String(),
+  applicationId: Type.Union([Id, Type.Null()]), proposalId: Type.Union([Id, Type.Null()]), status: Type.String({ description: "unclassified=已保存待分类，new，proposed=已出确认卡，unlinked=分不清是哪条申请（candidates 是候选）" }),
+  candidates: Type.Optional(Type.Array(Id, { description: "可能对应的申请（分不清时由本人在收件箱里选）" })),
 });
 
 // ---------- tools ----------
@@ -1278,6 +1279,15 @@ export const tools = {
     effects: EGRESS,
     execution: "sync",
     errors: ["NO_MODEL"],
+  }),
+  "inbox.replay": defineTool({
+    name: "inbox.replay",
+    description: "按现在的规则把最近的招聘邮件重新判一遍：各属于哪条申请（或候选）、会做什么改动——只看不写，用来在邮件自动入账前核对。",
+    input: Type.Object({ limit: Type.Optional(Type.Number({ default: 50 })) }),
+    output: Type.Object({ items: Type.Array(Type.Object({ messageId: Type.String(), subject: Type.String(), receivedAt: Type.String(), category: Type.String(), company: Type.String(), linkedNow: Type.Union([Type.String(), Type.Null()]), wouldLink: Type.Union([Type.String(), Type.Null()]), candidates: Type.Array(Type.String()), wouldDo: Type.Union([Type.Object({ tool: Type.String(), input: Type.Unknown() }), Type.Null()]), note: Type.String() })) }),
+    effects: READ,
+    execution: "sync",
+    errors: [],
   }),
   "inbox.list": defineTool({
     name: "inbox.list",

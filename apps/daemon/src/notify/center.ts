@@ -173,3 +173,47 @@ export function noticeStages(db: Db, now = Date.now()): number {
   }
   return filed;
 }
+
+// ---------- tests written in a mail, before (or without) a stage for them
+
+const EXAM_MAIL = "('笔试', '测评', '面试', '面试改期')";
+/** Does a mail still carry its own test reminder? Not once a stage of that application holds the same time. */
+export function mailStands(db: Db, messageId: string): boolean {
+  const m = db.prepare(`select application_id, scheduled_at, category from message where id = ? and category in ${EXAM_MAIL} and scheduled_at is not null`).get(messageId) as any;
+  if (!m) return false;
+  // a stage of that kind on the application: it reminds from now on — also after a move, which the mail knows nothing of
+  const kind = m.category === "面试改期" ? null : m.category === "面试" ? null : m.category;
+  if (m.application_id && db.prepare(`select 1 from stage where application_id = ? and (scheduled_at = ? or ${kind ? "kind = ?" : "(kind like '%面%')"})`).get(m.application_id, m.scheduled_at, ...(kind ? [kind] : []))) return false;
+  if (m.application_id && db.prepare("select 1 from application where id = ? and state in ('closed', 'cancelled')").get(m.application_id)) return false;
+  return true;
+}
+
+/**
+ * A test or interview a mail announces is reminded of from the mail itself — whether or not it is filed under an
+ * application yet (B2: the DJI test was missed for want of a link). When a stage of the same time exists, its own
+ * notices take over and these are dropped. A mail not yet placed also asks which application it is about.
+ */
+export function noticeMail(db: Db, now = Date.now()): number {
+  for (const n of db.prepare("select id, ref_id from notice where ref_kind = 'message' and state in ('pending', 'sent')").all() as any[])
+    if (!mailStands(db, n.ref_id)) db.prepare("update notice set state = 'cancelled', last_error = '已记成环节，由环节提醒', next_at = null where id = ? and kind = 'exam'").run(n.id);
+  const rows = db.prepare(`select id, category, round, company, position, scheduled_at, link, summary, status, candidates_json from message where category in ${EXAM_MAIL} and scheduled_at >= ?`).all(iso(now)) as any[];
+  let filed = 0;
+  for (const r of rows) {
+    if (!mailStands(db, r.id)) continue;
+    const at = Date.parse(r.scheduled_at), left = at - now;
+    if (!Number.isFinite(at) || left <= 0) continue;
+    const kind = r.round || (r.category === "面试改期" ? "面试" : r.category);
+    const when = `${dayWord(at, now)} ${hm(at)}`;
+    const lines = [`**${r.company || "（邮件没写公司）"}**${r.position ? ` · ${r.position}` : ""}`, `时间：**${when}**`, ...(r.link ? [`链接：${r.link}`] : []), ...(r.summary ? [String(r.summary).slice(0, 200)] : [])];
+    const base = { kind: "exam", refKind: "message", refId: r.id as string, dueAt: r.scheduled_at as string, url: r.link || undefined, lines };
+    if (left <= 26 * HOUR) {
+      const one = left <= 2.5 * HOUR
+        ? enqueue(db, { ...base, key: `mail:${r.id}:${r.scheduled_at}:soon`, urgency: "now", title: `${kind} ${when} · ${r.company}` }, now)
+        : enqueue(db, { ...base, key: `mail:${r.id}:${r.scheduled_at}:day`, urgency: "today", title: `${dayWord(at, now)}${kind} · ${r.company} · ${hm(at)}` }, now);
+      if (one) filed++;
+    }
+    // not placed yet: ask once which application (answered in the Zhiro window's 收件箱)
+    if (r.status === "unlinked" && enqueue(db, { key: `mail:${r.id}:which`, kind: "question", urgency: "info", title: `这封邮件是哪条申请？· ${r.company}`, lines: [`「${kind} ${when}」的通知，Zhiro 分不清是你哪条申请的。`, "在 Zhiro 的收件箱里选一下；考试提醒照常会发。"], refKind: "message-which", refId: r.id }, now)) filed++;
+  }
+  return filed;
+}
