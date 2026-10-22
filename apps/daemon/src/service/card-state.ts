@@ -21,21 +21,24 @@ const equalWhereGiven = (p: any, row: any, fields: [string, string][]) => fields
 export function cardView(db: Db, c: Card, cfg: { referenceDoc?: string } = {}, now = Date.now()): CardView {
   const p = c.payload ?? {};
   if (c.execution === "running") return { state: "待处理", why: "正在执行" };
-  let done = false, gone = "";
+  // a run that stopped half way may have done part of it: the person checks first, it is never folded or raised again blind
+  if (c.execution === "interrupted") return { state: "待处理", why: "上次执行中途停了，可能已做了一部分：先核对再确认" };
+  let done = false, gone = "", why = "";
   switch (c.kind) {
     case "application.update": {
+      // an ended application still takes corrections and reopening: only what it asks decides
       const a = db.prepare("select * from application where id = ?").get(p.id) as any;
       if (!a) { gone = "这条申请已经不在了"; break; }
       done = equalWhereGiven(p, a, APP_FIELDS) && (p.state !== undefined || p.nextAction !== undefined || p.closeReason !== undefined);
-      if (!done && ["closed", "cancelled"].includes(a.state) && p.state !== a.state) gone = "这条申请已经结束了";
       break;
     }
     case "stage.add": {
       const a = db.prepare("select state from application where id = ?").get(p.applicationId) as any;
       if (!a) { gone = "这条申请已经不在了"; break; }
-      done = !!db.prepare("select 1 from stage where application_id = ? and kind = ? and coalesce(scheduled_at, '') = ?").get(p.applicationId, p.kind, p.scheduledAt ?? "");
-      if (!done && ["closed", "cancelled"].includes(a.state)) gone = "这条申请已经结束了";
-      else if (!done && p.scheduledAt && Date.parse(p.scheduledAt) < now) gone = "这个环节的时间已经过了";
+      // done only when a stage of that kind already says everything the card asks — a time is needed to tell two apart
+      done = !!p.scheduledAt && (db.prepare("select * from stage where application_id = ? and kind = ?").all(p.applicationId, p.kind) as any[]).some((s) => equalWhereGiven(p, s, STAGE_FIELDS));
+      // a past stage is history to record (backfill); only one still ahead on an ended application no longer stands
+      if (!done && ["closed", "cancelled"].includes(a.state) && p.scheduledAt && Date.parse(p.scheduledAt) > now) gone = "这条申请已经结束了，之后的环节不会有了";
       break;
     }
     case "stage.update": {
@@ -50,9 +53,13 @@ export function cardView(db: Db, c: Card, cfg: { referenceDoc?: string } = {}, n
       break;
     }
     case "fact.merge": {
-      const pairs: any[] = p.pairs ?? [p];
-      done = !pairs.some((x) => db.prepare("select 1 from fact where id = ?").get(x.fromId));
-      if (!done && pairs.some((x) => !db.prepare("select 1 from fact where id = ?").get(x.intoId))) gone = "要并入的那张资料卡已经不在了";
+      // pair by pair: one broken pair does not void the others
+      const has = (id: string) => !!db.prepare("select 1 from fact where id = ?").get(id);
+      const left = ((p.pairs ?? [p]) as any[]).filter((x) => has(x.fromId));
+      const broken = left.filter((x) => !has(x.intoId)).length;
+      done = !left.length;
+      if (left.length && broken === left.length) gone = "要并入的那张资料卡已经不在了";
+      else if (broken) why = `其中 ${broken} 项要并入的资料卡已经不在了，确认前先看一下`;
       break;
     }
     case "company.merge": {
@@ -69,8 +76,8 @@ export function cardView(db: Db, c: Card, cfg: { referenceDoc?: string } = {}, n
   }
   if (done) return { state: "已完成", why: "要做的事已经是这样了" };
   if (gone) return { state: "已过时", why: gone };
-  if (Date.parse(c.expiresAt) < now) return { state: "需补救", why: "确认卡过期了，但这件事还有用：可以重新提出再确认" };
-  return { state: "待处理", why: "" };
+  if (Date.parse(c.expiresAt) < now) return { state: "需补救", why: why || "确认卡过期了，但这件事还有用：可以重新提出再确认" };
+  return { state: "待处理", why };
 }
 
 /** The views of the pending cards, and how many of each. */
