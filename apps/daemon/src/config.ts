@@ -34,6 +34,9 @@ export interface JobosConfig {
    * subscription whose windows have not been read yet; quietBeforeMins / quietAfterMins: around a written test, an
    * assessment or an interview nothing opens on this computer.
    */
+  /** an instance that reads sites for others (a data source's collector) keeps every subscription: the startup trim of
+   * auto-added ones is for a person's own library, where it keeps the companies they care about */
+  keepAutoSources?: boolean;
   /** subscribed data sources (data/feed.ts): where the signed packages are, and the key that signs them */
   feeds?: Array<{ id: string; url: string; publicKey: string; enabled?: boolean }>;
   /** P4: when the daily brief is made (local time, "HH:MM"; default 08:00) */
