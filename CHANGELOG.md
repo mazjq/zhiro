@@ -1,5 +1,35 @@
 # Changelog
 
+## [0.3.0](https://github.com/mazjq/zhiro/compare/v0.2.1...v0.3.0) (2026-10-23)
+
+
+### Features
+
+* **brief:** an application an agent recorded as sent, with no proof since, is asked about (R19) ([#40](https://github.com/mazjq/zhiro/issues/40)) ([f63aba9](https://github.com/mazjq/zhiro/commit/f63aba975328ecb4a07df536518eb93428619b88))
+* **brief:** each morning a brief of what changed ([#31](https://github.com/mazjq/zhiro/issues/31)) ([7859630](https://github.com/mazjq/zhiro/commit/78596300d4ab0619d261510248d624a48a1fe50d))
+* **budget:** background work waits for the allowance, a test, or a full screen ([#25](https://github.com/mazjq/zhiro/issues/25)) ([f4f4f4e](https://github.com/mazjq/zhiro/commit/f4f4f4e25aa392d90e5409d7d99b9397f79bdda3))
+* **cards:** confirm cards say what they are now; done / void ones fold away, run-out ones are raised again ([#30](https://github.com/mazjq/zhiro/issues/30)) ([9ccf948](https://github.com/mazjq/zhiro/commit/9ccf9485c7a357252769a62663f551aba27b4146))
+* **data:** subscribe to a signed data source, filed as a local read would be ([#36](https://github.com/mazjq/zhiro/issues/36)) ([21c6516](https://github.com/mazjq/zhiro/commit/21c6516eba42243ecd94d703f75457df3afb729a))
+* **feed:** rows the sender held back come as post ids: still there, never closed ([#38](https://github.com/mazjq/zhiro/issues/38)) ([faf66f4](https://github.com/mazjq/zhiro/commit/faf66f40e9268d2dc30836a1cc7f0aee2a2292c3))
+* **inbox:** clear recruiting mail is filed on its own, told, and can be undone ([#29](https://github.com/mazjq/zhiro/issues/29)) ([df21760](https://github.com/mazjq/zhiro/commit/df21760e6c40192ae839e22913a7851cbafa8804))
+* **inbox:** mail kept before classifying, better linking, tests reminded of from the mail, replay ([#28](https://github.com/mazjq/zhiro/issues/28)) ([4859037](https://github.com/mazjq/zhiro/commit/4859037e4cc6797a2a1a53c513cf83b32f6b38bc))
+* **maintenance:** read-only start, and a compare run of two builds on copies of one snapshot ([#22](https://github.com/mazjq/zhiro/issues/22)) ([e87e5f2](https://github.com/mazjq/zhiro/commit/e87e5f26f1538f4a8c5f362bd93f3d041030325d))
+* **notify:** notices reach the person or say they did not; unread ones are pressed ([#26](https://github.com/mazjq/zhiro/issues/26)) ([e64591d](https://github.com/mazjq/zhiro/commit/e64591db42c7df08bc772c74cefd3b73a18c264e))
+* **pool:** stale information leaves the everyday lists ([#35](https://github.com/mazjq/zhiro/issues/35)) ([236a696](https://github.com/mazjq/zhiro/commit/236a69652a511e39661305617d19436b5bf0b444))
+
+
+### Bug Fixes
+
+* **config:** a wrong setting falls back to its default and the start says so (A13) ([#42](https://github.com/mazjq/zhiro/issues/42)) ([85e0f32](https://github.com/mazjq/zhiro/commit/85e0f3210bac7ed73e6b79dadb0fede58030e16e))
+* **contracts:** say which tools reach the internet; data.export writes (B27) ([#41](https://github.com/mazjq/zhiro/issues/41)) ([b29a447](https://github.com/mazjq/zhiro/commit/b29a4473eb4d1bbdb368f3de428099720cf37e2e))
+* **data:** a full read closes only posts no subscription lists any more (B34) ([#33](https://github.com/mazjq/zhiro/issues/33)) ([6283cbd](https://github.com/mazjq/zhiro/commit/6283cbd3ea79819278d67f1187d8b124674eb45a))
+* **inbox:** the mail poll starts again after the last mailbox was disconnected and one is connected ([#23](https://github.com/mazjq/zhiro/issues/23)) ([28ab108](https://github.com/mazjq/zhiro/commit/28ab1085bd99e7d04ae1f8af09f19071defb751a))
+* **policy:** MCP tool notes say what the tier rule does; evals never default to a real data folder ([#21](https://github.com/mazjq/zhiro/issues/21)) ([63ff7f4](https://github.com/mazjq/zhiro/commit/63ff7f4a4a15d49c8df67da026aafd5a131dd04b))
+* **reminders:** a deadline that moves back is said too (B28) ([#39](https://github.com/mazjq/zhiro/issues/39)) ([1f9d18d](https://github.com/mazjq/zhiro/commit/1f9d18d7aabfb66e1afa29f4acb30a8e4fbac86e))
+* **sheet:** split a cell on spaces only where every word is Chinese ([#37](https://github.com/mazjq/zhiro/issues/37)) ([afd8665](https://github.com/mazjq/zhiro/commit/afd8665538d597eb0dfa4a2f9711924c5ba541e7))
+* **status:** count only work running now; say the quota look reads nothing new ([#32](https://github.com/mazjq/zhiro/issues/32)) ([3905f23](https://github.com/mazjq/zhiro/commit/3905f238cc53530461f2914d9de34b73d6ecc2c7))
+* **time:** follow the computer's zone when Node and the browser cannot name it ([#34](https://github.com/mazjq/zhiro/issues/34)) ([b47810f](https://github.com/mazjq/zhiro/commit/b47810f73548e76cf958063412266fbd27a7bd56))
+
 ## [0.2.1](https://github.com/mazjq/zhiro/compare/v0.2.0...v0.2.1) (2026-10-21)
 
 
