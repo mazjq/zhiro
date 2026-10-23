@@ -27,6 +27,17 @@ describe("which subscriptions list a post", () => {
     expect((db.prepare("select count(*) n from position_seen where position_id = (select id from position where title = '岗位9')").get() as any).n).toBe(0); // nor claims
   });
 
+  it("a subscription's own % or _ is taken literally: a_b's read does not count axb's posts as its own", () => {
+    const vault = mkdtempSync(join(tmpdir(), "zhiro-own-"));
+    const db = openDb(join(vault, "z.db"));
+    db.prepare("update meta set value = ? where key = 'claims_since'").run(new Date(Date.now() - 3 * 86400_000).toISOString());
+    const read = (cfg: string, ids: string[]) => ingest({ db }, vault, "iguopin", cfg, ids.map(post), { closeUnseen: true });
+    read("ch-axb", ["2"]);
+    db.prepare("delete from position_seen").run(); // unclaimed: only the listing row says whose it is
+    read("ch-a_b", ["1"]);
+    expect((db.prepare("select title from position where status = 'open' order by title").all() as any[]).map((r) => r.title)).toEqual(["岗位1", "岗位2"]);
+  });
+
   it("right after the upgrade (nothing claimed yet) a read closes only what it filed itself", () => {
     const vault = mkdtempSync(join(tmpdir(), "zhiro-own-"));
     const db = openDb(join(vault, "z.db"));

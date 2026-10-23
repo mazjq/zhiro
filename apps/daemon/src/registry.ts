@@ -70,6 +70,7 @@ import { cardView } from "./service/card-state.js";
 import { tx } from "./db.js";
 import { latestBrief, runBrief } from "./daily/brief.js";
 import { nextAt, normalizeAt } from "./workflows/daily.js";
+import { pullFeeds } from "./workflows/feed.js";
 import { setupFeishu } from "./workflows/notify.js";
 import { ack as ackNotice, listNotices } from "./notify/center.js";
 import { codexLauncher } from "./agent/backends/codex.js";
@@ -359,6 +360,7 @@ const handlers: { [N in ToolName]: Handler<N> } = {
   "profile.gaps": (_i, _a, s) => profileGaps(s.domain.db, s.config.vault),
   "budget.status": (_i, _a, s) => budgetStatus(gateDepsOf(s)),
   "brief.today": (_i, _a, s) => ({ brief: latestBrief(s.domain.db) }),
+  "feed.pull": (i, a, s) => { humanOnly(a); return { results: pullFeeds(s, i.id) }; },
   "brief.at": (i, a, s) => {
     humanOnly(a);
     const at = normalizeAt(i.at);
@@ -629,7 +631,7 @@ function executeDirect<N extends ToolName>(name: N, input: ToolInput<N>, actor: 
  *  - agent + write/effect tool → proposal (returned as { proposal }) instead of execution
  *  - audit row for every call
  */
-export const HUMAN_ONLY = new Set(["brief.at", "brief.make", "notify.setup", "notice.ack", "proposal.dismiss", "proposal.renew", "agent.model", "gap.confirm", "model.login", "model.answer", "model.cancel", "model.provider", "model.select", "model.refresh", "inbox.connect", "inbox.disconnect", "history.undo", "agent.mode", "agent.backend", "agent.harnessConfirm", "agent.background", "data.export", "data.move"]);
+export const HUMAN_ONLY = new Set(["feed.pull", "brief.at", "brief.make", "notify.setup", "notice.ack", "proposal.dismiss", "proposal.renew", "agent.model", "gap.confirm", "model.login", "model.answer", "model.cancel", "model.provider", "model.select", "model.refresh", "inbox.connect", "inbox.disconnect", "history.undo", "agent.mode", "agent.backend", "agent.harnessConfirm", "agent.background", "data.export", "data.move"]);
 
 /** What an actor may call at all: agents never see the human-only tools or proposal.decide (they would only be refused) — except the person's own harness, when confirmation happens there (ADR-047). */
 export const callableBy = (actor: Actor, s?: Services) => {

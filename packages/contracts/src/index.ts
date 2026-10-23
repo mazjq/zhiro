@@ -806,6 +806,15 @@ export const tools = {
     execution: "sync",
     errors: ["BAD_INPUT"],
   }),
+  "feed.pull": defineTool({
+    name: "feed.pull",
+    description: "现在去订阅的数据源取一次新数据（本人）：验签、查版本、整包入库或整包不入；和本机自己去读官网一样入库，不碰本人改过的东西。不带 id 取全部订阅源。",
+    input: Type.Object({ id: Type.Optional(Type.String()) }),
+    output: Type.Object({ results: Type.Array(Type.Object({ feed: Type.String(), seq: Type.Optional(Type.Union([Type.Number(), Type.Null()])), unchanged: Type.Optional(Type.Boolean()), applied: Type.Optional(Type.Number({ description: "这次入库的订阅数" })), skipped: Type.Optional(Type.Number()), local: Type.Optional(Type.Number({ description: "本机自己也在读、所以没用源里那份的订阅数" })), released: Type.Optional(Type.Number({ description: "源里不再有的订阅数" })), positionsNew: Type.Optional(Type.Number()), positionsClosed: Type.Optional(Type.Number()), error: Type.Optional(Type.String()) })) }),
+    effects: WRITE,
+    execution: "sync",
+    errors: [],
+  }),
   "brief.make": defineTool({
     name: "brief.make",
     description: "现在就生成一份简报（本人）：和每天早上的一样，只讲上一份以来的变化，并发到飞书。",
