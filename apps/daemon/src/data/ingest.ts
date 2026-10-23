@@ -83,7 +83,7 @@ function keepSnapshot(vault: string, sourceId: string, configId: string, listing
  *  3. record a scan_run row (so "0 new" and "failed" stay distinguishable from "closed")
  * One transaction, all or nothing. Campaign identity: catalog.campaignKey; the rest of the identity rules: catalog.ts.
  */
-export function ingest(store: { db: Db }, vault: string, sourceId: string, configId: string, listings: Listing[], opts: { complete?: boolean; error?: string; closeUnseen?: boolean; observedAt?: string; noSnapshot?: boolean } = {}): IngestResult & { listed: Listed } {
+export function ingest(store: { db: Db }, vault: string, sourceId: string, configId: string, listings: Listing[], opts: { complete?: boolean; error?: string; closeUnseen?: boolean; observedAt?: string; noSnapshot?: boolean; alsoSeen?: string[] } = {}): IngestResult & { listed: Listed } {
   const db = store.db;
   const runId = ulid();
   const started = now();
@@ -180,6 +180,14 @@ export function ingest(store: { db: Db }, vault: string, sourceId: string, confi
       // what it lists now (only full reads claim: a claim must be one a later full read can take back)
       const seen = db.prepare("insert into position_seen(position_id, config_id, seen_at) values (?,?,?) on conflict do update set seen_at = excluded.seen_at");
       for (const p of new Set(listedRows.values())) seen.run(p, configId, started);
+      // posts the site still lists that the sender held back (a feed's quality gate): still there, so not closed —
+      // their claims and their last-seen time are kept as if listed, their content left as it was
+      if (opts.alsoSeen?.length) inChunks(opts.alsoSeen, (part, q) => {
+        for (const r of db.prepare(`select distinct position_id id from source_listing where provider = ? and external_id in (${q})`).all(sourceId, ...part) as { id: string }[]) {
+          seen.run(r.id, configId, started);
+          db.prepare("update position set last_seen_at = ? where id = ?").run(started, r.id);
+        }
+      });
       // where to look: its campaigns now, the ones it fed before and did not list at all this time (国能 dropped a stale
       // 专项 list), and those of the posts it claimed before
       // this subscription's snapshot names, as a LIKE pattern (an id's own % or _ taken literally)
