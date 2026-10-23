@@ -89,14 +89,19 @@ export function cleanListing(x: any): Listing | null {
   return l;
 }
 
-export interface FeedResult { feed: string; seq: number | null; unchanged: boolean; applied: number; skipped: number; released: number; positionsNew: number; positionsClosed: number }
+export interface FeedResult { feed: string; seq: number | null; unchanged: boolean; applied: number; skipped: number; local: number; released: number; positionsNew: number; positionsClosed: number }
 
 /** Read, check and file one feed. Throws (nothing written) when any check fails. */
-export function importFeed(store: { db: Db }, vault: string, cfg: FeedConfig, now = Date.now()): FeedResult {
+/**
+ * Read, check and file one feed. Throws (nothing written) when any check fails. `local`: the subscriptions this library
+ * reads itself — one writer each, so the feed's copy of those is left alone (an older feed read must not overwrite a
+ * newer local one, and two writers would take each other's claims).
+ */
+export function importFeed(store: { db: Db }, vault: string, cfg: FeedConfig, local: Set<string> = new Set(), now = Date.now()): FeedResult {
   const db = store.db, base = folderUrl(cfg.url);
   const last = db.prepare("select seq from feed_run where feed_id = ?").get(cfg.id) as { seq: number } | undefined;
   const m = checkManifest(readFrom(base, "manifest.json").toString("utf8"), cfg, last?.seq ?? null, now);
-  if (!m) return { feed: cfg.id, seq: last!.seq, unchanged: true, applied: 0, skipped: 0, released: 0, positionsNew: 0, positionsClosed: 0 };
+  if (!m) return { feed: cfg.id, seq: last!.seq, unchanged: true, applied: 0, skipped: 0, local: 0, released: 0, positionsNew: 0, positionsClosed: 0 };
   if (!SAFE_ID.test(m.bundle.path) || m.bundle.path.includes("..")) throw new FeedError("FEED_BAD_MANIFEST", "数据包路径不对");
   const packed = readFrom(base, m.bundle.path);
   if (sha256(packed) !== m.bundle.sha256) throw new FeedError("FEED_BAD_BUNDLE", "数据包和清单对不上（sha256）");
@@ -106,10 +111,11 @@ export function importFeed(store: { db: Db }, vault: string, cfg: FeedConfig, no
   // every check before any write: what each subscription brings, and whether it is newer than what is here
   const applied = new Map((db.prepare("select sub_id, observed_at, sha256 from feed_applied where feed_id = ?").all(cfg.id) as { sub_id: string; observed_at: string; sha256: string }[]).map((r) => [r.sub_id, r]));
   const plan: { sub: FeedSub; listings: Listing[] }[] = [];
-  let skipped = 0;
+  let skipped = 0, mine = 0;
   for (const sub of m.subs) {
     const rows = bundle.subs?.[sub.id];
     if (!Array.isArray(rows) || rows.length !== sub.count || sha256(JSON.stringify(rows)) !== sub.sha256) throw new FeedError("FEED_BAD_BUNDLE", `订阅「${sub.id}」的内容和清单对不上`);
+    if (local.has(sub.id)) { mine++; continue; }
     const before = applied.get(sub.id);
     if (before && sub.observedAt < before.observed_at) { skipped++; continue; } // an older read than the one filed
     if (before && sub.observedAt === before.observed_at) { if (before.sha256 !== sub.sha256) throw new FeedError("FEED_CONFLICT", `订阅「${sub.id}」同一次读取内容不同`); skipped++; continue; }
@@ -126,7 +132,7 @@ export function importFeed(store: { db: Db }, vault: string, cfg: FeedConfig, no
         .run(cfg.id, sub.id, sub.observedAt, sub.sha256, new Date(now).toISOString());
     }
     // what the feed no longer carries lists nothing any more here: its claims go (tidy then drops what only it kept)
-    const carried = new Set(m.subs.map((s) => s.id));
+    const carried = new Set(m.subs.filter((s) => !local.has(s.id)).map((s) => s.id));
     for (const id of applied.keys()) if (!carried.has(id)) {
       db.prepare("delete from position_seen where config_id = ?").run(feedConfigId(cfg.id, id));
       db.prepare("delete from feed_applied where feed_id = ? and sub_id = ?").run(cfg.id, id);
@@ -135,5 +141,5 @@ export function importFeed(store: { db: Db }, vault: string, cfg: FeedConfig, no
     db.prepare("insert into feed_run(feed_id, seq, created_at, applied_at) values (?,?,?,?) on conflict(feed_id) do update set seq = excluded.seq, created_at = excluded.created_at, applied_at = excluded.applied_at")
       .run(cfg.id, m.seq, m.createdAt, new Date(now).toISOString());
   });
-  return { feed: cfg.id, seq: m.seq, unchanged: false, applied: plan.length, skipped, released, positionsNew, positionsClosed };
+  return { feed: cfg.id, seq: m.seq, unchanged: false, applied: plan.length, skipped, local: mine, released, positionsNew, positionsClosed };
 }

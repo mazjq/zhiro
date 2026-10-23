@@ -92,6 +92,13 @@ describe("a subscribed data source", () => {
     expect(w.open()).toEqual(["岗位1"]);
   });
 
+  it("a subscription this library reads itself is left to its own reads", () => {
+    const w = world();
+    publish(w.out, 1, [{ id: "moka-a", at: T(5), rows: [post("1")] }, { id: "moka-mine", at: T(5), rows: [post("8", { company: "本机也读的" })] }]);
+    expect(importFeed({ db: w.db }, w.vault, w.cfg, new Set(["moka-mine"]))).toMatchObject({ applied: 1, local: 1 });
+    expect(w.db.prepare("select count(*) n from company where name = '本机也读的'").get()).toEqual({ n: 0 });
+  });
+
   it("a subscription the feed no longer carries loses its claims; nothing of it is left half-filed when a later one is bad", () => {
     const w = world();
     publish(w.out, 1, [{ id: "moka-a", at: T(5), rows: [post("1")] }, { id: "moka-b", at: T(5), rows: [post("9", { company: "另一家" })] }]);
