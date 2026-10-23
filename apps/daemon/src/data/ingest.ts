@@ -41,14 +41,14 @@ export const CLAIMS_SETTLE_MS = 48 * 3600_000;
  * subscription went, not the post), then its claims go. The campaigns
  * it claimed posts of are returned, for tidy's orphan check.
  */
-export function releaseClaims(db: Db, configId: string): string[] {
+export function releaseClaims(db: Db, configId: string): { campaigns: string[]; closed: number } {
   const campaigns = (db.prepare("select distinct p.campaign_id id from position_seen s join position p on p.id = s.position_id where s.config_id = ?").all(configId) as { id: string }[]).map((r) => r.id);
-  db.prepare(`update position set status = 'closed', updated_at = ? where status = 'open'
+  const closed = Number(db.prepare(`update position set status = 'closed', updated_at = ? where status = 'open'
     and id in (select position_id from position_seen where config_id = ?)
     and not exists (select 1 from position_seen o where o.position_id = position.id and o.config_id != ?)
-    and coalesce(watch_priority, 0) <= 0 and id not in (select position_id from application where state != 'cancelled')`).run(now(), configId, configId);
+    and coalesce(watch_priority, 0) <= 0 and id not in (select position_id from application where state != 'cancelled')`).run(now(), configId, configId).changes);
   db.prepare("delete from position_seen where config_id = ?").run(configId);
-  return campaigns;
+  return { campaigns, closed };
 }
 
 /** A subscription's snapshots are named `<24-char time>-<configId>.json`; only its own, not another id that ends the same. */
