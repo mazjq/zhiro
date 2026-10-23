@@ -3,7 +3,8 @@
  *   今天必须做  tests and interviews within 48 h, deadlines within 3 days on posts held and not sent yet;
  *   新出现的    posts first seen since the last brief that match the profile (很对口 / 部分对口), not held yet;
  *   重新找过的  what the daily lookup of thin companies found since the last brief;
- *   悬着的      drafts left for 5 days or past their deadline, sent applications quiet for 14 days.
+ *   悬着的      drafts left for 5 days or past their deadline, sent applications quiet for 14 days, and ones an agent
+ *              recorded as sent with no mail or word of the person since (R19).
  * Built from rules only (no model). What was in an earlier brief and has not changed is left out (brief_item keeps
  * each item's content hash); the 必须做 part is always shown. A run is kept whole (brief_run) — brief.today reads it,
  * generating nothing — and goes out as one 「知道就行」 notice.
@@ -22,6 +23,8 @@ const H = 3600_000, DAY = 24 * H;
 /** 悬着的 that did not change come back once a week, not every day. */
 const REMIND = 7 * DAY;
 const FRESH_MAX = 15;
+/** mail that shows an application was really sent (inbox.ts categories) */
+const EVIDENCE = ["投递确认", "测评", "笔试", "面试", "面试改期", "面试取消", "通过", "offer", "拒信"];
 const hm = (iso: string) => new Date(iso).toLocaleString("zh-CN", { month: "numeric", day: "numeric", weekday: "short", hour: "2-digit", minute: "2-digit", hour12: false });
 const hash = (x: unknown) => createHash("sha256").update(JSON.stringify(x)).digest("hex").slice(0, 16);
 /** The local calendar day, YYYY-MM-DD (deadlines are written as local days). */
@@ -77,6 +80,21 @@ export function makeBrief(db: Db, now = Date.now()): Brief {
   for (const a of db.prepare(`select a.id, a.progress_url, co.name company, p.title, (select max(at) from application_event e where e.application_id = a.id) last
       from application a join position p on p.id = a.position_id join campaign c on c.id = a.campaign_id join company co on co.id = c.company_id where a.state = 'submitted'`).all() as any[])
     if (a.last && Date.parse(a.last) < now - 14 * DAY) hanging.push({ key: `hang:quiet:${a.id}`, state: `quiet:${a.last}`, text: `已投 ${Math.floor((now - Date.parse(a.last)) / DAY)} 天没动静 · ${a.company} · ${a.title}：去查一下进度`, link: { page: "pipeline", id: a.id }, url: a.progress_url || undefined });
+
+  // 已投递 an agent recorded, with nothing since that shows it happened (R19: 2026-10-22 an agent recorded 中国移动 as
+  // sent, the person never applied): no confirmation, test, interview or result mail filed to it, and the person has
+  // not set its state since
+  for (const a of db.prepare(`select a.id, a.progress_url, co.name company, p.title, e.id ev, e.at from application a
+      join position p on p.id = a.position_id join campaign c on c.id = a.campaign_id join company co on co.id = c.company_id
+      join application_event e on e.id = (select id from application_event x where x.application_id = a.id and x.kind = 'state' and x.detail like '%→ submitted%' order by x.at desc limit 1)
+      where a.state = 'submitted' and e.source like 'agent:%' and e.at < ?
+        and not exists (select 1 from application_event h where h.application_id = a.id and h.kind = 'state' and h.source like 'human:%' and h.at > e.at)
+        and not exists (select 1 from message m where m.application_id = a.id and m.category in (${EVIDENCE.map(() => "?").join(",")}))`).all(iso(now - 3 * DAY), ...EVIDENCE) as any[])
+    hanging.push({ key: `hang:unproven:${a.id}`, state: `unproven:${a.ev}`, text: `agent 记了已投递，${Math.floor((now - Date.parse(a.at)) / DAY)} 天没有确认邮件 · ${a.company} · ${a.title}：去网申平台核实是不是真投了`, link: { page: "pipeline", id: a.id }, url: a.progress_url || undefined });
+
+  // one line per application: an unproven one is not also 「很久没动静」
+  const unproven = new Set(hanging.filter((x) => x.key.startsWith("hang:unproven:")).map((x) => x.key.slice("hang:unproven:".length)));
+  for (let i = hanging.length - 1; i >= 0; i--) if (hanging[i].key.startsWith("hang:quiet:") && unproven.has(hanging[i].key.slice("hang:quiet:".length))) hanging.splice(i, 1);
 
   // past deadlines first (decide or close), then the longest left
   hanging.sort((x, y) => Number(y.key.startsWith("hang:past")) - Number(x.key.startsWith("hang:past")));
