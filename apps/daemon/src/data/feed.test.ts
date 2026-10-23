@@ -55,6 +55,9 @@ describe("a subscribed data source", () => {
     expect(w.db.prepare("select closes_at_override o from campaign where id = ?").get(camp)).toEqual({ o: "2026-12-31" });
     expect(w.db.prepare("select watch_priority p from position where title = '岗位1'").get()).toEqual({ p: 2 });
     expect(w.pull()).toMatchObject({ unchanged: true }); // the same package again: nothing to do
+    publish(w.out, 3, [{ id: "moka-a", at: T(0.5), rows: [post("1", { validThrough: "2026-11-30" }), post("2")] }]); // read again, the same
+    expect(w.pull()).toMatchObject({ applied: 0, unchangedSubs: 1 });
+    expect(w.db.prepare("select observed_at a from feed_applied").get()).toEqual({ a: T(0.5) });
   });
 
   it("refuses a wrong signature, another feed, an older or expired package, an unknown reader — writing nothing", () => {
