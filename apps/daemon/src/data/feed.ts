@@ -10,7 +10,8 @@
  *   - each subscription's read is newer than the one filed (same read again: skipped; same time, other content or
  *     another reader: refused; the same read now complete where it was stale: filed, so it may close what it dropped);
  *   - listings keep the fields a reader fills and nothing else; a row that does not pass (or whose identity is too
- *     long to keep whole) is left out — and then the read no longer counts as complete: it adds, it closes nothing.
+ *     long to keep whole) is left out — and then the read no longer counts as complete: it adds, it closes nothing;
+ *   - rows the sender held back come as post ids only: still listed by the site, so kept open, never closed.
  * Then all of it is filed in one transaction with the feed's position (no files are written: the package is the
  * record). One writer per subscription: one this library reads itself is left to its own reads. A subscription the
  * feed drops closes what only it listed (releaseClaims); a paused feed keeps what it brought, a removed one goes
@@ -38,7 +39,11 @@ const GRADES = new Set(["官方", "校方转载", "聚合", "行业线索", "推
 const SAFE_ID = /^[^\\/:*?"<>|~%\u0000-\u001f]{1,120}$/;
 
 export interface FeedConfig { id: string; url: string; publicKey: string; enabled?: boolean }
-export interface FeedSub { id: string; source: string; state: "complete" | "stale"; observedAt: string; count: number; sha256: string }
+/**
+ * One subscription's read. `count` rows are sent; `withheld` more the site listed are not (a gate held them back) and
+ * are sent by their post id only — still there, so never taken for gone. `sha256` covers both: JSON of [rows, withheld].
+ */
+export interface FeedSub { id: string; source: string; state: "complete" | "stale"; observedAt: string; count: number; withheld?: number; sha256: string }
 export interface FeedManifest { feed: string; protocol: number; seq: number; createdAt: string; bundle: { path: string; sha256: string; bytes: number }; subs: FeedSub[]; sig?: string }
 
 export const feedConfigId = (feedId: string, subId: string) => `feed~${feedId}~${subId}`;
@@ -142,13 +147,14 @@ export function importFeed(store: { db: Db }, vault: string, cfg: FeedConfig, lo
   if (sha256(packed) !== m.bundle.sha256) throw new FeedError("FEED_BAD_BUNDLE", "数据包和清单对不上（sha256）");
   const unpacked = gunzipSync(packed, { maxOutputLength: Math.max(1, m.bundle.bytes) });
   if (unpacked.length !== m.bundle.bytes) throw new FeedError("FEED_BAD_BUNDLE", "数据包解开后的大小和清单不符");
-  const bundle = JSON.parse(unpacked.toString("utf8")) as { subs: Record<string, unknown[]> };
+  const bundle = JSON.parse(unpacked.toString("utf8")) as { subs: Record<string, unknown[]>; withheld?: Record<string, unknown[]> };
 
   // every check before any write: what each subscription brings, and whether it is newer than what is here
-  const plan: { sub: FeedSub; listings: Listing[]; complete: boolean; at: string }[] = [];
+  const plan: { sub: FeedSub; listings: Listing[]; held: string[]; complete: boolean; at: string }[] = [];
   for (const sub of m.subs) {
-    const rows = bundle.subs?.[sub.id];
-    if (!Array.isArray(rows) || rows.length !== sub.count || sha256(JSON.stringify(rows)) !== sub.sha256) throw new FeedError("FEED_BAD_BUNDLE", `订阅「${sub.id}」的内容和清单对不上`);
+    const rows = bundle.subs?.[sub.id], held = bundle.withheld?.[sub.id] ?? [];
+    if (!Array.isArray(rows) || rows.length !== sub.count || !Array.isArray(held) || held.length !== (sub.withheld ?? 0) || held.some((x) => typeof x !== "string" || x.length > 500)
+      || sha256(JSON.stringify([rows, held])) !== sub.sha256) throw new FeedError("FEED_BAD_BUNDLE", `订阅「${sub.id}」的内容和清单对不上`);
     if (local.has(sub.id)) { result.local++; continue; }
     const at = new Date(ms(sub.observedAt)).toISOString(), before = applied.get(sub.id);
     if (before && before.source !== sub.source) throw new FeedError("FEED_CONFLICT", `订阅「${sub.id}」的读取器从 ${before.source} 变成了 ${sub.source}`);
@@ -161,7 +167,7 @@ export function importFeed(store: { db: Db }, vault: string, cfg: FeedConfig, lo
     // a read with rows left out, or with none at all (a local read of nothing is a failure too), only adds
     const complete = sub.state === "complete" && listings.length === rows.length && listings.length > 0;
     if (sub.state === "complete" && !complete) result.downgraded++;
-    plan.push({ sub, listings, complete, at });
+    plan.push({ sub, listings, held: held as string[], complete, at });
   }
 
   tx(db, () => {
@@ -180,8 +186,8 @@ export function importFeed(store: { db: Db }, vault: string, cfg: FeedConfig, lo
       db.prepare("delete from feed_applied where feed_id = ? and sub_id = ?").run(cfg.id, id);
       result.released++;
     }
-    for (const { sub, listings, complete, at } of plan) {
-      const r = ingest(store, vault, sub.source, feedConfigId(cfg.id, sub.id), listings, { closeUnseen: complete, complete, observedAt: at, noSnapshot: true });
+    for (const { sub, listings, held, complete, at } of plan) {
+      const r = ingest(store, vault, sub.source, feedConfigId(cfg.id, sub.id), listings, { closeUnseen: complete, complete, observedAt: at, noSnapshot: true, alsoSeen: held });
       result.positionsNew += r.positionsNew; result.positionsClosed += r.positionsClosed; result.applied++;
       db.prepare(`insert into feed_applied(feed_id, sub_id, source, state, observed_at, sha256, applied_at) values (?,?,?,?,?,?,?) on conflict(feed_id, sub_id) do update set
         source = excluded.source, state = excluded.state, observed_at = excluded.observed_at, sha256 = excluded.sha256, applied_at = excluded.applied_at`)
