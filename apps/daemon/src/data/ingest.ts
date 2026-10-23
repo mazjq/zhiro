@@ -37,7 +37,8 @@ export const CLAIMS_SETTLE_MS = 48 * 3600_000;
 
 /**
  * A subscription that lists nothing any more (removed, switched off, dropped by a feed): the posts only it claimed
- * close as a full read listing nothing would close them (an applied-to post stays), then its claims go. The campaigns
+ * close as a full read listing nothing would close them (one the person watches or applied to stays as it was: the
+ * subscription went, not the post), then its claims go. The campaigns
  * it claimed posts of are returned, for tidy's orphan check.
  */
 export function releaseClaims(db: Db, configId: string): string[] {
@@ -45,7 +46,7 @@ export function releaseClaims(db: Db, configId: string): string[] {
   db.prepare(`update position set status = 'closed', updated_at = ? where status = 'open'
     and id in (select position_id from position_seen where config_id = ?)
     and not exists (select 1 from position_seen o where o.position_id = position.id and o.config_id != ?)
-    and id not in (select position_id from application where state != 'cancelled')`).run(now(), configId, configId);
+    and coalesce(watch_priority, 0) <= 0 and id not in (select position_id from application where state != 'cancelled')`).run(now(), configId, configId);
   db.prepare("delete from position_seen where config_id = ?").run(configId);
   return campaigns;
 }
