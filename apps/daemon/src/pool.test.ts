@@ -385,6 +385,25 @@ describe("deadline reminders follow relevance", () => {
   });
 });
 
+describe("a deadline that moves and moves back (B28)", () => {
+  it("says every change from the day last told: A → B, then B → A", async () => {
+    const { dir, domain, s } = setup();
+    ingest(domain, dir, "moka", "x", [listing({ validThrough: "2099-10-20" })]);
+    const co = ((await callTool("pool.list", {}, HUMAN, s)) as any).items[0], id = co.positions[0].id;
+    await callTool("position.watch", { positionId: id, priority: 2 }, HUMAN, s);
+    const step = () => deadlineReminder(s).steps.remind({ subjectId: id, checkpoint: {} } as any);
+    const told = () => (domain.db.prepare("select body from notice where kind = 'deadline' and title like '截止已更新%' order by rowid").all() as any[]).map((r) => JSON.parse(r.body)[0] as string);
+    await step(); // 2099-10-20 known: nothing changed yet
+    await callTool("campaign.deadline", { companyId: co.companyId, positionId: id, date: "2099-11-30" }, HUMAN, s);
+    await step();
+    await callTool("campaign.deadline", { companyId: co.companyId, positionId: id, date: "2099-10-20" }, HUMAN, s);
+    await step();
+    expect(told()).toHaveLength(2);
+    expect(told()[1]).toContain("改为 **");
+    expect(told()[1]).toMatch(/11.*30.*改为.*10.*20/);
+  });
+});
+
 describe("搜索模式 (presets) and 排除词", () => {
   it("must = AND, any = OR, exclude = NOT; the preset's tag ranks by its own score; a global 排除词 applies to every mode", async () => {
     const { dir, domain, s } = setup();
