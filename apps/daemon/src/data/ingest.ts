@@ -35,6 +35,21 @@ const sourceKey = (aggregate: boolean, l: Listing) => (aggregate || /#\d+$/.test
 /** How long after claims began (v45) a post nobody has claimed may close: every daily subscription has read by then. */
 export const CLAIMS_SETTLE_MS = 48 * 3600_000;
 
+/**
+ * A subscription that lists nothing any more (removed, switched off, dropped by a feed): the posts only it claimed
+ * close as a full read listing nothing would close them (an applied-to post stays), then its claims go. The campaigns
+ * it claimed posts of are returned, for tidy's orphan check.
+ */
+export function releaseClaims(db: Db, configId: string): string[] {
+  const campaigns = (db.prepare("select distinct p.campaign_id id from position_seen s join position p on p.id = s.position_id where s.config_id = ?").all(configId) as { id: string }[]).map((r) => r.id);
+  db.prepare(`update position set status = 'closed', updated_at = ? where status = 'open'
+    and id in (select position_id from position_seen where config_id = ?)
+    and not exists (select 1 from position_seen o where o.position_id = position.id and o.config_id != ?)
+    and id not in (select position_id from application where state != 'cancelled')`).run(now(), configId, configId);
+  db.prepare("delete from position_seen where config_id = ?").run(configId);
+  return campaigns;
+}
+
 /** A subscription's snapshots are named `<24-char time>-<configId>.json`; only its own, not another id that ends the same. */
 const ownSnapshots = (dir: string, configId: string) => readdirSync(dir).filter((f) => f.slice(25) === `${configId}.json`).sort();
 const SNAPSHOT_KEEP = 7;
@@ -67,11 +82,12 @@ function keepSnapshot(vault: string, sourceId: string, configId: string, listing
  *  3. record a scan_run row (so "0 new" and "failed" stay distinguishable from "closed")
  * One transaction, all or nothing. Campaign identity: catalog.campaignKey; the rest of the identity rules: catalog.ts.
  */
-export function ingest(store: { db: Db }, vault: string, sourceId: string, configId: string, listings: Listing[], opts: { complete?: boolean; error?: string; closeUnseen?: boolean; observedAt?: string } = {}): IngestResult & { listed: Listed } {
+export function ingest(store: { db: Db }, vault: string, sourceId: string, configId: string, listings: Listing[], opts: { complete?: boolean; error?: string; closeUnseen?: boolean; observedAt?: string; noSnapshot?: boolean } = {}): IngestResult & { listed: Listed } {
   const db = store.db;
   const runId = ulid();
   const started = now();
-  const snapshotPath = keepSnapshot(vault, sourceId, configId, listings);
+  // a feed's package is its own record (data/feed.ts): only the name is kept, no file is written outside the transaction
+  const snapshotPath = opts.noSnapshot ? join(vault, "snapshots", sourceId, `${started.replace(/[:.]/g, "-")}-${configId}.json`) : keepSnapshot(vault, sourceId, configId, listings);
 
   // Campaign-level fields come from the whole group, not from whichever listing happens to be last:
   // one job without a deadline must not blank the deadline another job of the same campaign stated.

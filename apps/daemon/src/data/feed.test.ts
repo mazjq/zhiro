@@ -1,7 +1,7 @@
 /** A subscribed data source: checked before anything is written, filed as a local read would be, all or nothing. */
 import { describe, it, expect } from "vitest";
 import { createHash, generateKeyPairSync, sign } from "node:crypto";
-import { mkdirSync, mkdtempSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { gzipSync } from "node:zlib";
@@ -90,6 +90,31 @@ describe("a subscribed data source", () => {
     publish(w.out, 4, [{ id: "moka-a", at: T(3), rows: [post("1")] }]);
     w.pull();
     expect(w.open()).toEqual(["岗位1"]);
+  });
+
+  it("a row that does not pass makes the read add only; a subscription dropped upstream closes what only it listed", () => {
+    const w = world();
+    publish(w.out, 1, [{ id: "moka-a", at: T(5), rows: [post("1"), post("2")] }, { id: "moka-b", at: T(5), rows: [post("3")] }]);
+    w.pull();
+    publish(w.out, 2, [{ id: "moka-a", at: T(4), rows: [post("1"), { title: "", company: "示例公司", url: "https://example.com/x" }] }]); // a bad row
+    expect(w.pull()).toMatchObject({ downgraded: 1, released: 1 });
+    expect(w.open()).toEqual(["岗位1", "岗位2"]); // 2 not closed by a read that lost a row; 3 (only b's) closed
+    publish(w.out, 3, [{ id: "moka-a", at: T(3), rows: [post("1", { title: "x".repeat(400) })] }]); // identity too long: not cut, left out
+    expect(w.pull()).toMatchObject({ downgraded: 1 });
+    expect(w.open()).toEqual(["岗位1", "岗位2"]);
+  });
+
+  it("refuses a package larger than it says, and a read from the future", () => {
+    const w = world();
+    publish(w.out, 1, [{ id: "moka-a", at: new Date(NOW + 5 * 3600_000).toISOString(), rows: [post("1")] }]);
+    expect(() => w.pull()).toThrow(/读取时间不对/);
+    publish(w.out, 1, [{ id: "moka-a", at: T(5), rows: [post("1")] }]);
+    const m = JSON.parse(readFileSync(join(w.out, "manifest.json"), "utf8"));
+    m.bundle.bytes = 10; // signed again with the lie: the unpacking stops at what it says
+    m.sig = sign(null, Buffer.from(signedPart(m)), privateKey).toString("base64");
+    writeFileSync(join(w.out, "manifest.json"), JSON.stringify(m));
+    expect(() => w.pull()).toThrow();
+    expect(w.open()).toEqual([]);
   });
 
   it("a subscription this library reads itself is left to its own reads", () => {

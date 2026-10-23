@@ -1,6 +1,6 @@
 import type { Services } from "../registry.js";
 import { tx } from "../db.js";
-import { sources, liveFeedConfigs } from "../data/index.js";
+import { sources, liveFeedConfigs, releaseClaims } from "../data/index.js";
 import { unitIndex, unitKey } from "./same-company.js";
 import { poolDirty } from "./pool.js";
 
@@ -87,13 +87,10 @@ export function dropOrphanCampaigns(s: Services, only?: string): number {
   // a subscription removed or switched off lists nothing any more: its claims go, so the others' full reads can close
   // what it alone kept open (B34) — whether or not it left listing rows of its own
   const live = new Set([...s.config.sources.filter((c) => c.enabled !== false).map((c) => c.id), ...fed]);
-  const unclaim = db.prepare("delete from position_seen where config_id = ?");
-  const claimedBy = db.prepare("select distinct p.campaign_id id from position_seen s join position p on p.id = s.position_id where s.config_id = ?");
   const released: string[] = []; // the campaigns they claimed posts of: checked like the ones their listing rows name
   for (const { id } of db.prepare("select distinct config_id id from position_seen").all() as { id: string }[]) {
     if (live.has(id) || (only && id !== only)) continue;
-    released.push(...(claimedBy.all(id) as { id: string }[]).map((r) => r.id));
-    unclaim.run(id);
+    released.push(...tx(db, () => releaseClaims(db, id))); // what only it listed closes, as a read listing nothing would
   }
   if (!mine.length && !released.length) return 0;
 
