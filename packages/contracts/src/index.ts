@@ -9,6 +9,8 @@ export interface ToolEffects {
   externalAction: boolean;
   dataEgress: boolean;
   reversible: boolean;
+  /** it reaches sites on the internet (reads a page, a mail server); with dataEgress false, none of the person's data goes out (B27) */
+  network?: boolean;
 }
 
 export interface ToolContract<I extends TSchema = TSchema, O extends TSchema = TSchema> {
@@ -25,8 +27,10 @@ export interface ToolContract<I extends TSchema = TSchema, O extends TSchema = T
 
 export const READ: ToolEffects = { localWrite: false, externalAction: false, dataEgress: false, reversible: true };
 export const WRITE: ToolEffects = { localWrite: true, externalAction: false, dataEgress: false, reversible: true };
-export const NETWORK_READ: ToolEffects = { localWrite: true, externalAction: false, dataEgress: false, reversible: true };
-export const EGRESS: ToolEffects = { localWrite: true, externalAction: true, dataEgress: true, reversible: false };
+export const NETWORK_READ: ToolEffects = { localWrite: true, externalAction: false, dataEgress: false, reversible: true, network: true };
+export const EGRESS: ToolEffects = { localWrite: true, externalAction: true, dataEgress: true, reversible: false, network: true };
+/** reads from the internet and keeps nothing: still a read an agent may call directly, but said to reach outside (B27) */
+export const ONLINE_READ: ToolEffects = { ...READ, network: true };
 
 export function defineTool<I extends TSchema, O extends TSchema>(t: ToolContract<I, O>): ToolContract<I, O> {
   return t;
@@ -480,7 +484,7 @@ export const tools = {
       next: Type.Union([Type.String(), Type.Null()]), truncated: Type.Boolean(), chars: Type.Number(), found: Type.Union([Type.Boolean(), Type.Null()]),
       steps: Type.Optional(Type.Array(Type.Object({ step: Type.String(), ok: Type.Boolean(), note: Type.String() }), { description: "每一步做成没有；第一步失败后面的不做" })),
     }),
-    effects: READ,
+    effects: ONLINE_READ,
     execution: "sync",
     errors: ["BAD_URL", "BUDGET", "BROWSER_FAILED"],
   }),
@@ -527,7 +531,7 @@ export const tools = {
       headers: Type.Array(Type.String()), columns: Type.Record(Type.String(), Type.String()), rows: Type.Number(), posts: Type.Number(), companies: Type.Number(),
       sample: Type.Array(Type.Object({ company: Type.String(), title: Type.String(), deadline: Type.String(), cities: Type.Array(Type.String()), url: Type.String() })), problem: Type.String(),
     }),
-    effects: READ,
+    effects: ONLINE_READ,
     execution: "sync",
     errors: ["UNSUPPORTED_URL", "FORBIDDEN", "NOT_PUBLIC", "FILE_NOT_FOUND", "BLOCKED"],
   }),
@@ -1387,7 +1391,7 @@ export const tools = {
     description: "查看一封被预筛跳过的邮件的原文：临时从邮箱取回用于显示，不入库、不送模型。",
     input: Type.Object({ account: Type.String(), messageId: Type.String() }),
     output: Type.Object({ from: Type.String(), subject: Type.String(), date: Type.String(), body: Type.String(), html: Type.String() }),
-    effects: READ,
+    effects: ONLINE_READ,
     execution: "sync",
     errors: ["NOT_FOUND"],
   }),
@@ -1659,7 +1663,7 @@ export const tools = {
     description: "把数据目录导出成一个 zip（数据库快照、配置（去掉密钥）、调研与简历等文件；不含钥匙、模型登录、浏览器状态），用于迁移或留存。只能由本人。",
     input: Type.Object({ to: Type.Optional(Type.String({ description: "zip 路径；默认 下载 目录" })) }),
     output: Type.Object({ path: Type.String(), bytes: Type.Number(), counts: Type.Record(Type.String(), Type.Number()), files: Type.Number() }),
-    effects: READ,
+    effects: WRITE,
     execution: "sync",
     errors: ["BAD_PATH", "EXISTS", "SNAPSHOT_BAD"],
   }),

@@ -16,7 +16,7 @@ import { createHash } from "node:crypto";
 import { dirname, join, resolve, sep } from "node:path";
 import { DatabaseSync } from "node:sqlite";
 import { tools, type ToolContract } from "@zhiro/contracts";
-import { OUTSIDE_TOOLS } from "../maintenance.js";
+import { reachesOutside } from "../maintenance.js";
 
 const argv = process.argv.slice(2).filter((x) => x !== "--");
 const arg = (k: string) => { const i = argv.indexOf(k); return i >= 0 ? argv[i + 1] : ""; };
@@ -114,7 +114,7 @@ function comparePictures(a: Picture, b: Picture, an: string, bn: string): string
 const report: { tools: { name: string; input: unknown; diff: string | null }[]; db: Record<string, string[]> } = { tools: [], db: {} };
 try {
   for (const s of sides) await start(s);
-  const plain = (Object.values(tools) as ToolContract[]).filter((c) => !c.effects.localWrite && !c.effects.externalAction && !c.effects.dataEgress && !OUTSIDE_TOOLS.test(c.name) && c.name !== "data.location" /* free disk space moves between calls */ &&!((c.input as any).required?.length));
+  const plain = (Object.values(tools) as ToolContract[]).filter((c) => !c.effects.localWrite && !c.effects.externalAction && !c.effects.dataEgress && !reachesOutside(c.name, c.effects) && c.name !== "data.location" /* free disk space moves between calls */ &&!((c.input as any).required?.length));
   const calls: [string, unknown][] = plain.flatMap((c) => (c.name.endsWith(".list") && (c.input as any).properties?.detail ? [[c.name, {}], [c.name, { detail: "brief" }]] : [[c.name, {}]]) as [string, unknown][]);
   const apps = ((await ask(sides[0], "application.list", { detail: "brief" })) as any).items ?? [];
   for (const a of apps) calls.push(["application.timeline", { id: a.application.id }]);
