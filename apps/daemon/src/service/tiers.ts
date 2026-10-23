@@ -58,7 +58,7 @@ const UNDOABLE = new Set(["position.watch", "recommend.tag", "recommend.untag", 
  */
 export function policySummary(name: string, c: ToolContract, s: Services, byAgent = false): string {
   const e = c.effects;
-  if (!e.localWrite && !e.externalAction && !e.dataEgress) return "";
+  if (!e.localWrite && !e.externalAction && !e.dataEgress) return e.network ? "（只读：会联网读取，不带你的资料）" : "";
   if (agentMode(s) !== "conservative" && BY_INPUT[name]) return BY_INPUT[name];
   if (tierOf(name, c, {}, s, byAgent) === "ask") return "（需用户确认：生成确认卡）";
   if (!e.localWrite) return "（直接执行）";
