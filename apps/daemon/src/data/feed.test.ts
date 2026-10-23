@@ -15,13 +15,13 @@ const sha = (x: string | Buffer) => createHash("sha256").update(x).digest("hex")
 const post = (id: string, o: Partial<Listing> = {}): Listing => ({ externalId: id, url: `https://example.com/${id}`, title: `岗位${id}`, company: "示例公司", locations: ["武汉"], cohort: "2027届", batch: "秋招", publisher: "示例公司", grade: "官方", isOriginal: true, confidence: 1, description: `职责${id}`, ...o } as Listing);
 
 /** What the collector writes: a bundle and a signed manifest in one folder. */
-function publish(dir: string, seq: number, subs: { id: string; source?: string; state?: "complete" | "stale"; at: string; rows: unknown[] }[], o: { createdAt?: string; tamper?: boolean; feed?: string } = {}) {
+function publish(dir: string, seq: number, subs: { id: string; source?: string; state?: "complete" | "stale"; at: string; rows: unknown[]; held?: string[] }[], o: { createdAt?: string; tamper?: boolean; feed?: string } = {}) {
   mkdirSync(dir, { recursive: true });
-  const bundle = Buffer.from(JSON.stringify({ subs: Object.fromEntries(subs.map((s) => [s.id, s.rows])) }));
+  const bundle = Buffer.from(JSON.stringify({ subs: Object.fromEntries(subs.map((s) => [s.id, s.rows])), withheld: Object.fromEntries(subs.map((s) => [s.id, s.held ?? []])) }));
   const packed = gzipSync(bundle), path = `bundle-${seq}.json.gz`;
   writeFileSync(join(dir, path), packed);
   const m: FeedManifest = { feed: o.feed ?? "f1", protocol: 1, seq, createdAt: o.createdAt ?? new Date().toISOString(), bundle: { path, sha256: sha(packed), bytes: bundle.length },
-    subs: subs.map((s) => ({ id: s.id, source: s.source ?? "moka", state: s.state ?? "complete", observedAt: s.at, count: s.rows.length, sha256: sha(JSON.stringify(s.rows)) })) };
+    subs: subs.map((s) => ({ id: s.id, source: s.source ?? "moka", state: s.state ?? "complete", observedAt: s.at, count: s.rows.length, withheld: (s.held ?? []).length, sha256: sha(JSON.stringify([s.rows, s.held ?? []])) })) };
   m.sig = sign(null, Buffer.from(signedPart(m)), privateKey).toString("base64");
   if (o.tamper) m.seq += 100;
   writeFileSync(join(dir, "manifest.json"), JSON.stringify(m));
@@ -55,6 +55,9 @@ describe("a subscribed data source", () => {
     expect(w.db.prepare("select closes_at_override o from campaign where id = ?").get(camp)).toEqual({ o: "2026-12-31" });
     expect(w.db.prepare("select watch_priority p from position where title = '岗位1'").get()).toEqual({ p: 2 });
     expect(w.pull()).toMatchObject({ unchanged: true }); // the same package again: nothing to do
+    publish(w.out, 3, [{ id: "moka-a", at: T(0.5), rows: [post("1", { validThrough: "2026-11-30" }), post("2")] }]); // read again, the same
+    expect(w.pull()).toMatchObject({ applied: 0, unchangedSubs: 1 });
+    expect(w.db.prepare("select observed_at a from feed_applied").get()).toEqual({ a: T(0.5) });
   });
 
   it("refuses a wrong signature, another feed, an older or expired package, an unknown reader — writing nothing", () => {
@@ -102,6 +105,18 @@ describe("a subscribed data source", () => {
     publish(w.out, 3, [{ id: "moka-a", at: T(3), rows: [post("1", { title: "x".repeat(400) })] }]); // identity too long: not cut, left out
     expect(w.pull()).toMatchObject({ downgraded: 1 });
     expect(w.open()).toEqual(["岗位1", "岗位2"]);
+  });
+
+  it("a post the sender held back is still there: not closed, its content left as it was", () => {
+    const w = world();
+    publish(w.out, 1, [{ id: "moka-a", at: T(5), rows: [post("1"), post("2")] }]);
+    w.pull();
+    publish(w.out, 2, [{ id: "moka-a", at: T(4), rows: [post("1")], held: ["2"] }]); // the gate kept 2 back this time
+    w.pull();
+    expect(w.open()).toEqual(["岗位1", "岗位2"]);
+    publish(w.out, 3, [{ id: "moka-a", at: T(3), rows: [post("1")] }]); // now the site no longer lists it
+    w.pull();
+    expect(w.open()).toEqual(["岗位1"]);
   });
 
   it("refuses a package larger than it says, and a read from the future", () => {
