@@ -127,7 +127,7 @@ export function cleanListing(x: any): Listing | null {
   return l;
 }
 
-export interface FeedResult { feed: string; seq: number | null; unchanged: boolean; applied: number; skipped: number; local: number; released: number; downgraded: number; positionsNew: number; positionsClosed: number }
+export interface FeedResult { feed: string; seq: number | null; unchanged: boolean; applied: number; unchangedSubs?: number; skipped: number; local: number; released: number; downgraded: number; positionsNew: number; positionsClosed: number }
 
 /**
  * Read, check and file one feed. Throws (nothing written) when any check fails. `local`: the subscriptions this library
@@ -151,6 +151,7 @@ export function importFeed(store: { db: Db }, vault: string, cfg: FeedConfig, lo
 
   // every check before any write: what each subscription brings, and whether it is newer than what is here
   const plan: { sub: FeedSub; listings: Listing[]; held: string[]; complete: boolean; at: string }[] = [];
+  const touched: { sub: FeedSub; at: string }[] = []; // read again, found the same: only the read time moves
   for (const sub of m.subs) {
     const rows = bundle.subs?.[sub.id], held = bundle.withheld?.[sub.id] ?? [];
     if (!Array.isArray(rows) || rows.length !== sub.count || !Array.isArray(held) || held.length !== (sub.withheld ?? 0) || held.some((x) => typeof x !== "string" || x.length > 500)
@@ -163,6 +164,9 @@ export function importFeed(store: { db: Db }, vault: string, cfg: FeedConfig, lo
       if (before.sha256 !== sub.sha256) throw new FeedError("FEED_CONFLICT", `订阅「${sub.id}」同一次读取内容不同`);
       if (!(before.state === "stale" && sub.state === "complete")) { result.skipped++; continue; } // the same read, now known complete: filed again
     }
+    // most subscriptions read the same as yesterday: nothing to file, only when they were read (the first full package
+    // took 47 s to file; every one after it would have taken as long for the few that changed)
+    if (before && before.sha256 === sub.sha256 && (before.state === sub.state || before.state === "complete")) { touched.push({ sub, at }); continue; }
     const listings = rows.map(cleanListing).filter((l): l is Listing => !!l);
     // a read with rows left out, or with none at all (a local read of nothing is a failure too), only adds
     const complete = sub.state === "complete" && listings.length === rows.length && listings.length > 0;
@@ -191,8 +195,10 @@ export function importFeed(store: { db: Db }, vault: string, cfg: FeedConfig, lo
       result.positionsNew += r.positionsNew; result.positionsClosed += r.positionsClosed; result.applied++;
       db.prepare(`insert into feed_applied(feed_id, sub_id, source, state, observed_at, sha256, applied_at) values (?,?,?,?,?,?,?) on conflict(feed_id, sub_id) do update set
         source = excluded.source, state = excluded.state, observed_at = excluded.observed_at, sha256 = excluded.sha256, applied_at = excluded.applied_at`)
-        .run(cfg.id, sub.id, sub.source, complete ? "complete" : "stale", at, sub.sha256, new Date(now).toISOString());
+        .run(cfg.id, sub.id, sub.source, sub.state, at, sub.sha256, new Date(now).toISOString()); // the state the sender declared (a downgrade here is this run's alone)
     }
+    for (const { sub, at } of touched) db.prepare("update feed_applied set observed_at = ?, applied_at = ? where feed_id = ? and sub_id = ?").run(at, new Date(now).toISOString(), cfg.id, sub.id);
+    result.unchangedSubs = touched.length;
     db.prepare("insert into feed_run(feed_id, seq, created_at, applied_at) values (?,?,?,?) on conflict(feed_id) do update set seq = excluded.seq, created_at = excluded.created_at, applied_at = excluded.applied_at")
       .run(cfg.id, m.seq, m.createdAt, new Date(now).toISOString());
   });
