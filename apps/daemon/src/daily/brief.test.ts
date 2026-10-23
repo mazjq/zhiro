@@ -5,7 +5,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { ulid } from "ulid";
 import { seedWorld } from "../eval/seed.js";
-import { latestBrief, runBrief } from "./brief.js";
+import { latestBrief, makeBrief, runBrief } from "./brief.js";
 import { nextAt, normalizeAt } from "../workflows/daily.js";
 
 const H = 3600_000, DAY = 24 * H;
@@ -82,6 +82,20 @@ describe("the daily brief", () => {
     expect(() => runBrief(db, now + DAY)).toThrow();
     expect(count()).toEqual(before);
     db.exec("alter table notice_gone rename to notice");
+  });
+
+  it("an application an agent recorded as sent, with no mail or word of the person since, is asked about (R19)", async () => {
+    const { s, app } = await world();
+    const db = s.domain.db, now = Date.now();
+    const id = app.chutian;
+    db.prepare("update application set state = 'submitted' where id = ?").run(id);
+    db.prepare("delete from application_event where application_id = ? and kind = 'state'").run(id);
+    db.prepare("delete from message where application_id = ?").run(id);
+    db.prepare("insert into application_event(id, application_id, at, kind, detail, source) values ('ev1', ?, ?, 'state', 'draft → submitted: 平台已提交', 'agent:mcp')").run(id, new Date(now - 5 * DAY).toISOString());
+    const asked = (at: number) => makeBrief(db, at).hanging.some((x) => x.key === `hang:unproven:${id}`);
+    expect(asked(now)).toBe(true);
+    db.prepare("insert into message(id, account, message_id, sender, subject, received_at, body_path, category, application_id, status, created_at) values ('m1', 'a', 'x', 'hr', '投递成功', ?, '', '投递确认', ?, 'filed', ?)").run(new Date(now).toISOString(), id, new Date(now).toISOString());
+    expect(asked(now)).toBe(false); // a confirmation came in
   });
 
   it("takes only a real hour and minute", () => {
