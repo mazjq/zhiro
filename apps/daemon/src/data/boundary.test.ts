@@ -9,7 +9,7 @@ import { join, resolve, relative, dirname } from "node:path";
  */
 const SRC = resolve(import.meta.dirname, "..");
 const DATA = join(SRC, "data");
-const BASE = ["db.ts", "config.ts", "datadir.ts", "lock.ts", "move.ts", "service/workflow.ts"]; // what the layer may stand on
+const BASE = ["db.ts", "config.ts", "config-check.ts", "datadir.ts", "lock.ts", "move.ts", "service/workflow.ts"]; // what the layer may stand on
 const PACKAGES = ["ulid", "yaml", "@zhiro/contracts"];
 const TEST_ONLY = ["vitest"];
 
