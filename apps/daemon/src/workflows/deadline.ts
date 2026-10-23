@@ -46,10 +46,14 @@ export function deadlineReminder(s: Services): WorkflowDef {
           if (!sent(week)) { const err = await send(`宜尽早投递 · ${p.company}`, [`${name}${r.say}`, "状态：**未投递**"], week); if (err) return { type: "fail", error: err, retryInMs: 30 * 60_000 }; mark(week); }
           return { type: "sleep", until: new Date(Date.now() + 7 * DAY).toISOString() };
         }
-        // the day changed since the person was last told one: say so once
-        if (!sent(`known|${id}|${r.date}`)) {
-          const prev = db.prepare("select key from reminder_sent where key like ? order by sent_at desc limit 1").get(`known|${id}|%`) as { key: string } | undefined;
-          if (prev) { const err = await send(`截止已更新 · ${p.company}`, [`${name}的截止由 ${sayDate(prev.key.split("|")[2])} 改为 **${sayDate(r.date)}**`, r.say], `known|${id}|${r.date}`); if (err) return { type: "fail", error: err, retryInMs: 30 * 60_000 }; }
+        // the day differs from the one the person was last told: say so once. By the last one told, not by "ever told":
+        // A → B → A must say B → A (B28); each change is its own notice, so going back is not taken for the first one
+        const prev = db.prepare("select key from reminder_sent where key like ? order by sent_at desc, rowid desc limit 1").get(`known|${id}|%`) as { key: string } | undefined;
+        const told = prev?.key.split("|")[2];
+        if (told !== r.date) {
+          if (told) { const err = await send(`截止已更新 · ${p.company}`, [`${name}的截止由 ${sayDate(told)} 改为 **${sayDate(r.date)}**`, r.say], `known|${id}|${told}>${r.date}|${Date.now()}`); if (err) return { type: "fail", error: err, retryInMs: 30 * 60_000 }; }
+          // the newest row (rowid) is the day last told, also within one millisecond
+          db.prepare("delete from reminder_sent where key = ?").run(`known|${id}|${r.date}`);
           mark(`known|${id}|${r.date}`);
         }
         const left = Math.ceil((Date.parse(r.date + "T23:59:59+08:00") - Date.now()) / DAY);
