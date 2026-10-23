@@ -8,6 +8,7 @@ export { pullOnce } from "./types.js";
 export { sources, sourceFor, siteKeyOf, aggregateIds, isAggregate, aggregateSql, isNotices, readerName } from "./readers/index.js";
 export { httpContext, publicUrl, isLocalPath } from "./http.js";
 export { ingest, recordFailedRun, campaignUrl, type IngestResult, type Listed } from "./ingest.js";
+export { importFeed, liveFeedConfigs, feedConfigId, checkManifest, cleanListing, signedPart, FEED_PROTOCOL, type FeedConfig, type FeedManifest, type FeedSub, type FeedResult } from "./feed.js";
 export { runSource, type Progress, listSources, previewSource, forgetPreviews, reasonOf, SYNC_REASONS, sourceScan, scheduleSources } from "./sync.js";
 export { addSource, removeSource, saveSources } from "./subscriptions.js";
 export { parseCsv, parseDeadline, splitList, gradeFromSource, FIELDS, BUILTIN_COLUMNS, guessColumns, csvToTable, listingsFromTable, type Columns, type Table } from "./sheet.js";

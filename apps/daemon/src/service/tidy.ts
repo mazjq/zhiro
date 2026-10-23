@@ -1,6 +1,6 @@
 import type { Services } from "../registry.js";
 import { tx } from "../db.js";
-import { sources } from "../data/index.js";
+import { sources, liveFeedConfigs } from "../data/index.js";
 import { unitIndex, unitKey } from "./same-company.js";
 import { poolDirty } from "./pool.js";
 
@@ -74,7 +74,9 @@ export function resolveMergeProposals(s: Services): { merged: string[]; expired:
  */
 export function dropOrphanCampaigns(s: Services, only?: string): number {
   const db = s.domain.db;
-  const configured = new Set(s.config.sources.map((c) => c.id));
+  // a subscribed feed's subscriptions count as configured while the feed carries them (data/feed.ts)
+  const fed = liveFeedConfigs(db, s.config.feeds);
+  const configured = new Set([...s.config.sources.map((c) => c.id), ...fed]);
   const pullKinds = new Set(Object.values(sources).filter((x) => x.mode === "pull").map((x) => x.id));
   // source_listing.provider is the reader kind; the subscription id is in the snapshot name: <timestamp 24 chars>-<configId>.json
   const configIdOf = (path: string) => { const base = path.split(/[\\/]/).pop() ?? ""; return base.length > 30 ? base.slice(25).replace(/\.json$/, "") : ""; };
@@ -84,7 +86,7 @@ export function dropOrphanCampaigns(s: Services, only?: string): number {
   for (const p of paths) { const id = configIdOf(p.path); if (id && pullKinds.has(p.provider) && !configured.has(id) && (!only || id === only)) { gone.set(id, p.provider); mine.push(p.path); } }
   // a subscription removed or switched off lists nothing any more: its claims go, so the others' full reads can close
   // what it alone kept open (B34) — whether or not it left listing rows of its own
-  const live = new Set(s.config.sources.filter((c) => c.enabled !== false).map((c) => c.id));
+  const live = new Set([...s.config.sources.filter((c) => c.enabled !== false).map((c) => c.id), ...fed]);
   const unclaim = db.prepare("delete from position_seen where config_id = ?");
   const claimedBy = db.prepare("select distinct p.campaign_id id from position_seen s join position p on p.id = s.position_id where s.config_id = ?");
   const released: string[] = []; // the campaigns they claimed posts of: checked like the ones their listing rows name

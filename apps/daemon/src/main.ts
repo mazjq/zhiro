@@ -42,6 +42,7 @@ import { inboxPoll, scheduleInbox } from "./workflows/inbox.js";
 import { noticeDeliver, scheduleNotices } from "./workflows/notify.js";
 import { dailyBrief, scheduleBrief } from "./workflows/daily.js";
 import { leadResolve, scheduleLeads } from "./workflows/leads.js";
+import { feedPull, scheduleFeeds } from "./workflows/feed.js";
 import { docDeps, dataOf } from "./registry.js";
 import { coalesce } from "./service/later.js";
 import { announcer } from "./service/background.js";
@@ -115,6 +116,7 @@ workflows.register(smeRun(services));
 workflows.register(captureRecheck(services));
 workflows.register(inboxPoll(services));
 workflows.register(leadResolve(services));
+workflows.register(feedPull(services));
 workflows.register(noticeDeliver(services));
 workflows.register(dailyBrief(services));
 if (!maintenance) {
@@ -145,6 +147,7 @@ llm.gate = (kind) => callGate(gateDeps, kind);
 if (!maintenance) {
   scheduleInbox(services);
   scheduleLeads(services);
+  scheduleFeeds(services);
   scheduleNotices(services);
   scheduleBrief(services);
   void syncRelevantOfficial(services);
