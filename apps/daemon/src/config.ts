@@ -1,4 +1,5 @@
 import { closeSync, existsSync, fsyncSync, mkdirSync, openSync, readdirSync, readFileSync, renameSync, rmSync, writeFileSync, writeSync } from "node:fs";
+import { checkConfig } from "./config-check.js";
 import { join } from "node:path";
 import { randomBytes } from "node:crypto";
 import YAML from "yaml";
@@ -48,6 +49,8 @@ export interface JobosConfig {
   background?: { reserve?: number; apiDailyUsd?: number; unknownDailyTokens?: number; quietBeforeMins?: number; quietAfterMins?: number };
   /** the application season: applications since this date count against a company's exploration slots (ADR-036) */
   season?: { key?: string; since?: string };
+  /** what was wrong in jobos.yaml when it was read (A13: each taken back to its default); not written to the file */
+  problems?: string[];
   /** configured data-source instances; see sources/types.ts SourceConfig */
   sources: Array<{ id: string; source: string; name?: string; url?: string; cohort?: string; batch?: string; kind?: string; keywords?: string[]; maxPages?: number; everyHours?: number; enabled?: boolean; auto?: boolean; discover?: boolean }>;
 }
@@ -76,6 +79,9 @@ export function loadConfig(vault = defaultVaultDir()): JobosConfig {
   let user: Partial<JobosConfig> = {};
   if (existsSync(file)) user = (YAML.parse(readFileSync(file, "utf8")) as Partial<JobosConfig>) ?? {};
   else replaceConfig(vault, { ...DEFAULTS, vault: undefined });
+  // A13: a wrong setting falls back to its default and the start says so (config-check.ts); the file is not changed
+  const problems = checkConfig(user);
+  for (const p of problems) console.warn(`[zhiro] jobos.yaml：${p}`);
   return {
     ...DEFAULTS,
     ...user,
@@ -87,6 +93,7 @@ export function loadConfig(vault = defaultVaultDir()): JobosConfig {
     reminders: { ...DEFAULTS.reminders, ...(user.reminders ?? {}) },
     agent: { ...DEFAULTS.agent, ...(user.agent ?? {}) },
     sources: Array.isArray(user.sources) ? user.sources : [],
+    ...(problems.length ? { problems } : {}),
   };
 }
 
