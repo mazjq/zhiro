@@ -1,11 +1,10 @@
 import { describe, it, expect } from "vitest";
+import { createServices, testConfig } from "../services.js";
 import { mkdtempSync, mkdirSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { openDb } from "../db.js";
-import { Domain } from "../service/domain.js";
-import { WorkflowEngine } from "../service/workflow.js";
-import type { Services } from "../registry.js";
+import type { Services } from "../services.js";
 import { ingest, type Listing } from "../data/index.js";
 import { pruneAutoSources, caredCompanies } from "../service/official.js";
 import { entryOf, expand, expandable } from "./expand.js";
@@ -33,7 +32,7 @@ describe("待展开 and the start-up tidying of subscriptions agree", () => {
       { id: "moka-示例动力集团", source: "moka", name: "示例动力集团", url: own, auto: true, enabled: true },
       { id: "moka-无人关心公司", source: "moka", name: "无人关心公司", url: other, auto: true, enabled: true },
     ];
-    const s: Services = { domain: new Domain(db), workflows: new WorkflowEngine(db), config: { vault: dir, http: { host: "127.0.0.1", port: 0 }, llm: { provider: "x", model: "y" }, feishu: {}, reminders: { daysBefore: [7, 3, 1] }, sources } };
+    const s: Services = createServices({ db: db, config: testConfig(dir, { sources }) });
     // the sheet knows the group by one row of categories, linking its career site; the site files its posts under the units
     const row = (o: Partial<Listing>): Listing => ({ externalId: "r1", url: site, title: "技术类", company: "示例重工集团", companyType: "央国企", industry: "装备制造", locations: ["武汉"], publisher: "汇总表", grade: "聚合", isOriginal: false, confidence: 1, cohort: "2027届", batch: "秋招", ...o });
     ingest(s.domain, dir, "feishu-base", "feishu-base-sheet", [row({})]);

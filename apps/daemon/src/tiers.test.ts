@@ -1,11 +1,11 @@
 import { describe, it, expect } from "vitest";
+import { createServices, testConfig } from "./services.js";
 import { mkdtempSync, writeFileSync, mkdirSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { openDb } from "./db.js";
 import { Domain } from "./service/domain.js";
 import { importCsv } from "./service/import-csv.js";
-import { WorkflowEngine } from "./service/workflow.js";
 import { callTool, callableBy, type Services } from "./registry.js";
 
 const CSV = `更新时间,公司,企业类型,行业类别,批次,招聘届次,工作地点,招聘岗位,学历要求,专业要求,开始时间,截止时间,简历投递链接,公告链接,是否笔试,公告来源,备注
@@ -21,7 +21,7 @@ function setup() {
   writeFileSync(join(dir, "config", "jobos.yaml"), "agent:\n  mode: default\n", "utf8");
   const db = openDb(join(dir, "t.db"));
   const domain = new Domain(db);
-  const s: Services = { domain, workflows: new WorkflowEngine(db), config: { vault: dir, http: { host: "127.0.0.1", port: 0 }, llm: { provider: "x", model: "y" }, feishu: {}, reminders: { daysBefore: [7, 3, 1] }, sources: [], agent: { mode: "default", maxWritesPerTurn: 10 } } };
+  const s: Services = createServices({ db: db, domain, config: testConfig(dir, { sources: [], agent: { mode: "default", maxWritesPerTurn: 10 } }) });
   const csv = join(dir, "a.csv");
   writeFileSync(csv, CSV, "utf8");
   importCsv(domain, csv);

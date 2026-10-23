@@ -1,5 +1,5 @@
 import type { WorkflowDef } from "../service/workflow.js";
-import type { Services } from "../registry.js";
+import type { Services } from "../services.js";
 import { updateConfig } from "../config.js";
 import { DomainError } from "../service/domain.js";
 import { budgetSettings } from "../budget/index.js";

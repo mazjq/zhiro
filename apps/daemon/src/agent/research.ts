@@ -2,7 +2,7 @@ import { mkdirSync, writeFileSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { ulid } from "ulid";
 import { now } from "../db.js";
-import type { Services } from "../registry.js";
+import type { Services } from "../services.js";
 import type { WorkflowDef } from "../service/workflow.js";
 import { spawnRun, readRun } from "./worker.js";
 import { INTEL_QUESTION } from "../service/intel.js";

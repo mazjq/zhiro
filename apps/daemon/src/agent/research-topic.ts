@@ -3,7 +3,7 @@ import { join } from "node:path";
 import { ulid } from "ulid";
 import YAML from "yaml";
 import { now } from "../db.js";
-import type { Services } from "../registry.js";
+import type { Services } from "../services.js";
 import type { WorkflowDef } from "../service/workflow.js";
 import { spawnRun, readRun } from "./worker.js";
 import { companyKey, genericCompany, publicUrl, sha } from "../data/index.js";

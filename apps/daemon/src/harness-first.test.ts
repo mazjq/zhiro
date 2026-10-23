@@ -1,11 +1,10 @@
 /** ADR-057: one harness does the AI work — who answers what, the no-tools check, and what an agent is told of the person's edits. */
+import { createServices } from "./services.js";
 import { describe, it, expect, afterEach } from "vitest";
 import { mkdtempSync, mkdirSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { openDb } from "./db.js";
-import { Domain } from "./service/domain.js";
-import { WorkflowEngine } from "./service/workflow.js";
 import { createLlm } from "./llm.js";
 import { callTool, type Services } from "./registry.js";
 import { asAgentCall, callingAgent } from "./service/usage.js";
@@ -31,7 +30,7 @@ function setup(llmCfg: any = { provider: "openai-codex", model: "gpt-5.6-sol" },
   const config: any = { vault: dir, http: { host: "127.0.0.1", port: 0 }, llm: llmCfg, feishu: {}, reminders: { daysBefore: [7, 3, 1] }, sources: [], agent };
   const llm = createLlm(config);
   llm.db = db;
-  const s: Services = { domain: new Domain(db), workflows: new WorkflowEngine(db), config, llm };
+  const s: Services = createServices({ db, config, llm });
   return { s, db, dir };
 }
 const env = { ...process.env };

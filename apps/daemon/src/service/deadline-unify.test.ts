@@ -1,10 +1,10 @@
 import { describe, it, expect, vi } from "vitest";
+import { createServices, testConfig } from "../services.js";
 import { mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { openDb } from "../db.js";
 import { Domain } from "./domain.js";
-import { WorkflowEngine } from "./workflow.js";
 import { callTool, type Services, type Actor } from "../registry.js";
 import { ingest } from "../data/index.js";
 import type { Listing } from "../data/index.js";
@@ -25,7 +25,7 @@ function setup() {
   const dir = mkdtempSync(join(tmpdir(), "jobos-unify-"));
   const db = openDb(join(dir, "t.db"));
   const domain = new Domain(db);
-  const s: Services = { domain, workflows: new WorkflowEngine(db), config: { vault: dir, http: { host: "127.0.0.1", port: 0 }, llm: { provider: "x", model: "y" }, feishu: {}, reminders: { daysBefore: [7, 3, 1] }, sources: [] } };
+  const s: Services = createServices({ db: db, domain, config: testConfig(dir, { sources: [] }) });
   return { dir, domain, db, s };
 }
 const listing = (o: Partial<Listing>): Listing => ({ externalId: o.title ?? "x", url: "https://example.com/j", title: "控制算法工程师", company: "示例", locations: ["武汉"], publisher: "示例", grade: "官方", isOriginal: true, confidence: 1, cohort: "2027届", batch: "秋招", ...o });

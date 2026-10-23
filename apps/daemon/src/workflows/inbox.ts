@@ -1,5 +1,5 @@
 import type { WorkflowDef } from "../service/workflow.js";
-import type { Services } from "../registry.js";
+import type { Services } from "../services.js";
 import { inboxDeps } from "../registry.js";
 import { loadAccounts, pullAll } from "../service/inbox.js";
 import { withPurpose } from "../service/usage.js";

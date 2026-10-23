@@ -1,18 +1,18 @@
 import { describe, it, expect } from "vitest";
+import { createServices, testConfig } from "../services.js";
 import { mkdtempSync, mkdirSync, writeFileSync, readFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { openDb, now } from "../db.js";
 import { Domain } from "../service/domain.js";
-import { WorkflowEngine } from "../service/workflow.js";
-import type { Services } from "../registry.js";
+import type { Services } from "../services.js";
 import { researchRun, claimsMarkdown, staffMarkdown } from "./research.js";
 import { factsMarkdown } from "../service/employer.js";
 
 function setup() {
   const vault = mkdtempSync(join(tmpdir(), "zhiro-employer-"));
   const domain = new Domain(openDb(join(vault, "t.db")));
-  const s: Services = { domain, workflows: new WorkflowEngine(domain.db), config: { vault, http: { host: "127.0.0.1", port: 0 }, llm: { provider: "x", model: "y" }, feishu: {}, reminders: { daysBefore: [7, 3, 1] }, sources: [] } };
+  const s: Services = createServices({ db: domain.db, domain, config: testConfig(vault, { sources: [] }) });
   return { vault, domain, s };
 }
 

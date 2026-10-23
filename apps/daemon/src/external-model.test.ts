@@ -1,10 +1,9 @@
+import { createServices } from "./services.js";
 import { describe, it, expect } from "vitest";
 import { mkdtempSync, mkdirSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { openDb } from "./db.js";
-import { Domain } from "./service/domain.js";
-import { WorkflowEngine } from "./service/workflow.js";
 import { createLlm } from "./llm.js";
 import { callTool, type Services } from "./registry.js";
 import { spawnRun, readRun } from "./agent/worker.js";
@@ -20,7 +19,7 @@ function setup() {
   const config: any = { vault: dir, http: { host: "127.0.0.1", port: 0 }, llm: { provider: "external", model: "agent" }, feishu: {}, reminders: { daysBefore: [7, 3, 1] }, sources: [], agent: { mode: "default", maxWritesPerTurn: 10 } };
   const llm = createLlm(config);
   llm.db = db;
-  const s: Services = { domain: new Domain(db), workflows: new WorkflowEngine(db), config, llm };
+  const s: Services = createServices({ db, config, llm });
   return { s, db, dir };
 }
 
