@@ -2,7 +2,7 @@ import { resolveUsListing, fetchUsBasic, fetchUsFinance } from "./us-stock.js";
 import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import type { Db } from "../db.js";
-import type { Services } from "../registry.js";
+import type { Services } from "../services.js";
 import { NotFound } from "./domain.js";
 import { parseCsv } from "../data/index.js";
 import { upsertSme } from "./sme.js";

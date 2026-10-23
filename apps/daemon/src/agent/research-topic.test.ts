@@ -1,11 +1,10 @@
+import { createServices } from "../services.js";
 import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 import { mkdtempSync, mkdirSync, writeFileSync, readFileSync, existsSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { ulid } from "ulid";
 import { openDb } from "../db.js";
-import { Domain } from "../service/domain.js";
-import { WorkflowEngine } from "../service/workflow.js";
 import { createLlm } from "../llm.js";
 import { callTool, type Services } from "../registry.js";
 import { ingest, type Listing } from "../data/index.js";
@@ -38,7 +37,7 @@ function setup(provider = "external") {
   const config: any = { vault: dir, http: { host: "127.0.0.1", port: 0 }, llm: { provider, model: "agent" }, feishu: {}, reminders: { daysBefore: [7, 3, 1] }, sources: [], agent: { mode: "default", maxWritesPerTurn: 10 } };
   const llm = createLlm(config);
   llm.db = db;
-  const s: Services = { domain: new Domain(db), workflows: new WorkflowEngine(db), config, llm };
+  const s: Services = createServices({ db, config, llm });
   s.workflows.register(topicRun(s));
   return { s, db, dir };
 }

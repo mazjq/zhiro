@@ -1,4 +1,4 @@
-import type { Services } from "../registry.js";
+import type { Services } from "../services.js";
 import { listFacts } from "../service/profile.js";
 import { isAggregate } from "../data/index.js";
 import { expiredMany } from "../service/deadlines.js";

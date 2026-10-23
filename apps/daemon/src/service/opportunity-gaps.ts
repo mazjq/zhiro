@@ -1,4 +1,4 @@
-import type { Services } from "../registry.js";
+import type { Services } from "../services.js";
 import { json, now } from "../db.js";
 import { label } from "../recommenders/fit.js";
 import { expiredMany } from "./deadlines.js";

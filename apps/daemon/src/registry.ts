@@ -1,19 +1,15 @@
 import { positionBrief, applicationBrief, poolCompanyBrief } from "./service/brief.js";
 import { tools, type ToolName, type ToolInput, type ToolOutput, type ToolContract } from "@zhiro/contracts";
 import { Value } from "@sinclair/typebox/value";
-import type { Domain } from "./service/domain.js";
 import { DomainError, NotFound, genericCompany } from "./service/domain.js";
 import { importCsv } from "./service/import-csv.js";
 import { capture, providerOf } from "./service/capture.js";
 import { runBackup } from "./service/backup.js";
 import { locationInfo, requestMove, cancelMove } from "./move.js";
 import { notify } from "./service/feishu.js";
-import type { WorkflowEngine } from "./service/workflow.js";
-import type { JobosConfig } from "./config.js";
 import { configFile, updateConfig } from "./config.js";
 import { reachesOutside } from "./maintenance.js";
 import { emit } from "./events.js";
-import type { Llm } from "./llm.js";
 import { runSource, listSources, addSource, removeSource, previewSource, isLocalPath, type Columns } from "./data/index.js";
 import { sourceFor, campaignKey, companyKey, aggregateSql, type DataContext, type SourceConfig } from "./data/index.js";
 
@@ -91,7 +87,7 @@ export const docDeps = (s: Services): Deps => ({ db: s.domain.db, vault: s.confi
 import { recommenders, runRecommender, tagCompany, rerunAuto } from "./recommenders/index.js";
 import { listPresets, savePreset, removePreset, suggestTerms } from "./recommenders/preset.js";
 import { tierOf, undoPlan, recordAction, listActions, undoAction, setMode, setAgentConfig, maxWritesPerTurn } from "./service/tiers.js";
-import { backendOf, type ChatHub } from "./agent/backend.js";
+import { backendOf, } from "./agent/backend.js";
 import { exportVault, defaultExportPath } from "./service/export.js";
 import { join } from "node:path";
 import { readIntel, getIntelDetail, refreshIntel, importSme } from "./service/intel.js";
@@ -149,8 +145,8 @@ export function dataOf(s: Services): DataContext {
     onPull: (configId, running) => emit("scan", { configId, running }) };
 }
 
-/** `onBackgroundChanged`: data changed with no tool call behind it; the open pages hear of it once it shows (service/background.ts) */
-export interface Services { domain: Domain; workflows: WorkflowEngine; config: JobosConfig; onDataChanged?: () => void; onBackgroundChanged?: (what: string) => void; onRelevanceChanged?: () => void; onSourcesChanged?: () => void; onInboxChanged?: () => void; llm?: Llm; chat?: ChatHub }
+export type { Services } from "./services.js";
+import type { Services } from "./services.js";
 
 /**
  * The research data tools (ADR-056). Called with the runId of a 主题调研 that is under way, the call and its answer are

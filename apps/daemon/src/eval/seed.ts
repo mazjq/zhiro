@@ -3,7 +3,7 @@ import { join } from "node:path";
 import { ulid } from "ulid";
 import { openDb, now } from "../db.js";
 import { Domain } from "../service/domain.js";
-import { WorkflowEngine } from "../service/workflow.js";
+import { createServices, testConfig } from "../services.js";
 import { callTool, type Services, type Actor } from "../registry.js";
 import { ingest } from "../data/index.js";
 import type { Listing } from "../data/index.js";
@@ -69,8 +69,7 @@ export async function seedWorld(dir: string): Promise<World> {
   const db = openDb(join(dir, "jobos.db"));
   const domain = new Domain(db);
   const s: Services = {
-    domain, workflows: new WorkflowEngine(db),
-    config: { vault: dir, http: { host: "127.0.0.1", port: 0 }, llm: { provider: "none", model: "none" }, feishu: {}, reminders: { daysBefore: [7, 3, 1] }, sources: [] },
+    ...createServices({ db, domain, config: testConfig(dir, { llm: { provider: "none", model: "none" } }) }),
     onDataChanged: () => {}, onRelevanceChanged: () => {}, onSourcesChanged: () => {}, onInboxChanged: () => {},
   };
 

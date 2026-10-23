@@ -1,11 +1,10 @@
 import { describe, it, expect } from "vitest";
+import { createServices, testConfig } from "./services.js";
 import { mkdtempSync, mkdirSync, readdirSync, readFileSync, writeFileSync, existsSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import YAML from "yaml";
 import { openDb } from "./db.js";
-import { Domain } from "./service/domain.js";
-import { WorkflowEngine } from "./service/workflow.js";
 import { callTool, type Services } from "./registry.js";
 import { updateConfig, replaceConfig, clearConfigTemps } from "./config.js";
 import { runBackup } from "./service/backup.js";
@@ -21,7 +20,7 @@ function setup() {
   mkdirSync(join(dir, "config"));
   writeFileSync(join(dir, "config", "jobos.yaml"), START, "utf8");
   const db = openDb(join(dir, "t.db"));
-  const s: Services = { domain: new Domain(db), workflows: new WorkflowEngine(db), config: { vault: dir, http: { host: "127.0.0.1", port: 0 }, llm: { provider: "x", model: "y" }, feishu: {}, reminders: { daysBefore: [7, 3, 1] }, sources: [], agent: { mode: "default", maxWritesPerTurn: 10 } } };
+  const s: Services = createServices({ db: db, config: testConfig(dir, { sources: [], agent: { mode: "default", maxWritesPerTurn: 10 } }) });
   return { dir, db, s };
 }
 const doc = (dir: string) => YAML.parse(readFileSync(join(dir, "config", "jobos.yaml"), "utf8"));
