@@ -4,7 +4,7 @@
  */
 import { ulid } from "ulid";
 import type { AgentActionT } from "../service/tiers.js";
-import type { Services } from "../registry.js";
+import type { Services } from "../services.js";
 
 export type BackendName = "builtin" | "claude" | "codex" | "dsh";
 export const BACKENDS: BackendName[] = ["builtin", "claude", "codex", "dsh"];

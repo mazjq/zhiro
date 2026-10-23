@@ -10,7 +10,7 @@ import { join } from "node:path";
 import { homedir } from "node:os";
 import { createInterface } from "node:readline";
 import { ulid } from "ulid";
-import type { Services } from "../../registry.js";
+import type { Services } from "../../services.js";
 import type { Auth } from "../../auth.js";
 import type { BackendName, ChatBackend, ChatEvent, Turn } from "../backend.js";
 import { chatRules, historyPack } from "../rules.js";

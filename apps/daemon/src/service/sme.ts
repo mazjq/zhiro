@@ -5,7 +5,7 @@ import { join } from "node:path";
 import { promisify } from "node:util";
 import type { Db } from "../db.js";
 import { now } from "../db.js";
-import type { Services } from "../registry.js";
+import type { Services } from "../services.js";
 import type { WorkflowDef } from "./workflow.js";
 import { readZipEntry, docxText } from "./documents.js";
 import { readBase, parseBaseUrl } from "../data/index.js";

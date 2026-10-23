@@ -1,19 +1,18 @@
 import { describe, it, expect } from "vitest";
+import { createServices, testConfig } from "./services.js";
 import { mkdtempSync, mkdirSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { openDb } from "./db.js";
-import { Domain } from "./service/domain.js";
-import { WorkflowEngine } from "./service/workflow.js";
 import { createApp } from "./http.js";
 import { Auth, loadCredentials } from "./auth.js";
-import type { Services } from "./registry.js";
+import type { Services } from "./services.js";
 
 function app() {
   const dir = mkdtempSync(join(tmpdir(), "jobos-http-"));
   mkdirSync(join(dir, "config"));
   const db = openDb(join(dir, "t.db"));
-  const s: Services = { domain: new Domain(db), workflows: new WorkflowEngine(db), config: { vault: dir, http: { host: "127.0.0.1", port: 0 }, llm: { provider: "x", model: "y" }, feishu: {}, reminders: { daysBefore: [7, 3, 1] }, sources: [] } };
+  const s: Services = createServices({ db: db, config: testConfig(dir, { sources: [] }) });
   const auth = new Auth(loadCredentials(dir));
   const a = createApp(s, auth, { onEvent: () => () => {}, history: () => [], reset: () => {}, cancel: () => {}, ask: async () => ({}), current: () => ({ name: "builtin" }), busy: () => null } as any);
   return { a, auth, creds: auth.creds, db };

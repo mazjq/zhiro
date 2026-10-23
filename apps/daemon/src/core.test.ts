@@ -1,4 +1,5 @@
 import { describe, it, expect } from "vitest";
+import { createServices, testConfig } from "./services.js";
 import { mkdtempSync, mkdirSync, readdirSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -20,7 +21,7 @@ function setup() {
   const db = openDb(join(dir, "t.db"));
   const domain = new Domain(db);
   const workflows = new WorkflowEngine(db);
-  const s: Services = { domain, workflows, config: { vault: dir, http: { host: "127.0.0.1", port: 0 }, llm: { provider: "x", model: "y" }, feishu: {}, reminders: { daysBefore: [7, 3, 1] }, sources: [] } };
+  const s: Services = createServices({ db: db, domain, config: testConfig(dir, { sources: [] }) });
   return { dir, db, domain, workflows, s };
 }
 

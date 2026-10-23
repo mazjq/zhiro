@@ -8,7 +8,7 @@
  * our own" has always meant (ADR-032) and which the settings page says.
  */
 import { isExternal } from "../llm.js";
-import type { Services } from "../registry.js";
+import type { Services } from "../services.js";
 import { claudeLauncher } from "./backends/claude.js";
 import { codexLauncher } from "./backends/codex.js";
 import { backendOf } from "./backend.js";

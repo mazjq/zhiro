@@ -19,8 +19,7 @@ import { backgroundTarget } from "./agent/route.js";
 import { codexLauncher } from "./agent/backends/codex.js";
 import { join, resolve, sep } from "node:path";
 import { spawn } from "node:child_process";
-import { Domain } from "./service/domain.js";
-import { WorkflowEngine } from "./service/workflow.js";
+import { createServices } from "./services.js";
 import { deadlineReminder, scheduleAllDeadlines } from "./workflows/deadline.js";
 import { sourceScan, scheduleSources } from "./data/index.js";
 import { researchRun } from "./agent/research.js";
@@ -32,7 +31,7 @@ import { CareerAgent } from "./agent/career.js";
 import { createLlm } from "./llm.js";
 import { recordUsage } from "./service/usage.js";
 import { createApp } from "./http.js";
-import type { Services } from "./registry.js";
+import type { Services } from "./services.js";
 import { rerunAuto } from "./recommenders/index.js";
 import { resumePending } from "./service/documents.js";
 import { syncRelevantOfficial, pruneAutoSources } from "./service/official.js";
@@ -79,10 +78,10 @@ catch (e: any) {
 const auth = new Auth(loadCredentials(config.vault), Date.now, config.vault);
 const db = openDb(dbPath(config.vault));
 if (!maintenance) stampApp(db);
-const domain = new Domain(db, { readOnly: maintenance });
+const base = createServices({ db, config, readOnly: maintenance }); // the same parts the tests use (services.ts)
+const { domain, workflows } = base;
 // a confirm card whose work was running when the daemon stopped: shown on 今日 as interrupted, never re-run by itself (ADR-062)
 if (!maintenance) { const n = domain.interruptRunningProposals(); if (n) console.log(`[zhiro] ${n} confirm card(s) interrupted mid-run, waiting for the person`); }
-const workflows = new WorkflowEngine(db);
 // Follow-up work never runs inside the tool call that caused it: re-matching the pool blocks the event loop for seconds,
 // which the user felt as "关注 takes a second to show". Deferred, a burst recomputes once, and never more than once a
 // minute while scans keep coming in (service/later.ts).
@@ -91,7 +90,7 @@ const later = (fn: () => void) => (maintenance ? () => {} : coalesce(fn));
 // data changed with nobody calling a tool: the open pages hear of it once the pool shows it (tech-debt 5B)
 const announce = announcer(db);
 const services: Services = {
-  domain, workflows, config,
+  ...base,
   // the pool or the profile changed. Tags decide which deadlines get reminders, so recompute them first; the pages hear of it
   // when the posts and their new matches are both in place (announce rebuilds the pool first)
   onDataChanged: later(() => { scheduleRechecks(services); void rerunAuto(services).then(() => { scheduleAllDeadlines(services); announce("matches"); void syncRelevantOfficial(services); }); }),

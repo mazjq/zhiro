@@ -1,7 +1,7 @@
 import { readFileSync } from "node:fs";
 import { configFile, updateConfig } from "../config.js";
 import YAML from "yaml";
-import type { Services } from "../registry.js";
+import type { Services } from "../services.js";
 import { DomainError } from "../service/domain.js";
 import { createOAuthLoginManager, listProviderCapabilities, listProviderModels, type OAuthLoginManager } from "./model-auth.js";
 

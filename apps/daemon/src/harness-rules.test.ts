@@ -2,13 +2,13 @@
  * ADR-045 / ADR-047: what an agent credential may do with cards and undo, and the write budget of a caller without a turn.
  */
 import { describe, it, expect } from "vitest";
+import { createServices, testConfig } from "./services.js";
 import { mkdtempSync, writeFileSync, mkdirSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { openDb } from "./db.js";
 import { Domain } from "./service/domain.js";
 import { importCsv } from "./service/import-csv.js";
-import { WorkflowEngine } from "./service/workflow.js";
 import { callTool, callableBy, type Actor, type Services } from "./registry.js";
 import { Auth, loadCredentials, sanitizeVia } from "./auth.js";
 
@@ -27,7 +27,7 @@ function setup(harnessConfirm: "harness" | "window" = "harness") {
   writeFileSync(join(dir, "config", "jobos.yaml"), "agent:\n  mode: default\n", "utf8");
   const db = openDb(join(dir, "t.db"));
   const domain = new Domain(db);
-  const s: Services = { domain, workflows: new WorkflowEngine(db), config: { vault: dir, http: { host: "127.0.0.1", port: 0 }, llm: { provider: "x", model: "y" }, feishu: {}, reminders: { daysBefore: [7, 3, 1] }, sources: [], agent: { mode: "default", maxWritesPerTurn: 10, harnessConfirm } } };
+  const s: Services = createServices({ db: db, domain, config: testConfig(dir, { sources: [], agent: { mode: "default", maxWritesPerTurn: 10, harnessConfirm } }) });
   const csv = join(dir, "a.csv");
   writeFileSync(csv, CSV, "utf8");
   importCsv(domain, csv);

@@ -1,17 +1,17 @@
 import { describe, it, expect, afterEach, vi } from "vitest";
+import { createServices, testConfig } from "../services.js";
 import { mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { openDb } from "../db.js";
 import { Domain } from "./domain.js";
-import { WorkflowEngine } from "./workflow.js";
-import type { Services } from "../registry.js";
+import type { Services } from "../services.js";
 import { getIntel, readIntel, refreshIntel, EVERY_DAYS } from "./intel.js";
 
 function setup() {
   const vault = mkdtempSync(join(tmpdir(), "zhiro-intel-"));
   const domain = new Domain(openDb(join(vault, "t.db")));
-  const s: Services = { domain, workflows: new WorkflowEngine(domain.db), config: { vault, http: { host: "127.0.0.1", port: 0 }, llm: { provider: "x", model: "y" }, feishu: {}, reminders: { daysBefore: [7, 3, 1] }, sources: [] } };
+  const s: Services = createServices({ db: domain.db, domain, config: testConfig(vault, { sources: [] }) });
   domain.db.prepare("insert into company(id, name, norm, created_at) values ('c1', '汇川技术', '汇川技术', '2026-01-01')").run();
   return s;
 }

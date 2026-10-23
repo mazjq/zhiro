@@ -2,7 +2,7 @@ import { mkdirSync, writeFileSync, readFileSync, existsSync } from "node:fs";
 import { join } from "node:path";
 import { ulid } from "ulid";
 import { now } from "../db.js";
-import type { Services } from "../registry.js";
+import type { Services } from "../services.js";
 import { DomainError } from "./domain.js";
 import { httpContext, publicUrl } from "../data/index.js";
 import { articleText } from "./extract.js";

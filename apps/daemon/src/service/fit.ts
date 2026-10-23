@@ -1,6 +1,6 @@
 import { isAggregate } from "../data/index.js";
 import { parseJsonWithRepair, contentText } from "@earendil-works/pi-ai";
-import type { Services } from "../registry.js";
+import type { Services } from "../services.js";
 import { json, now } from "../db.js";
 import { sha } from "./domain.js";
 import { listFacts } from "./profile.js";

@@ -1,11 +1,11 @@
 import { describe, it, expect } from "vitest";
+import { createServices, testConfig } from "../services.js";
 import { mkdtempSync, mkdirSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { openDb, now } from "../db.js";
 import { Domain } from "../service/domain.js";
-import { WorkflowEngine } from "../service/workflow.js";
-import type { Services } from "../registry.js";
+import type { Services } from "../services.js";
 import { ingest } from "../data/index.js";
 import { companyFind } from "./find-company.js";
 
@@ -23,7 +23,7 @@ function setup() {
   const vault = mkdtempSync(join(tmpdir(), "jobos-find-"));
   const db = openDb(join(vault, "t.db"));
   const domain = new Domain(db);
-  const s: Services = { domain, workflows: new WorkflowEngine(db), config: { vault, http: { host: "127.0.0.1", port: 0 }, llm: { provider: "x", model: "y" }, feishu: {}, reminders: { daysBefore: [7, 3, 1] }, sources: [] } };
+  const s: Services = createServices({ db: db, domain, config: testConfig(vault, { sources: [] }) });
   return { vault, domain, s };
 }
 const status = (s: Services) => s.domain.db.prepare("select status, summary, error, cost_usd from agent_run where id = 'run1'").get() as any;

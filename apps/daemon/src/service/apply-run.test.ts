@@ -1,17 +1,17 @@
 import { describe, it, expect, afterAll } from "vitest";
+import { createServices, testConfig } from "../services.js";
 import { mkdtempSync, writeFileSync, existsSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { pathToFileURL } from "node:url";
 import { openDb } from "../db.js";
 import { Domain } from "./domain.js";
-import { WorkflowEngine } from "./workflow.js";
 import { ingest } from "../data/index.js";
 import { upsertFact, listFacts } from "./profile.js";
 import { closeBrowser, activePage, readForm } from "./apply.js";
 import { planBlocks } from "./apply-blocks.js";
 import { startRun, currentRun, stopRun, submittedNow } from "./apply-run.js";
-import type { Services } from "../registry.js";
+import type { Services } from "../services.js";
 
 const CHROME = ["C:/Program Files/Google/Chrome/Application/chrome.exe", "/usr/bin/google-chrome", "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome"].some(existsSync);
 
@@ -38,7 +38,7 @@ describe.skipIf(!CHROME)("开始网申 (ADR-024)", () => {
     const vault = mkdtempSync(join(tmpdir(), "jobos-run-"));
     const db = openDb(join(vault, "t.db"));
     const domain = new Domain(db);
-    const s: Services = { domain, workflows: new WorkflowEngine(db), config: { vault, http: { host: "127.0.0.1", port: 0 }, llm: { provider: "x", model: "y" }, feishu: {}, reminders: { daysBefore: [] }, sources: [] } };
+    const s: Services = createServices({ db: db, domain, config: testConfig(vault, { reminders: { daysBefore: [] }, sources: [] }) });
     for (const [field, value] of [["姓名", "李示例"], ["邮箱", "li@example.com"], ["电话", "13800000000"]]) upsertFact(db, { kind: "basic", data: { field, value } }, "本人确认");
     upsertFact(db, { kind: "education", data: { school: "示例大学", degree: "博士", major: "控制科学与工程" } }, "本人确认");
     const pdf = join(vault, "cv.pdf"); writeFileSync(pdf, "%PDF-1.4 test");
@@ -98,7 +98,7 @@ describe.skipIf(!CHROME)("多段经历 (milestone c)", () => {
     const vault = mkdtempSync(join(tmpdir(), "jobos-blocks-"));
     const db = openDb(join(vault, "t.db"));
     const domain = new Domain(db);
-    const s: Services = { domain, workflows: new WorkflowEngine(db), config: { vault, http: { host: "127.0.0.1", port: 0 }, llm: { provider: "x", model: "y" }, feishu: {}, reminders: { daysBefore: [] }, sources: [] } };
+    const s: Services = createServices({ db: db, domain, config: testConfig(vault, { reminders: { daysBefore: [] }, sources: [] }) });
     upsertFact(db, { kind: "basic", data: { field: "姓名", value: "李示例" } }, "本人确认");
     upsertFact(db, { kind: "education", data: { school: "示例大学", degree: "博士", major: "控制科学与工程", period: "2021.09—2027.06" } }, "本人确认");
     upsertFact(db, { kind: "education", data: { school: "示例学院", degree: "本科", major: "自动化", period: "2017.09—2021.06" } }, "本人确认");
@@ -133,7 +133,7 @@ describe.skipIf(!CHROME)("提交之后 (N1)", () => {
     const vault = mkdtempSync(join(tmpdir(), "jobos-landed-"));
     const db = openDb(join(vault, "t.db"));
     const domain = new Domain(db);
-    const s: Services = { domain, workflows: new WorkflowEngine(db), config: { vault, http: { host: "127.0.0.1", port: 0 }, llm: { provider: "x", model: "y" }, feishu: {}, reminders: { daysBefore: [] }, sources: [] } };
+    const s: Services = createServices({ db: db, domain, config: testConfig(vault, { reminders: { daysBefore: [] }, sources: [] }) });
     upsertFact(db, { kind: "basic", data: { field: "姓名", value: "李示例" } }, "本人确认");
     ingest(domain, vault, "moka", "demo", [{ externalId: "1", url: "https://example.com/j", title: "工程师", company: "示例", locations: [], publisher: "示例", grade: "官方", isOriginal: true, confidence: 1 } as any]);
     const app = domain.createApplication((db.prepare("select id from position").get() as any).id);

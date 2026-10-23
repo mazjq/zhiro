@@ -1,4 +1,4 @@
-import type { Services } from "../registry.js";
+import type { Services } from "../services.js";
 
 /**
  * What a harness answering the chat drawer is told (ADR-046): the same rules the built-in assistant works by, minus
