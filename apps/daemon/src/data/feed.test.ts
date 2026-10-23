@@ -124,6 +124,21 @@ describe("a subscribed data source", () => {
     expect(w.db.prepare("select count(*) n from company where name = '本机也读的'").get()).toEqual({ n: 0 });
   });
 
+  it("a subscription taken over by this library keeps the feed's claims until its own full read has come in", () => {
+    const w = world();
+    publish(w.out, 1, [{ id: "moka-a", at: T(5), rows: [post("1")] }]);
+    w.pull();
+    const claims = () => (w.db.prepare("select count(*) n from position_seen where config_id = ?").get(feedConfigId("f1", "moka-a")) as any).n;
+    publish(w.out, 2, [{ id: "moka-a", at: T(4), rows: [post("1")] }]);
+    importFeed({ db: w.db }, w.vault, w.cfg, new Set(["moka-a"]));
+    expect(claims()).toBe(1); // not read here yet: the feed's claims stay
+    w.db.prepare("insert into scan_run(id, source, config_id, started_at, finished_at, complete, found, new_positions, error, snapshot_path) values ('r1', 'moka', 'moka-a', ?, ?, 1, 1, 0, '', '')").run(new Date(Date.now() + 1000).toISOString(), new Date(Date.now() + 2000).toISOString());
+    publish(w.out, 3, [{ id: "moka-a", at: T(3), rows: [post("1")] }]);
+    importFeed({ db: w.db }, w.vault, w.cfg, new Set(["moka-a"]));
+    expect(claims()).toBe(0);
+    expect(w.open()).toEqual(["岗位1"]); // handed over, nothing closed by it
+  });
+
   it("a subscription the feed no longer carries loses its claims; nothing of it is left half-filed when a later one is bad", () => {
     const w = world();
     publish(w.out, 1, [{ id: "moka-a", at: T(5), rows: [post("1")] }, { id: "moka-b", at: T(5), rows: [post("9", { company: "另一家" })] }]);

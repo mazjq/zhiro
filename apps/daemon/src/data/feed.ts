@@ -15,9 +15,14 @@
  * record). One writer per subscription: one this library reads itself is left to its own reads. A subscription the
  * feed drops closes what only it listed (releaseClaims); a paused feed keeps what it brought, a removed one goes
  * (tidy.ts reads liveFeedConfigs). Feed subscriptions are named `feed~<feed id>~<subscription id>`.
+ * ponytail, known limits of this stage: (1) two subscriptions of one reader that list the same post share its listing
+ * row, so a feed read up to a day older than a local read of another channel can rewrite that row until the next read;
+ * per-observation versions would close it. (2) The import runs on the daemon's thread: measured on the first full
+ * package; a worker if it holds the daemon too long. (3) A read that succeeded with nothing in it only adds, as a local
+ * read of nothing counts as failed (ZERO_POSTS).
  */
 import { createHash, createPublicKey, verify } from "node:crypto";
-import { readFileSync, statSync } from "node:fs";
+import { closeSync, fstatSync, openSync, readSync } from "node:fs";
 import { pathToFileURL, fileURLToPath } from "node:url";
 import { gunzipSync } from "node:zlib";
 import { tx, type Db } from "../db.js";
@@ -27,7 +32,7 @@ import type { Listing } from "./types.js";
 
 export const FEED_PROTOCOL = 1;
 const MAX_AGE_MS = 14 * 86400_000, SKEW_MS = 3600_000;
-const MAX_MANIFEST = 32 * 1024 * 1024, MAX_PACKED = 512 * 1024 * 1024, MAX_UNPACKED = 1024 * 1024 * 1024;
+const MAX_MANIFEST = 16 * 1024 * 1024, MAX_PACKED = 128 * 1024 * 1024, MAX_UNPACKED = 512 * 1024 * 1024;
 const MAX_SUBS = 20_000, MAX_ROWS = 3_000_000;
 const GRADES = new Set(["官方", "校方转载", "聚合", "行业线索", "推断"]);
 const SAFE_ID = /^[^\\/:*?"<>|~%\u0000-\u001f]{1,120}$/;
@@ -49,12 +54,20 @@ export const signedPart = (m: FeedManifest) => { const { sig: _, ...rest } = m; 
 
 class FeedError extends Error { constructor(public code: string, msg: string) { super(`${code}: ${msg}`); } }
 
-/** A file of the feed's folder, no larger than `max`. F1: a folder on this computer. ponytail: https + token with F2. */
+/**
+ * A file of the feed's folder, never more than `max` bytes read (the size is not trusted: the file may change between a
+ * look and a read). F1: a folder on this computer. ponytail: https + token with F2.
+ */
 function readFrom(folder: string, name: string, max: number): Buffer {
   const path = fileURLToPath(new URL(encodeURIComponent(name), pathToFileURL(folder.endsWith("/") || folder.endsWith("\\") ? folder : `${folder}/`)));
-  const size = statSync(path).size;
-  if (size > max) throw new FeedError("FEED_TOO_LARGE", `${name} 有 ${size} 字节，超过上限 ${max}`);
-  return readFileSync(path);
+  const fd = openSync(path, "r");
+  try {
+    const buf = Buffer.alloc(Math.min(max + 1, fstatSync(fd).size + 1));
+    let n = 0, r = 0;
+    while (n < buf.length && (r = readSync(fd, buf, n, buf.length - n, n)) > 0) n += r;
+    if (n > max) throw new FeedError("FEED_TOO_LARGE", `${name} 超过上限 ${max} 字节`);
+    return buf.subarray(0, n);
+  } finally { closeSync(fd); }
 }
 const ms = (s: unknown) => (typeof s === "string" ? Date.parse(s) : Number.NaN);
 
@@ -119,10 +132,7 @@ export interface FeedResult { feed: string; seq: number | null; unchanged: boole
 export function importFeed(store: { db: Db }, vault: string, cfg: FeedConfig, local: Set<string> = new Set(), now = Date.now()): FeedResult {
   const db = store.db;
   if (!SAFE_ID.test(cfg.id)) throw new FeedError("FEED_BAD_CONFIG", `数据源 id 不合规：${cfg.id}`);
-  const applied = new Map((db.prepare("select sub_id, source, state, observed_at, sha256 from feed_applied where feed_id = ?").all(cfg.id) as { sub_id: string; source: string; state: string; observed_at: string; sha256: string }[]).map((r) => [r.sub_id, r]));
-  // a subscription this library now reads itself: the feed's claims on it go, whatever the package (its reads take over)
-  const handOver = [...applied.keys()].filter((id) => local.has(id));
-  if (handOver.length) tx(db, () => { for (const id of handOver) { db.prepare("delete from position_seen where config_id = ?").run(feedConfigId(cfg.id, id)); db.prepare("delete from feed_applied where feed_id = ? and sub_id = ?").run(cfg.id, id); applied.delete(id); } });
+  const applied = new Map((db.prepare("select sub_id, source, state, observed_at, sha256, applied_at from feed_applied where feed_id = ?").all(cfg.id) as { sub_id: string; source: string; state: string; observed_at: string; sha256: string; applied_at: string }[]).map((r) => [r.sub_id, r]));
 
   const last = db.prepare("select seq from feed_run where feed_id = ?").get(cfg.id) as { seq: number } | undefined;
   const m = checkManifest(readFrom(cfg.url, "manifest.json", MAX_MANIFEST).toString("utf8"), cfg, last?.seq ?? null, now);
@@ -155,10 +165,18 @@ export function importFeed(store: { db: Db }, vault: string, cfg: FeedConfig, lo
   }
 
   tx(db, () => {
+    // a subscription this library now reads itself: handed over once its own full read has come in since the feed's
+    // last one (until then the feed's claims keep what it brought); its claims go, nothing is closed by the hand-over
+    const readSince = db.prepare("select 1 from scan_run where config_id = ? and complete = 1 and error = '' and started_at > ? limit 1");
+    for (const [id, a] of [...applied]) if (local.has(id) && readSince.get(id, a.applied_at)) {
+      db.prepare("delete from position_seen where config_id = ?").run(feedConfigId(cfg.id, id));
+      db.prepare("delete from feed_applied where feed_id = ? and sub_id = ?").run(cfg.id, id);
+      applied.delete(id);
+    }
     // what the feed no longer carries lists nothing any more here: what only it listed closes, its claims go first
-    const carried = new Set(m.subs.filter((s) => !local.has(s.id)).map((s) => s.id));
-    for (const id of applied.keys()) if (!carried.has(id)) {
-      releaseClaims(db, feedConfigId(cfg.id, id));
+    const carried = new Set(m.subs.map((s) => s.id));
+    for (const id of [...applied.keys()]) if (!carried.has(id) && !local.has(id)) {
+      result.positionsClosed += releaseClaims(db, feedConfigId(cfg.id, id)).closed;
       db.prepare("delete from feed_applied where feed_id = ? and sub_id = ?").run(cfg.id, id);
       result.released++;
     }

@@ -75,6 +75,10 @@ export function resolveMergeProposals(s: Services): { merged: string[]; expired:
 export function dropOrphanCampaigns(s: Services, only?: string): number {
   const db = s.domain.db;
   // a subscribed feed's subscriptions count as configured while the feed carries them (data/feed.ts)
+  // a feed taken out of the settings: its import position goes too, so adding it back files it again from the start
+  const feedIds = (s.config.feeds ?? []).map((f) => f.id), marks = feedIds.map(() => "?").join(",") || "''";
+  db.prepare(`delete from feed_applied where feed_id not in (${marks})`).run(...feedIds);
+  db.prepare(`delete from feed_run where feed_id not in (${marks})`).run(...feedIds);
   const fed = liveFeedConfigs(db, s.config.feeds);
   const configured = new Set([...s.config.sources.map((c) => c.id), ...fed]);
   const pullKinds = new Set(Object.values(sources).filter((x) => x.mode === "pull").map((x) => x.id));
@@ -90,7 +94,7 @@ export function dropOrphanCampaigns(s: Services, only?: string): number {
   const released: string[] = []; // the campaigns they claimed posts of: checked like the ones their listing rows name
   for (const { id } of db.prepare("select distinct config_id id from position_seen").all() as { id: string }[]) {
     if (live.has(id) || (only && id !== only)) continue;
-    released.push(...tx(db, () => releaseClaims(db, id))); // what only it listed closes, as a read listing nothing would
+    released.push(...tx(db, () => releaseClaims(db, id)).campaigns); // what only it listed closes, as a read listing nothing would
   }
   if (!mine.length && !released.length) return 0;
 
