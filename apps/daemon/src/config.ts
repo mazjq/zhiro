@@ -34,6 +34,8 @@ export interface JobosConfig {
    * subscription whose windows have not been read yet; quietBeforeMins / quietAfterMins: around a written test, an
    * assessment or an interview nothing opens on this computer.
    */
+  /** subscribed data sources (data/feed.ts): where the signed packages are, and the key that signs them */
+  feeds?: Array<{ id: string; url: string; publicKey: string; enabled?: boolean }>;
   /** P4: when the daily brief is made (local time, "HH:MM"; default 08:00) */
   brief?: { at?: string };
   /** P2b: recruiting mail is filed on its own (a stage added, an application moved) when it is clear; off = confirm cards as before */

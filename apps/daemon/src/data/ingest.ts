@@ -67,7 +67,7 @@ function keepSnapshot(vault: string, sourceId: string, configId: string, listing
  *  3. record a scan_run row (so "0 new" and "failed" stay distinguishable from "closed")
  * One transaction, all or nothing. Campaign identity: catalog.campaignKey; the rest of the identity rules: catalog.ts.
  */
-export function ingest(store: { db: Db }, vault: string, sourceId: string, configId: string, listings: Listing[], opts: { complete?: boolean; error?: string; closeUnseen?: boolean } = {}): IngestResult & { listed: Listed } {
+export function ingest(store: { db: Db }, vault: string, sourceId: string, configId: string, listings: Listing[], opts: { complete?: boolean; error?: string; closeUnseen?: boolean; observedAt?: string } = {}): IngestResult & { listed: Listed } {
   const db = store.db;
   const runId = ulid();
   const started = now();
@@ -114,7 +114,8 @@ export function ingest(store: { db: Db }, vault: string, sourceId: string, confi
   let updated = 0;
   tx(db, () => {
     const batch = new CatalogBatch(db, listings.flatMap((l, i) => (filed(l) ? [ofGroup(groupOf[i], l).externalKey] : [])));
-    const verifiedAt = now(); // the campaigns this pull lists were confirmed now
+    // the campaigns this pull lists were confirmed when it read them: now, or when a subscribed feed's reader did (feed.ts)
+    const verifiedAt = opts.observedAt ?? now();
     const aggregate = isAggregate(sourceId);
     // this source's listing rows of these campaigns, first by rowid as the lookup below finds them. A listing row stays
     // with its post and its post with its campaign (nothing rewrites either), so a row not found here is not there.
