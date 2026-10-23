@@ -5,7 +5,8 @@
  * on fetch itself, plus what goes around it: a browser (page.read, apply.*, a site preview), the mailbox (inbox.peek
  * talks IMAP), and data.export (labelled a read, it writes a file).
  */
-export const OUTSIDE_TOOLS = /^(page\.read|source\.preview|inbox\.peek|data\.export)$|^apply\./;
+/** A tool that reaches outside this computer's database: the internet (effects.network) or the application browser. */
+export const reachesOutside = (name: string, effects: { network?: boolean }) => !!effects.network || name.startsWith("apply.");
 
 export function enterMaintenance(): void {
   const real = globalThis.fetch;
