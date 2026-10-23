@@ -119,10 +119,23 @@ export function guessColumns(headers: string[]): Columns {
  */
 export function splitCell(s: string): string[] {
   const han = /[㐀-鿿]/;
-  return (s ?? "").split(/[，,、;；|\n\r]+/).flatMap((part) => {
-    const words = part.trim().split(/\s+/).filter(Boolean);
+  return splitOutside(s ?? "", /[，,、;；|\n\r]/).flatMap((part) => {
+    const words = splitOutside(part, /\s/);
     return words.length > 1 && words.every((w) => han.test(w)) ? words : [part.trim()];
   }).filter(Boolean);
+}
+
+/** Split where `sep` stands outside brackets: 「管培生（电商类、运营类）」 is one post, not 「管培生（电商类」 and 「运营类）」. */
+function splitOutside(s: string, sep: RegExp): string[] {
+  const out: string[] = [];
+  let depth = 0, cur = "";
+  for (const ch of s) {
+    if ("（(【[".includes(ch)) depth++;
+    else if ("）)】]".includes(ch)) depth = Math.max(0, depth - 1);
+    if (depth === 0 && sep.test(ch)) { if (cur.trim()) out.push(cur.trim()); cur = ""; } else cur += ch;
+  }
+  if (cur.trim()) out.push(cur.trim());
+  return out;
 }
 
 /**
