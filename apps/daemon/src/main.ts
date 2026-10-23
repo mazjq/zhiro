@@ -42,6 +42,7 @@ import { inboxPoll, scheduleInbox } from "./workflows/inbox.js";
 import { noticeDeliver, scheduleNotices } from "./workflows/notify.js";
 import { dailyBrief, scheduleBrief } from "./workflows/daily.js";
 import { leadResolve, scheduleLeads } from "./workflows/leads.js";
+import { feedPull, scheduleFeeds } from "./workflows/feed.js";
 import { docDeps, dataOf } from "./registry.js";
 import { coalesce } from "./service/later.js";
 import { announcer } from "./service/background.js";
@@ -115,12 +116,13 @@ workflows.register(smeRun(services));
 workflows.register(captureRecheck(services));
 workflows.register(inboxPoll(services));
 workflows.register(leadResolve(services));
+workflows.register(feedPull(services));
 workflows.register(noticeDeliver(services));
 workflows.register(dailyBrief(services));
 if (!maintenance) {
   scheduleRechecks(services);
   scheduleAllDeadlines(services);
-  { const pr = pruneAutoSources(services); if (pr.before !== pr.after) console.log(`[zhiro] auto sources pruned ${pr.before} -> ${pr.after}`); }
+  if (!config.keepAutoSources) { const pr = pruneAutoSources(services); if (pr.before !== pr.after) console.log(`[zhiro] auto sources pruned ${pr.before} -> ${pr.after}`); }
   // evidence-based tidy at start and once a day: orphan campaigns of pruned subscriptions, one unit spelled two ways
   const tidy = () => { try { const t = tidyPool(services); if (t.droppedCampaigns || t.merged.length) console.log(`[zhiro] tidy: ${t.droppedCampaigns} orphan campaigns dropped, merged ${t.merged.map((m) => `${m.from}→${m.into}`).join(", ") || "none"}`); } catch (e: any) { console.error("[zhiro] tidy failed", e?.message ?? e); } };
   setTimeout(tidy, 5_000).unref(); // after the server is listening: browsing never waits for housekeeping
@@ -145,6 +147,7 @@ llm.gate = (kind) => callGate(gateDeps, kind);
 if (!maintenance) {
   scheduleInbox(services);
   scheduleLeads(services);
+  scheduleFeeds(services);
   scheduleNotices(services);
   scheduleBrief(services);
   void syncRelevantOfficial(services);

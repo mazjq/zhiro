@@ -463,6 +463,11 @@ export const MIGRATIONS: string[] = [
   create index position_seen_config on position_seen(config_id);
   insert into meta(key, value) values ('claims_since', strftime('%Y-%m-%dT%H:%M:%fZ', 'now'));
   `,
+  // v46: a subscribed data source (data/feed.ts) — its last package, and each of its subscriptions' last read filed here
+  `
+  create table feed_run (feed_id text primary key, seq integer not null, created_at text not null, applied_at text not null);
+  create table feed_applied (feed_id text not null, sub_id text not null, source text not null, state text not null, observed_at text not null, sha256 text not null, applied_at text not null, primary key (feed_id, sub_id)) without rowid;
+  `,
 ];
 
 /**

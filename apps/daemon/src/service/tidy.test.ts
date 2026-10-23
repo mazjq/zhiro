@@ -52,6 +52,17 @@ describe("evidence-based tidy (2026-10-01)", () => {
     expect(dropOrphanCampaigns(s, "ig-b")).toBe(1); // b gone too: the batch goes, though no listing row named b
     expect(domain.db.prepare("select (select count(*) from position) p, (select count(*) from position_seen) c").get()).toEqual({ p: 0, c: 0 });
   });
+  it("what a subscribed feed brought stays while the feed is configured, and goes with it", () => {
+    const { dir, domain, s } = setup([]);
+    ingest(domain, dir, "moka", "feed~f1~moka-a", [listing({ externalId: "p1" })], { closeUnseen: true });
+    domain.db.prepare("insert into feed_applied(feed_id, sub_id, source, state, observed_at, sha256, applied_at) values ('f1', 'moka-a', 'moka', 'complete', '', '', '')").run();
+    s.config.feeds = [{ id: "f1", url: dir, publicKey: "" }];
+    expect(dropOrphanCampaigns(s)).toBe(0);
+    s.config.feeds = [{ id: "f1", url: dir, publicKey: "", enabled: false }]; // paused: keeps what it brought
+    expect(dropOrphanCampaigns(s)).toBe(0);
+    s.config.feeds = [];
+    expect(dropOrphanCampaigns(s)).toBe(1);
+  });
   it("a sheet of thousands of companies is cleared in seconds (it took 20 s for this many, 19 minutes for the user's sheet of 1 万)", () => {
     const { dir, domain, s } = setup([]);
     const rows: Listing[] = [];
