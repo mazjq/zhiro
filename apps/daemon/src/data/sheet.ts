@@ -112,13 +112,17 @@ export function guessColumns(headers: string[]): Columns {
 }
 
 /**
- * A cell that lists several things, for a table read by a mapping of its own: separated by 、，,；; | or a line break —
- * and by spaces only where the cell is written in Chinese (「武汉 上海」 is two cities; "Saint Paul" is one, and
- * "Industrial Conglomerates" one post). The built-in layout keeps `splitList`, which it has always been read with.
+ * A cell that lists several things: separated by 、，,；; | or a line break — and by spaces only where every word is
+ * Chinese (「武汉 上海」 is two cities, 「算法工程师 测试工程师」 two posts; "Saint Paul" is one, "AI Computing Software
+ * Development Intern" one post, 「算法工程师 AI」 one). The built-in layout used to split on every space: NVIDIA's one
+ * English post became five (「AI」「Computing」…; 2026-10-23).
  */
 export function splitCell(s: string): string[] {
-  const cjk = /[\u3400-\u9fff]/.test(s ?? "");
-  return (s ?? "").split(cjk ? /[，,、;；|\s]+/ : /[，,、;；|\n\r]+/).map((x) => x.trim()).filter(Boolean);
+  const han = /[㐀-鿿]/;
+  return (s ?? "").split(/[，,、;；|\n\r]+/).flatMap((part) => {
+    const words = part.trim().split(/\s+/).filter(Boolean);
+    return words.length > 1 && words.every((w) => han.test(w)) ? words : [part.trim()];
+  }).filter(Boolean);
 }
 
 /**
@@ -129,7 +133,7 @@ export function splitCell(s: string): string[] {
 export function tableToListings(table: Table, columns: Columns, cfg: { cohort?: string; name?: string }, today = new Date().toISOString().slice(0, 10), publisher = "汇总表"): Listing[] {
   const get = (row: TableRow, f: Field, want?: "text" | "link") => (columns[f] ? row.get(columns[f]!, want) : "");
   const wantCohort = (cfg.cohort ?? "").replace(/\D/g, "");
-  const split = columns === BUILTIN_COLUMNS ? splitList : splitCell;
+  const split = splitCell;
   const out: Listing[] = [];
   for (const row of table.rows) {
     const company = get(row, "company").trim();

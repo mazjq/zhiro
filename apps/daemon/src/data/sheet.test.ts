@@ -29,7 +29,7 @@ describe("a table's rows", () => {
     const moved = csvToTable(OWN.split("\n").filter((_, i) => i !== 2).join("\n"));
     expect(tableToListings(moved, guessColumns(moved.headers), { name: "我的表" }, "2026-10-12")[0].externalId).toBe(out[0].externalId);
   });
-  it("a cell in Latin script is not a list of words; the built-in layout still reads as it always did", () => {
+  it("a cell in Latin script is not a list of words — in the built-in layout too (NVIDIA's one post read as five)", () => {
     const t = csvToTable(`Security,Role,HQ
 3M,Industrial Conglomerates,"Saint Paul, Minnesota"
 Acme,"Software Engineer; Data Analyst",Austin
@@ -38,9 +38,10 @@ Acme,"Software Engineer; Data Analyst",Austin
     const out = tableToListings(t, { company: "Security", positions: "Role", cities: "HQ" }, {}, "2026-10-12");
     expect(out.map((l) => `${l.company}|${l.title}|${l.locations.join("/")}`)).toEqual(["3M|Industrial Conglomerates|Saint Paul/Minnesota", "Acme|Software Engineer|Austin", "Acme|Data Analyst|Austin", "示例重工|控制算法工程师|武汉/上海", "示例重工|仿真工程师|武汉/上海"]);
     const builtin = csvToTable(`公司,招聘岗位
-示例,Java C++
+示例,AI Computing Software Development Intern
+示例二,算法工程师 测试工程师
 `);
-    expect(tableToListings(builtin, BUILTIN_COLUMNS, {}, "2026-10-12").map((l) => l.title)).toEqual(["Java", "C++"]);
+    expect(tableToListings(builtin, BUILTIN_COLUMNS, {}, "2026-10-12").map((l) => l.title)).toEqual(["AI Computing Software Development Intern", "算法工程师", "测试工程师"]);
   });
   it("a cohort asked for leaves other cohorts out — when the table has a cohort column at all", () => {
     const t = csvToTable("公司,岗位,届次\n甲,工程师,2027届\n乙,工程师,2026届\n");
