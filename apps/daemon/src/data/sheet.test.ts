@@ -40,8 +40,9 @@ Acme,"Software Engineer; Data Analyst",Austin
     const builtin = csvToTable(`公司,招聘岗位
 示例,AI Computing Software Development Intern
 示例二,算法工程师 测试工程师
+示例三,"管培生（电商类、运营类）、研发工程师"
 `);
-    expect(tableToListings(builtin, BUILTIN_COLUMNS, {}, "2026-10-12").map((l) => l.title)).toEqual(["AI Computing Software Development Intern", "算法工程师", "测试工程师"]);
+    expect(tableToListings(builtin, BUILTIN_COLUMNS, {}, "2026-10-12").map((l) => l.title)).toEqual(["AI Computing Software Development Intern", "算法工程师", "测试工程师", "管培生（电商类、运营类）", "研发工程师"]);
   });
   it("a cohort asked for leaves other cohorts out — when the table has a cohort column at all", () => {
     const t = csvToTable("公司,岗位,届次\n甲,工程师,2027届\n乙,工程师,2026届\n");
