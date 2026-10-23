@@ -165,7 +165,9 @@ export function ingest(store: { db: Db }, vault: string, sourceId: string, confi
       for (const p of new Set(listedRows.values())) seen.run(p, configId, started);
       // where to look: its campaigns now, the ones it fed before and did not list at all this time (国能 dropped a stale
       // 专项 list), and those of the posts it claimed before
-      const gone = (db.prepare("select distinct campaign_id id from source_listing where provider = ? and content_path like ? and campaign_id is not null").all(sourceId, `%-${configId}.json`) as { id: string }[]).map((r) => r.id);
+      // this subscription's snapshot names, as a LIKE pattern (an id's own % or _ taken literally)
+      const ownSnapshot = `%-${configId.replace(/[\\%_]/g, (c) => `\\${c}`)}.json`;
+      const gone = (db.prepare("select distinct campaign_id id from source_listing where provider = ? and content_path like ? escape '\\' and campaign_id is not null").all(sourceId, ownSnapshot) as { id: string }[]).map((r) => r.id);
       const claimed = (db.prepare("select distinct p.campaign_id id from position_seen s join position p on p.id = s.position_id where s.config_id = ? and s.seen_at < ?").all(configId, started) as { id: string }[]).map((r) => r.id);
       const ids = [...new Set([...campaigns, ...gone, ...claimed])];
       // the first two days of claims every daily subscription reads at least once; until then a post nobody has claimed
@@ -179,8 +181,8 @@ export function ingest(store: { db: Db }, vault: string, sourceId: string, confi
           and status = 'open' and last_seen_at < ? and id not in (select position_id from application where state != 'cancelled')
           and not exists (select 1 from position_seen s where s.position_id = position.id and s.config_id != ?)
           and (exists (select 1 from position_seen s where s.position_id = position.id and s.config_id = ?)
-            or (? and not exists (select 1 from source_listing l where l.position_id = position.id and (l.provider != ? or l.content_path not like ?))))`)
-          .run(now(), ...part, started, configId, configId, settled, sourceId, `%-${configId}.json`).changes);
+            or (? and not exists (select 1 from source_listing l where l.position_id = position.id and (l.provider != ? or l.content_path not like ? escape '\\'))))`)
+          .run(now(), ...part, started, configId, configId, settled, sourceId, ownSnapshot).changes);
         db.prepare(`delete from position_seen where config_id = ? and seen_at < ? and position_id in (select id from position where campaign_id in (${q}))`).run(configId, started, ...part);
       });
     }

@@ -7,7 +7,7 @@ export function pullFeeds(s: Services, only?: string): (FeedResult | { feed: str
   const out: (FeedResult | { feed: string; error: string })[] = [];
   for (const f of (s.config.feeds ?? []).filter((x) => x.enabled !== false && (!only || x.id === only))) {
     try {
-      const r = importFeed(s.domain, s.config.vault, f);
+      const r = importFeed(s.domain, s.config.vault, f, new Set(s.config.sources.filter((c) => c.enabled !== false).map((c) => c.id)));
       if (r.positionsNew || r.positionsClosed || r.applied) s.onDataChanged?.();
       out.push(r);
     } catch (e: any) { out.push({ feed: f.id, error: String(e?.message ?? e) }); }
