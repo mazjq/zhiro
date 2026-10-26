@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { call } from "../api";
 import { useLatest, useOnDataChange } from "../refresh";
-import { H1, Card, Chip, Button, Empty, plain } from "../ui";
+import { JOBS_QUERY_KEY, H1, Card, Chip, Button, Empty, plain } from "../ui";
 import { CompanyRow, CompanyDetail, Intel } from "./CompanyView";
 import { Reader } from "../Reader";
 
@@ -137,7 +137,7 @@ const PAGE = 100;
 const SORTS: [string, string][] = [["", "默认排序"], ["match", "匹配度"], ["deadline", "截止日期"], ["new", "新岗位多"]];
 
 /** Another page hands a company over (调研 → 「库里的岗位」): the name it left here is searched for once, as if typed. */
-export const JOBS_QUERY_KEY = "jobos.jobs.query";
+export { JOBS_QUERY_KEY };
 const handedOver = () => { const q = sessionStorage.getItem(JOBS_QUERY_KEY) ?? ""; sessionStorage.removeItem(JOBS_QUERY_KEY); return q; };
 
 /** 找岗位 = 推荐 + 岗位库: the same company rows, either the recommended subset (ranked by score) or everything (by deadline). */
