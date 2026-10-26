@@ -72,7 +72,7 @@ const PROMPT = `你是校招公告核实员。下面是一份招聘材料（网�
  "deadlineText":"网申或投递截止的原文逐字（整句）；写的是招满即止 / 长期有效也照抄；没写就空", "deadlineDate":"YYYY-MM-DD，原文没年份就空", "deadlineImage":截止写在第几张图上（只在图上时），否则 null,
  "applyEntry":"投递入口原文（网址或「官网 / 小程序」等说法）",
  "scope":"截止适用哪些岗位 / 地区 / 下属单位；全部则写全部",
- "doubts":"看不清 / 多个截止 / 年份缺失 / 不确定是不是截止等，没有就空"}
+ "doubts":"只写对已抄出内容的疑问：看不清 / 多个截止 / 年份缺失 / 不确定是不是截止；某项原文没写就让那一项留空，不要写进这里；没有疑问就空"}
 规则：只抄原文，不推测、不补全；网申开始、宣讲、笔试、面试的日期不是截止；文字里有的就不要说在图上。`;
 
 /** The model copies out what the material says. Posters only reach a model that can see; otherwise the reading is left to a person. */
@@ -92,7 +92,9 @@ export async function askNotice(llm: Llm, doc: NoticeDoc, pics: { data: string; 
     deadlineText: str(j.deadlineText), deadlineDate: str(j.deadlineDate), deadlineImage: num(j.deadlineImage), applyEntry: str(j.applyEntry), scope: str(j.scope), doubts: str(j.doubts) };
 }
 
-export interface VerifyResult { url: string; outcome: Outcome; reasons: string[]; deadline: string; factId?: string; unchanged: boolean }
+export interface VerifyResult { url: string; outcome: Outcome; reasons: string[]; deadline: string; factId?: string; unchanged: boolean;
+  /** the company's own site names its employer otherwise: if that is its full name, company.alias (a card for an agent) and check again */
+  aliasHint?: { companyId: string; alias: string } }
 
 /** Check a batch's announcement (or the batch of a post). `url`: the material to read, else the batch's own links. */
 export async function verifyNotice(s: Services, input: { campaignId?: string; positionId?: string; url?: string }): Promise<{ campaignId: string; results: VerifyResult[]; now: string }> {
@@ -126,7 +128,10 @@ export async function verifyNotice(s: Services, input: { campaignId?: string; po
     }
     const result = checkNotice(doc, ex, co);
     const r = recordCheck({ db, vault: s.config.vault }, subject, doc, ex, result, unchanged ? "notice.verify:unchanged" : "notice.verify");
-    results.push({ url, outcome: result.outcome, reasons: reasons(result.gates), deadline: ex.deadlineText, factId: r.factId, unchanged });
+    // only a name wholly unlike the one on record, on the company's own site: a name that contains it is a part or a parent, not another way to write it
+    const other = result.gates.publisher.result === "pass" && result.gates.issuer.result === "fail" && !db.prepare("select 1 from company where name = ?").get(ex.issuer);
+    const why = [...reasons(result.gates), ...(ex.doubts ? [`模型存疑：${ex.doubts}`] : []), ...(other ? [`这家公司官网上写的招聘主体是「${ex.issuer}」：如果它就是「${co.name}」的全称，用 company.alias 登记后再核`] : [])];
+    results.push({ url, outcome: result.outcome, reasons: why, deadline: ex.deadlineText, factId: r.factId, unchanged, ...(other ? { aliasHint: { companyId: c.company_id, alias: ex.issuer } } : {}) });
   }
   if (results.some((r) => r.factId)) s.onDataChanged?.();
   const say = input.positionId ? resolveFor(db, [input.positionId]).get(input.positionId)?.say : campaignSaying(loadContext(db, [c.company_id]), c.id).say;
