@@ -1,6 +1,6 @@
 import { parseJsonWithRepair, contentText } from "@earendil-works/pi-ai";
 import type { Llm } from "../llm.js";
-import type { Listing } from "../data/index.js";
+import { type Listing, guardedFetch } from "../data/index.js";
 import type { SourceContext } from "../data/index.js";
 import { decodeQr, isHttpUrl } from "./qr.js";
 
@@ -30,7 +30,7 @@ export async function loadImages(urls: string[], ctx: SourceContext, max = 8, ma
   const out: { data: string; mimeType: string; qr: string[] }[] = [];
   for (const u of urls.slice(0, max)) {
     try {
-      const res = await fetch(u, { headers: { referer: "https://mp.weixin.qq.com/", "user-agent": "Mozilla/5.0" }, signal: ctx.signal });
+      const res = await guardedFetch(u, { headers: { referer: "https://mp.weixin.qq.com/", "user-agent": "Mozilla/5.0" }, signal: ctx.signal });
       const mime = res.headers.get("content-type")?.split(";")[0] ?? "";
       if (!res.ok || !/^image\/(png|jpeg|webp|gif)$/.test(mime)) continue;
       const buf = Buffer.from(await res.arrayBuffer());
