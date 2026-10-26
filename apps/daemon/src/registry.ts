@@ -96,7 +96,8 @@ import { sameCompanies } from "./service/same-company.js";
 import { enqueueFit, listFit } from "./service/fit.js";
 import { listGaps, confirmGap } from "./service/opportunity-gaps.js";
 import { listLeads, resolveLeads } from "./service/leads.js";
-import { verifyNotice, noticeChecks, recordAccount } from "./service/notice-verify.js";
+import { verifyNotice, noticeChecks, recordAccount, noticeSummary } from "./service/notice-verify.js";
+import { checkNoticeSoon } from "./workflows/notice.js";
 import { loadSources, startSmeResearch } from "./service/sme.js";
 import { listChannels } from "./channels.js";
 
@@ -187,8 +188,9 @@ const handlers: { [N in ToolName]: Handler<N> } = {
     // the person's day for this batch, else the source's (meaning unchanged; read from deadline_override since 2026-10-14)
     const campaignClosesAt = campaignClosesAtOf(s.domain.db, r.campaign_id, r.c_closes ?? null);
     const deadline = resolveFor(s.domain.db, [r.id]).get(r.id);
+    const notice = noticeSummary(s.domain.db, r.campaign_id, r.apply_url);
     return { position: { id: r.id, campaignId: r.campaign_id, title: r.title, jdText: r.jd_text, cities: JSON.parse(r.cities || "[]"), degreeReq: r.degree_req, status: r.status, directionTags: JSON.parse(r.direction_tags || "[]"), lastSeenAt: r.last_seen_at, watchPriority: r.watch_priority },
-      companyId: r.company_id, companyName: r.company_name, closesAt: deadline?.date ?? null, deadline, campaignClosesAt, majorReq: r.major_req || r.c_major || "", applyUrl: r.apply_url, noticeUrl: r.notice_url, sourceKind: r.source_kind, sourceGrade: r.source_grade, lastSeenAt: r.last_seen_at, assessment: r.assessment ? JSON.parse(r.assessment) : null };
+      companyId: r.company_id, companyName: r.company_name, closesAt: deadline?.date ?? null, deadline, campaignClosesAt, majorReq: r.major_req || r.c_major || "", applyUrl: r.apply_url, noticeUrl: r.notice_url, sourceKind: r.source_kind, sourceGrade: r.source_grade, lastSeenAt: r.last_seen_at, assessment: r.assessment ? JSON.parse(r.assessment) : null, ...(notice ? { notice } : {}) };
   },
   // the person's (or their agent's) own word about a deadline (ADR-041): a date, 招满即止, 官网未设截止, 官方未写, or taking
   // it back; on one post, one batch, or every campus batch of the company. It outranks every source and survives refreshes.
@@ -239,6 +241,7 @@ const handlers: { [N in ToolName]: Handler<N> } = {
   },
   "position.watch": (i, _a, s) => { s.domain.watchPosition(i.positionId, i.priority, i.note); poolWatched(s.domain.db, i.positionId, i.priority > 0); s.onRelevanceChanged?.(); return { ok: true }; },
   "application.create": (i, a, s) => { const application = s.domain.createApplication(i.positionId, i.channel, i.note, actorLabel(a));
+    checkNoticeSoon(s, application.campaignId); // preparing: the announcement is checked again, in the background
     syncOfficialInBackground(s, (s.domain.db.prepare("select company_id from campaign where id = ?").get(application.campaignId) as any).company_id);
     s.onRelevanceChanged?.(); return { application }; },
   "application.update": (i, a, s) => ({ application: s.domain.updateApplication(i, actorLabel(a)) }),

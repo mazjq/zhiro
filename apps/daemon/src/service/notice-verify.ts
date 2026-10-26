@@ -9,7 +9,7 @@ import { articleText, fetchArticle, loadImages } from "./extract.js";
 import { readPage } from "./page-read.js";
 import { withPurpose } from "./usage.js";
 import { resolveFor, campaignSaying, loadContext } from "./deadlines.js";
-import { checkNotice, recordCheck, siteKey, fingerprint, RULE_VERSION, type NoticeDoc, type Extract, type CompanyIdentity, type Outcome, type Gates } from "./notice.js";
+import { checkNotice, recordCheck, siteKey, fingerprint, RULE_VERSION, type NoticeDoc, type Extract, type CompanyIdentity, type Outcome, type Gates, type Gate } from "./notice.js";
 
 /**
  * 公告核实, the run: read a batch's announcement (its notice link, else its application link), have the model copy out
@@ -210,4 +210,33 @@ export function recordAccount(db: Db, p: { companyId: string; accountId: string;
   if (!p.accountId.trim() || !p.basis.trim()) throw new DomainError("MISSING_FIELD", "要给公众号 id 和依据（例如：官网招聘页链到这个号）");
   db.prepare("insert or replace into company_account(company_id, account_id, name, basis, at) values (?,?,?,?,?)").run(p.companyId, p.accountId.trim(), p.name?.trim() ?? "", p.basis.trim(), now());
   return { ok: true };
+}
+
+/**
+ * What the last checks of a batch's announcement say, in three lines for the post's page: what the announcement says
+ * (and when it was read), whether the way in opened, and that whether it still takes applications is not known — a
+ * page read today says nothing of a batch closed tomorrow. Null when nothing was checked in the last 30 days.
+ */
+export function noticeSummary(db: Db, campaignId: string, applyUrl = ""): { checkedAt: string; lines: string[] } | null {
+  const rows = db.prepare(`select k.outcome, k.gates, k.extract, k.checked_at, r.url, r.status from notice_check k join notice_read r on r.id = k.read_id
+    where k.subject_type = 'campaign' and k.subject_id = ? and k.checked_at >= datetime('now', '-30 days') order by k.checked_at desc`).all(campaignId) as { outcome: string; gates: string; extract: string; checked_at: string; url: string; status: string }[];
+  if (!rows.length) return null;
+  const latest = [...new Map(rows.map((r) => [r.url, r])).values()]; // newest per piece of material (rows come newest first)
+  const day = (iso: string) => iso.slice(5, 10);
+  const at = latest[0].checked_at;
+  const read = latest.filter((r) => r.outcome !== "unreadable");
+  const fact = read.find((r) => r.outcome === "fact"), none = read.find((r) => r.outcome === "not_stated");
+  const firstWhy = (r: { gates: string }) => (Object.values(JSON.parse(r.gates || "{}")) as Gate[]).find((g) => g.result !== "pass")?.why ?? "";
+  const lines: string[] = [];
+  if (fact) lines.push(`公告复查于 ${day(fact.checked_at)}：${JSON.parse(fact.extract || "{}").deadlineText || "截止已核实"}`);
+  else if (none) lines.push(`公告复查于 ${day(none.checked_at)}：官方页面未见截止`);
+  else if (read.length) lines.push(`公告复查于 ${day(read[0].checked_at)}：待复核（${firstWhy(read[0]) || "证据不够"}）`);
+  else {
+    const before = rows.find((r) => r.outcome !== "unreadable");
+    lines.push(`这次没读到公告（${day(at)}）${before ? `；上次 ${day(before.checked_at)} 的记录仍在` : ""}`);
+  }
+  const entry = applyUrl ? latest.find((r) => r.url === applyUrl) : undefined;
+  if (entry) lines.push(entry.status === "ok" ? `网申入口能打开（${day(entry.checked_at)}）` : `网申入口这次没打开（${day(entry.checked_at)}）`);
+  lines.push("是否还在收申请：没确认");
+  return { checkedAt: at, lines };
 }
