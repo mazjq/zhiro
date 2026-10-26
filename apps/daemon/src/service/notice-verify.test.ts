@@ -8,6 +8,7 @@ import { createServices, testConfig } from "../services.js";
 import { callTool, type Actor } from "../registry.js";
 import { ingest, type Listing } from "../data/index.js";
 import { otherSeeingModels } from "./notice-verify.js";
+import { noticeVerify } from "../workflows/notice.js";
 
 // a public address written as a number: no name to look up, so the guard lets the stubbed fetch answer
 const SITE = "http://93.184.216.34";
@@ -99,5 +100,24 @@ describe("the second reader of a poster", () => {
     expect(otherSeeingModels(llm([first, { id: "b", input: ["text"] }, { id: "c", input: ["text", "image"] }, { id: "d", input: ["image"] }]), first).map((m) => m.id)).toEqual(["c", "d"]);
     expect(otherSeeingModels(llm([first, { id: "b", input: ["text"] }]), first)).toEqual([]);
     expect(otherSeeingModels(llm([first, { id: "c", input: ["text", "image"] }], "harness"), first)).toEqual([]);
+  });
+});
+
+describe("preparing an application checks its announcement; the post's page says what was found", () => {
+  afterEach(() => vi.unstubAllGlobals());
+  it("one check per batch an hour, in the background; three lines on the post", async () => {
+    const { s, db, campaignId } = setup();
+    const post = (db.prepare("select id from position where campaign_id = ?").get(campaignId) as any).id;
+    const started: string[] = [];
+    s.workflows.register(noticeVerify(s));
+    const real = s.workflows.start.bind(s.workflows);
+    (s.workflows as any).start = (kind: string, subject: string, key: string, ...rest: any[]) => { if (kind === "notice_verify") started.push(key); return real(kind, subject, key, ...rest); };
+    await callTool("application.create", { positionId: post }, HUMAN, s);
+    expect(started).toHaveLength(1);
+    expect(started[0]).toContain(campaignId);
+    serve({ "/notice/1": { body: page() }, "/jobs/j1": { body: page() } });
+    await callTool("notice.verify", { campaignId }, HUMAN, s);
+    const p: any = await callTool("position.get", { id: post }, HUMAN, s);
+    expect(p.notice.lines).toEqual([expect.stringMatching(/^公告复查于 \d\d-\d\d：网申截止时间：2099年10月31日$/), expect.stringMatching(/^网申入口能打开（\d\d-\d\d）$/), "是否还在收申请：没确认"]);
   });
 });
