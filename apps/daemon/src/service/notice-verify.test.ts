@@ -119,5 +119,15 @@ describe("preparing an application checks its announcement; the post's page says
     await callTool("notice.verify", { campaignId }, HUMAN, s);
     const p: any = await callTool("position.get", { id: post }, HUMAN, s);
     expect(p.notice.lines).toEqual([expect.stringMatching(/^公告复查于 \d\d-\d\d：网申截止时间：2099年10月31日$/), expect.stringMatching(/^网申入口能打开（\d\d-\d\d）$/), "是否还在收申请：没确认"]);
+    // a later check of the same page is what the post goes by, not the first one
+    serve({ "/notice/1": { status: 401 }, "/jobs/j1": { body: page() } });
+    await callTool("notice.verify", { campaignId }, HUMAN, s);
+    const later: any = await callTool("position.get", { id: post }, HUMAN, s);
+    expect(later.notice.lines[0]).toMatch(/^公告复查于 \d\d-\d\d：网申截止时间：2099年10月31日$/); // the application page still says it
+    serve({ "/notice/1": { status: 401 }, "/jobs/j1": { status: 401 } });
+    await callTool("notice.verify", { campaignId }, HUMAN, s);
+    const none: any = await callTool("position.get", { id: post }, HUMAN, s);
+    expect(none.notice.lines[0]).toMatch(/^这次没读到公告（\d\d-\d\d）；上次 \d\d-\d\d 的记录仍在$/);
+    expect(none.notice.lines[1]).toMatch(/^网申入口这次没打开/);
   });
 });
