@@ -116,26 +116,30 @@ export async function askNotice(llm: Llm, doc: NoticeDoc, pics: { data: string; 
     issuerNames: Array.isArray(j.issuerNames) ? j.issuerNames.map((x: any) => ({ name: str(x?.name), quote: str(x?.quote) })).filter((x: any) => x.name && x.quote) : [],
     seen: { chars: text.length, images: shown.length, model: String((model as any).id ?? "") } };
   if (ex.deadlineImage != null && shown.length) {
-    const second = otherSeeingModel(llm, model);
-    if (second) {
-      const p = json(await llm.models.completeSimple(second, { systemPrompt: POSTER_PROMPT, messages: [{ role: "user", content: [{ type: "text", text: `${head}\n附 ${shown.length} 张配图。` }, ...pictures] as any, timestamp: Date.now() }] }, { reasoning: "low" }));
-      ex.poster = { model: String(second.id ?? ""), deadlineText: str(p.deadlineText), deadlineDate: str(p.deadlineDate), scope: str(p.scope), image: num(p.image) };
+    // a model the account cannot use is passed over; none that answers leaves the poster read once (under review)
+    for (const second of otherSeeingModels(llm, model).slice(0, 3)) {
+      try {
+        const p = json(await llm.models.completeSimple(second, { systemPrompt: POSTER_PROMPT, messages: [{ role: "user", content: [{ type: "text", text: `${head}\n附 ${shown.length} 张配图。` }, ...pictures] as any, timestamp: Date.now() }] }, { reasoning: "low" }));
+        ex.poster = { model: String(second.id ?? ""), deadlineText: str(p.deadlineText), deadlineDate: str(p.deadlineDate), scope: str(p.scope), image: num(p.image) };
+        break;
+      } catch (e: any) {
+        if (e?.code === "BUDGET_DEFERRED" || e?.code === "MODEL_DELEGATED") throw e;
+      }
     }
   }
   return ex;
 }
 
 /**
- * Another model of the same provider that can see, for the second reading of a poster. None when the work goes to a
- * harness (it answers with its own model, so a second call is not a second reader) or the provider has no other.
- * ponytail: the first such model in the provider's list; a setting when someone wants to pick it
+ * The other models of the same provider that can see, for the second reading of a poster, in the provider's order. None
+ * when the work goes to a harness (it answers with its own model, so a second call is not a second reader).
+ * ponytail: the provider's order; a setting when someone wants to pick the second reader
  */
-export function otherSeeingModel(llm: Llm, first: any): any | null {
-  if (llm.route?.().kind === "harness") return null;
+export function otherSeeingModels(llm: Llm, first: any): any[] {
+  if (llm.route?.().kind === "harness") return [];
   try {
-    const all = (llm.models as any).getModels(first.provider) as any[];
-    return all.find((m) => m.id !== first.id && m.input?.includes?.("image")) ?? null;
-  } catch { return null; }
+    return ((llm.models as any).getModels(first.provider) as any[]).filter((m) => m.id !== first.id && m.input?.includes?.("image"));
+  } catch { return []; }
 }
 
 export interface VerifyResult { url: string; outcome: Outcome; reasons: string[]; deadline: string; factId?: string; unchanged: boolean;
