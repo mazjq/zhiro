@@ -46,7 +46,8 @@ export interface Gates { publisher: Gate; issuer: Gate; evidence: Gate; season: 
 export type Outcome = "fact" | "not_stated" | "review" | "unreadable" | "not_recruitment";
 // 2: doubts are only about what is written (an absent deadline is not a doubt); 「27届」 read as 2027
 // 3: posters read twice by two models; cohort sentence checked; what the model was shown counted; 「以下简称」
-export const RULE_VERSION = 3;
+// 4: the title counts as the material's words; the batch's own cohort is no longer told to the model; 「中国」 in front
+export const RULE_VERSION = 4;
 
 const pass = (why: string): Gate => ({ result: "pass", why }), fail = (why: string): Gate => ({ result: "fail", why }), unknown = (why: string): Gate => ({ result: "unknown", why });
 
@@ -69,7 +70,8 @@ export function siteKey(url: string): string | null {
 }
 
 // legal form only: 「集团」「股份」 stay, they tell a group from its parts (catalog.ts companyKey)
-const nameKey = (s: string) => companyKey(s).replace(/[（）()【】\[\]·・\-—]/g, "").replace(/(股份有限公司|有限责任公司|有限公司|公司)$/, "");
+// 「中国航天502所」 and 「航天502所」 are one name written two ways
+const nameKey = (s: string) => companyKey(s).replace(/[（）()【】\[\]·・\-—]/g, "").replace(/(股份有限公司|有限责任公司|有限公司|公司)$/, "").replace(/^中国(?=.{2,})/, "");
 
 /** 发布者: the company's own site or hiring-system tenant, or a WeChat account on record as its own. */
 export function publisherGate(doc: NoticeDoc, co: CompanyIdentity): Gate {
@@ -97,7 +99,8 @@ export function issuerGate(ex: Extract, co: CompanyIdentity, doc?: NoticeDoc): G
   return fail(`招聘主体是「${ex.issuer}」，不是「${co.name}」`);
 }
 
-const onPage = (doc: NoticeDoc | undefined, q: string) => !!doc && !!norm(q) && norm(doc.text).includes(norm(q));
+// the material's words: its title and its text
+const onPage = (doc: NoticeDoc | undefined, q: string) => !!doc && !!norm(q) && norm(`${doc.title}\n${doc.text}`).includes(norm(q));
 const norm = (s: string) => (s ?? "").normalize("NFKC").replace(/\s+/g, "").replace(/[，,。.：:；;（）()【】\[\]“”"'、]/g, "");
 /** The days a sentence names, in order; a day without a year takes the year of the one before it. */
 export function datesIn(text: string): { dates: string[]; yearless: boolean; between: string[]; named: number } {
