@@ -221,7 +221,9 @@ export function noticeSummary(db: Db, campaignId: string, applyUrl = ""): { chec
   const rows = db.prepare(`select k.outcome, k.gates, k.extract, k.checked_at, r.url, r.status from notice_check k join notice_read r on r.id = k.read_id
     where k.subject_type = 'campaign' and k.subject_id = ? and k.checked_at >= datetime('now', '-30 days') order by k.checked_at desc`).all(campaignId) as { outcome: string; gates: string; extract: string; checked_at: string; url: string; status: string }[];
   if (!rows.length) return null;
-  const latest = [...new Map(rows.map((r) => [r.url, r])).values()]; // newest per piece of material (rows come newest first)
+  // newest per piece of material: rows come newest first, so the first seen of each url is kept
+  const latest: typeof rows = [];
+  for (const r of rows) if (!latest.some((x) => x.url === r.url)) latest.push(r);
   const day = (iso: string) => iso.slice(5, 10);
   const at = latest[0].checked_at;
   const read = latest.filter((r) => r.outcome !== "unreadable");
