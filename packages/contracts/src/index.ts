@@ -946,7 +946,7 @@ export const tools = {
     name: "notice.verify",
     description: "公告核实：读一个招聘批次的公告（默认它的公告链接、其次网申链接；或用 url 指定，如公众号文章），让模型照抄截止 / 届别 / 入口原文，再过四道检查（发布者是这家公司的官网 / 招聘系统租户 / 已登记的公众号；招聘主体就是这家公司；原句在页面上且日期一致；本季）。四道都过才记成官方截止并参与「还能投吗」；否则只记成核查结果（outcome：fact / not_stated=官方公告完整读过但没写截止 / review=待复核，reasons 写原因 / unreadable / not_recruitment），不影响别的来源的日期。和上次读到的内容一样就不再调模型。给 positionId 时核它所在的批次。每份材料约 1–3k token。",
     input: Type.Object({ campaignId: Type.Optional(Id), positionId: Type.Optional(Id), url: Type.Optional(Type.String({ description: "要读的公告（不给就用批次自己的链接）" })) }),
-    output: Type.Object({ campaignId: Id, now: Type.String({ description: "核完后系统对截止的说法" }), results: Type.Array(Type.Object({ url: Type.String(), outcome: Type.String(), reasons: Type.Array(Type.String()), deadline: Type.String({ description: "模型抄出的截止原句" }), factId: Type.Optional(Type.String()), unchanged: Type.Boolean() })) }),
+    output: Type.Object({ campaignId: Id, now: Type.String({ description: "核完后系统对截止的说法" }), results: Type.Array(Type.Object({ url: Type.String(), outcome: Type.String(), reasons: Type.Array(Type.String()), deadline: Type.String({ description: "模型抄出的截止原句" }), factId: Type.Optional(Type.String()), unchanged: Type.Boolean(), aliasHint: Type.Optional(Type.Object({ companyId: Id, alias: Type.String() }, { description: "官网上写的招聘主体和库里的名字完全不同：若是全称，用 company.alias 登记后再核" })) })) }),
     effects: { localWrite: true, externalAction: false, dataEgress: true, reversible: true, network: true },
     execution: "sync",
     errors: ["NOT_FOUND", "MISSING_FIELD", "NO_MATERIAL", "NO_MODEL"],

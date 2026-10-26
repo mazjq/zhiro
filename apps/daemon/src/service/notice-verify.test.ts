@@ -23,11 +23,11 @@ function setup() {
   const campaignId = (db.prepare("select id from campaign").get() as any).id;
   db.prepare("update campaign set source_grade = '官方', notice_url = ?, apply_url = ? where id = ?").run(`${SITE}/notice/1`, `${SITE}/jobs/j1`, campaignId);
   const calls: string[] = [];
-  const answer = { isRecruitment: true, issuer: "示例重工股份有限公司", cohort: "2027届", deadlineText: "网申截止时间：2099年10月31日", deadlineDate: "2099-10-31", deadlineImage: null, scope: "全部", doubts: "" };
+  const answer: any = { isRecruitment: true, issuer: "示例重工股份有限公司", cohort: "2027届", deadlineText: "网申截止时间：2099年10月31日", deadlineDate: "2099-10-31", deadlineImage: null, scope: "全部", doubts: "" };
   const llm: any = { model: () => ({ id: "fake", input: ["text"] }), models: { completeSimple: async (_m: any, req: any) => { calls.push(req.messages[0].content[0].text); return { content: [{ type: "text", text: JSON.stringify(answer) }] }; } } };
   const s = createServices({ db, domain, config: testConfig(dir, { sources: [] }) });
   (s as any).llm = llm;
-  return { s, db, campaignId, calls };
+  return { s, db, campaignId, calls, answer };
 }
 const page = (deadline = "2099年10月31日") => `<html><head><title>示例重工 2027届校园招聘公告</title></head><body><article>${"示例重工股份有限公司 2027届校园招聘公告。招聘对象：2027届毕业生。".repeat(80)}网申截止时间：${deadline}。投递入口：官网。</article></body></html>`;
 function serve(pages: Record<string, { status?: number; body?: string }>) {
@@ -70,6 +70,19 @@ describe("notice.verify: read, ask once, check, file", () => {
     expect(r.results[0]).toMatchObject({ outcome: "unreadable" });
     expect(calls).toHaveLength(1);
     expect((db.prepare("select count(*) n from deadline_fact where superseded_at is null and check_id is not null").get() as any).n).toBe(1);
+  });
+
+  it("the company's own site naming its employer wholly otherwise suggests an alias; a part of it does not; doubts are said", async () => {
+    const { s, campaignId, answer } = setup();
+    serve({ "/notice/1": { body: page() } });
+    answer.issuer = "示例装备集团股份有限公司研发总院";
+    const r: any = await callTool("notice.verify", { campaignId, url: `${SITE}/notice/1` }, HUMAN, s);
+    expect(r.results[0]).toMatchObject({ outcome: "review", aliasHint: { alias: "示例装备集团股份有限公司研发总院" } });
+    answer.issuer = "示例重工股份有限公司东北分公司"; answer.doubts = "截止只写了月日";
+    serve({ "/notice/1": { body: page("2099年11月30日") } });
+    const part: any = await callTool("notice.verify", { campaignId, url: `${SITE}/notice/1` }, HUMAN, s);
+    expect(part.results[0].aliasHint).toBeUndefined();
+    expect(part.results[0].reasons).toContain("模型存疑：截止只写了月日");
   });
 
   it("only the person puts an account on record", async () => {

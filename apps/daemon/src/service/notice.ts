@@ -37,7 +37,8 @@ export type GateResult = "pass" | "fail" | "unknown";
 export interface Gate { result: GateResult; why: string }
 export interface Gates { publisher: Gate; issuer: Gate; evidence: Gate; season: Gate }
 export type Outcome = "fact" | "not_stated" | "review" | "unreadable" | "not_recruitment";
-export const RULE_VERSION = 1;
+// 2: doubts are only about what is written (an absent deadline is not a doubt); 「27届」 read as 2027
+export const RULE_VERSION = 2;
 
 const pass = (why: string): Gate => ({ result: "pass", why }), fail = (why: string): Gate => ({ result: "fail", why }), unknown = (why: string): Gate => ({ result: "unknown", why });
 
@@ -106,6 +107,7 @@ export function readDeadline(quote: string): { policy: Policy; date?: string } |
   if (/招满即止|招满为止|额满为止|招满截止|满额即止/.test(quote)) return { policy: "until_filled" };
   if (/长期有效|长期招聘|常年招聘|滚动招聘/.test(quote)) return { policy: "rolling" };
   const { dates, yearless, between, named } = datesIn(quote);
+  if (named > 1 && !dates.length) return { unclear: "原文没写年份" };
   if (named > 1 && !(dates.length === 2 && named === 2)) return { unclear: "一句话里有好几个日期" };
   if (!dates.length) return { unclear: yearless ? "原文没写年份" : "原文里没有日期" };
   if (dates.length === 1) return { policy: "date", date: dates[0] };
@@ -130,7 +132,8 @@ export function evidenceGate(doc: NoticeDoc, ex: Extract): Gate {
 
 /** 本季: the cohort the announcement names (or, failing that, a day inside this season) is this season's. */
 export function seasonGate(ex: Extract, season: Season, date?: string): Gate {
-  const years = [...new Set((ex.cohort ?? "").match(/20\d{2}/g) ?? [])];
+  // 「2027届」「2027 届」「27届」
+  const years = [...new Set([...(ex.cohort ?? "").matchAll(/(?<!\d)(20)?(\d{2})(?!\d)/g)].map((m) => `20${m[2]}`))];
   if (years.includes(season.cohort)) return pass(`届别「${ex.cohort}」`);
   if (years.length) return fail(`届别是「${ex.cohort}」，不是 ${season.cohort} 届`);
   if (date && date >= season.since) return pass(`没写届别；截止 ${date} 在本季之内`);
