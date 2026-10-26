@@ -1,5 +1,5 @@
 import { isAggregate, isNotices } from "../data/index.js";
-import type { Services } from "../registry.js";
+import type { Services } from "../services.js";
 import { entryOf } from "../recommenders/expand.js";
 import { capture } from "./capture.js";
 import { withPurpose } from "./usage.js";

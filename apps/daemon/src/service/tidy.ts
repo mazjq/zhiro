@@ -1,4 +1,4 @@
-import type { Services } from "../registry.js";
+import type { Services } from "../services.js";
 import { tx } from "../db.js";
 import { sources, liveFeedConfigs, releaseClaims } from "../data/index.js";
 import { unitIndex, unitKey } from "./same-company.js";

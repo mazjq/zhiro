@@ -1,6 +1,6 @@
 import type { Recommender, Hit } from "./index.js";
 import { sourceFor, siteKeyOf, isAggregate } from "../data/index.js";
-import type { Services } from "../registry.js";
+import type { Services } from "../services.js";
 import { unitIndex, unitKey } from "../service/same-company.js";
 import { openCampaigns } from "../service/deadlines.js";
 

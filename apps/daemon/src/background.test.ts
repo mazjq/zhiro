@@ -1,9 +1,9 @@
 import { describe, it, expect, afterEach } from "vitest";
+import { createServices, testConfig } from "./services.js";
 import { mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { openDb } from "./db.js";
-import { Domain } from "./service/domain.js";
 import { WorkflowEngine } from "./service/workflow.js";
 import { dataOf, type Services } from "./registry.js";
 import { ingest, runSource, sources, type DataContext, type Listing, type Source } from "./data/index.js";
@@ -27,7 +27,7 @@ const until = async (ok: () => boolean) => { for (let i = 0; i < 200 && !ok(); i
 function setup() {
   const dir = mkdtempSync(join(tmpdir(), "jobos-bg-"));
   const db = openDb(join(dir, "t.db"));
-  const s: Services = { domain: new Domain(db), workflows: new WorkflowEngine(db), config: { vault: dir, http: { host: "127.0.0.1", port: 0 }, llm: { provider: "x", model: "y" }, feishu: {}, reminders: { daysBefore: [7, 3, 1] }, sources: [] } };
+  const s: Services = createServices({ db: db, config: testConfig(dir, { sources: [] }) });
   return { dir, db, s };
 }
 /** every `data` event, with what a page asking for the pool at that very moment would get */

@@ -1,5 +1,5 @@
 import type { WorkflowDef } from "../service/workflow.js";
-import type { Services } from "../registry.js";
+import type { Services } from "../services.js";
 import { runBrief } from "../daily/brief.js";
 
 /** "H:MM" / "HH:MM" with a real hour and minute → "HH:MM"; anything else → null. */

@@ -1,5 +1,5 @@
 import type { WorkflowDef } from "../service/workflow.js";
-import type { Services } from "../registry.js";
+import type { Services } from "../services.js";
 import { importFeed, type FeedResult } from "../data/index.js";
 
 /** Pull every configured feed (or one): each checked and filed whole, or not at all (data/feed.ts). */

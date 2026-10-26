@@ -1,10 +1,10 @@
 import { describe, it, expect } from "vitest";
+import { createServices, testConfig } from "./services.js";
 import { mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { openDb } from "./db.js";
 import { Domain } from "./service/domain.js";
-import { WorkflowEngine } from "./service/workflow.js";
 import { callTool, callableBy, type Services, type Actor } from "./registry.js";
 import { ingest } from "./data/index.js";
 import type { Listing } from "./data/index.js";
@@ -22,7 +22,7 @@ function setup() {
   const dir = mkdtempSync(join(tmpdir(), "jobos-pool-"));
   const db = openDb(join(dir, "t.db"));
   const domain = new Domain(db);
-  const s: Services = { domain, workflows: new WorkflowEngine(db), config: { vault: dir, http: { host: "127.0.0.1", port: 0 }, llm: { provider: "x", model: "y" }, feishu: {}, reminders: { daysBefore: [7, 3, 1] }, sources: [] } };
+  const s: Services = createServices({ db: db, domain, config: testConfig(dir, { sources: [] }) });
   s.onDataChanged = () => { pending = rerunAuto(s); };
   return { dir, domain, s };
 }
