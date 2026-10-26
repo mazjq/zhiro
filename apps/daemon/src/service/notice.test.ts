@@ -7,12 +7,13 @@ import { ingest, type Listing } from "../data/index.js";
 import { resolveFor } from "./deadlines.js";
 import { checkNotice, recordCheck, siteKey, readDeadline, type NoticeDoc, type Extract, type CompanyIdentity } from "./notice.js";
 
-const SEASON = { cohort: "2027", since: "2026-03-01" };
+const SEASON = { cohort: "2027", since: "2026-03-01", until: "2027-08-31" };
 const CO: CompanyIdentity = { name: "示例重工股份有限公司", aliases: ["示例重工"], sites: new Set(["mokahr:acme", "careers.example-heavy.cn"]), accounts: new Set(["MzA5biz"]) };
 const doc = (o: Partial<NoticeDoc> = {}): NoticeDoc => ({ url: "https://careers.example-heavy.cn/notice/1", finalUrl: "https://careers.example-heavy.cn/notice/1", via: "http", status: "ok", title: "2027届校园招聘公告",
   text: "示例重工股份有限公司 2027届校园招聘公告。招聘对象：2027届毕业生。网申截止时间：2099年10月31日。投递入口：官网。", images: [], complete: true, ...o });
 const ex = (o: Partial<Extract> = {}): Extract => ({ isRecruitment: true, issuer: "示例重工股份有限公司", cohort: "2027届", cohortQuote: "招聘对象：2027届毕业生", cohortImage: null,
-  deadlineText: "网申截止时间：2099年10月31日", deadlineDate: "2099-10-31", deadlineImage: null, applyEntry: "官网", scope: "全部", doubts: "", ...o });
+  deadlineText: "网申截止时间：2099年10月31日", deadlineDate: "2099-10-31", deadlineImage: null, applyEntry: "官网", scope: "全部", doubts: "",
+  seen: { chars: 1_000_000, images: 99, model: "first" }, ...o });
 const check = (d: Partial<NoticeDoc> = {}, e: Partial<Extract> = {}) => checkNotice(doc(d), ex(e), CO, SEASON);
 
 describe("公告核实: only a deadline that passes all four checks becomes a fact", () => {
@@ -42,7 +43,7 @@ describe("公告核实: only a deadline that passes all four checks becomes a fa
   it("the sentence must be on the page, and say the day the model gave", () => {
     expect(check({}, { deadlineText: "网申截止：2099年11月15日", deadlineDate: "2099-11-15" }).gates.evidence.result).toBe("fail");
     expect(check({}, { deadlineDate: "2099-11-30" }).gates.evidence.result).toBe("fail");
-    expect(check({ text: "网申时间：2099年9月1日-11月30日。" }, { deadlineText: "网申时间：2099年9月1日-11月30日", deadlineDate: "2099-11-30" }).outcome).toBe("fact");
+    expect(check({ text: "招聘对象：2027届毕业生。网申时间：2099年9月1日-11月30日。" }, { deadlineText: "网申时间：2099年9月1日-11月30日", deadlineDate: "2099-11-30" }).outcome).toBe("fact");
   });
 
   it("a sentence whose day cannot be told by rule is left to a person", () => {
@@ -55,17 +56,45 @@ describe("公告核实: only a deadline that passes all four checks becomes a fa
     expect(check({ text: "网申 10月31日截止" }, { deadlineText: "网申 10月31日截止", deadlineDate: "" }).outcome).toBe("review");
   });
 
-  it("a poster is a person's to confirm; an image the material does not have is wrong", () => {
-    const poster = { images: [{ n: 0, hash: "a" }, { n: 1, hash: "b" }], text: "" };
-    expect(check(poster, { deadlineText: "网申截止 11月30日", deadlineImage: 1 }).outcome).toBe("review");
-    expect(check(poster, { deadlineText: "网申截止 11月30日", deadlineImage: 5 }).gates.evidence.result).toBe("fail");
+  it("a poster counts only when a second model, reading on its own, names the same day, reach and terms", () => {
+    const poster = { images: [{ n: 0, hash: "a" }, { n: 1, hash: "b" }], text: "示例重工股份有限公司 2027届校园招聘" };
+    const first = { deadlineText: "网申截止：2099年11月30日", deadlineDate: "2099-11-30", deadlineImage: 1, scope: "", cohortQuote: "2027届校园招聘" };
+    const second = (o = {}) => ({ poster: { model: "second", deadlineText: "网申截止时间 2099年11月30日", deadlineDate: "2099-11-30", scope: "", image: 1, ...o } });
+    expect(check(poster, first).gates.evidence.result).toBe("unknown"); // read once
+    expect(check(poster, { ...first, ...second() }).outcome).toBe("fact");
+    expect(check(poster, { ...first, ...second() }).fact?.evidence).toBe("海报图 1：网申截止：2099年11月30日");
+    expect(check(poster, { ...first, ...second({ model: "first" }) }).gates.evidence.result).toBe("unknown"); // the same model twice
+    expect(check(poster, { ...first, ...second({ deadlineText: "网申截止 2099年11月20日" }) }).gates.evidence.result).toBe("unknown");
+    expect(check(poster, { ...first, ...second({ scope: "研发类岗位" }) }).gates.evidence.result).toBe("unknown");
+    expect(check(poster, { ...first, ...second({ deadlineText: "部分岗位网申截止 2099年11月30日" }) }).gates.evidence.result).toBe("unknown"); // terms differ, not 「contains」
+    expect(check(poster, { ...first, deadlineImage: 5 }).gates.evidence.result).toBe("fail");
+  });
+
+  it("days that are no days, ranges backwards, a whole that is not whole", () => {
+    expect(readDeadline("网申截止 2099年2月30日")).toEqual({ unclear: "原文里没有日期" });
+    expect(readDeadline("2099年11月30日至10月1日")).toEqual({ unclear: "日期区间前后颠倒" });
+    expect(check({ text: "网申截止时间：2099年10月31日（部分岗位除外）" }, { deadlineText: "网申截止时间：2099年10月31日（部分岗位除外）" }).outcome).toBe("review");
+    expect(check({}, { scope: "全部岗位，部分地区另行通知" }).outcome).toBe("review");
+  });
+
+  it("the cohort's words must be in the material", () => {
+    expect(check({}, { cohortQuote: "招聘对象：2027届本科及以上毕业生" }).gates.season.result).toBe("unknown");
+  });
+
+  it("「甲（以下简称乙）」 in the material ties a full name to the one on record; a likeness does not", () => {
+    const text = "示例装备集团股份有限公司研发总院（以下简称示例重工）2027届校园招聘。招聘对象：2027届毕业生。网申截止时间：2099年10月31日。";
+    const named = { issuer: "示例装备集团股份有限公司研发总院", issuerNames: [{ name: "示例重工", quote: "示例装备集团股份有限公司研发总院（以下简称示例重工）" }] };
+    expect(check({ text }, named).gates.issuer.result).toBe("pass");
+    expect(check({ text: text.replace("（以下简称示例重工）", "") }, named).gates.issuer.result).toBe("fail"); // the sentence is not there
+    expect(check({ text }, { ...named, issuerNames: [{ name: "示例重工", quote: "示例装备集团股份有限公司研发总院与示例重工" }] }).gates.issuer.result).toBe("fail"); // no 简称
   });
 
   it("season: last year's cohort fails; no cohort but a day inside this season passes; neither is unknown", () => {
-    expect(check({}, { cohort: "2026届" }).gates.season.result).toBe("fail");
-    expect(check({}, { cohort: "27届" }).gates.season.result).toBe("pass");
-    expect(check({}, { cohort: "26届" }).gates.season.result).toBe("fail");
-    expect(check({}, { cohort: "" }).gates.season.result).toBe("pass");
+    expect(check({ text: "招聘对象：2026届毕业生" }, { cohort: "2026届", cohortQuote: "招聘对象：2026届毕业生" }).gates.season.result).toBe("fail");
+    expect(check({ text: "面向27届毕业生" }, { cohort: "27届", cohortQuote: "面向27届毕业生" }).gates.season.result).toBe("pass");
+    expect(check({ text: "面向26届毕业生" }, { cohort: "26届", cohortQuote: "面向26届毕业生" }).gates.season.result).toBe("fail");
+    expect(check({ text: "网申截止时间：2026年10月31日" }, { cohort: "", deadlineText: "网申截止时间：2026年10月31日", deadlineDate: "2026-10-31" }).gates.season.result).toBe("pass");
+    expect(check({ text: "网申截止时间：2099年10月31日" }, { cohort: "", deadlineText: "网申截止时间：2099年10月31日" }).gates.season.result).toBe("unknown"); // 2099 is past this season's end
     expect(check({}, { cohort: "", deadlineText: "", deadlineDate: "" }).gates.season.result).toBe("unknown");
   });
 
@@ -81,6 +110,8 @@ describe("公告核实: only a deadline that passes all four checks becomes a fa
     expect(check({ status: "partial" }, none).outcome).toBe("review");
     expect(check({ finalUrl: "https://elsewhere.example.org/x" }, none).outcome).toBe("review");
     expect(check({ status: "login" }).outcome).toBe("unreadable");
+    expect(check({}, { ...none, seen: { chars: 10, images: 99, model: "first" } }).outcome).toBe("review"); // the model saw a part
+    expect(check({ images: [{ n: 0, hash: "a" }] }, { ...none, seen: { chars: 1_000_000, images: 0, model: "first" } }).outcome).toBe("review"); // nor the poster
   });
 
   it("siteKey: tenants, not hosts, on shared hiring systems", () => {

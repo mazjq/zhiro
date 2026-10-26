@@ -7,6 +7,7 @@ import { Domain } from "./domain.js";
 import { createServices, testConfig } from "../services.js";
 import { callTool, type Actor } from "../registry.js";
 import { ingest, type Listing } from "../data/index.js";
+import { otherSeeingModels } from "./notice-verify.js";
 
 // a public address written as a number: no name to look up, so the guard lets the stubbed fetch answer
 const SITE = "http://93.184.216.34";
@@ -23,8 +24,8 @@ function setup() {
   const campaignId = (db.prepare("select id from campaign").get() as any).id;
   db.prepare("update campaign set source_grade = '官方', notice_url = ?, apply_url = ? where id = ?").run(`${SITE}/notice/1`, `${SITE}/jobs/j1`, campaignId);
   const calls: string[] = [];
-  const answer: any = { isRecruitment: true, issuer: "示例重工股份有限公司", cohort: "2027届", deadlineText: "网申截止时间：2099年10月31日", deadlineDate: "2099-10-31", deadlineImage: null, scope: "全部", doubts: "" };
-  const llm: any = { model: () => ({ id: "fake", input: ["text"] }), models: { completeSimple: async (_m: any, req: any) => { calls.push(req.messages[0].content[0].text); return { content: [{ type: "text", text: JSON.stringify(answer) }] }; } } };
+  const answer: any = { isRecruitment: true, issuer: "示例重工股份有限公司", cohort: "2027届", cohortQuote: "招聘对象：2027届毕业生", deadlineText: "网申截止时间：2099年10月31日", deadlineDate: "2099-10-31", deadlineImage: null, scope: "全部", doubts: "" };
+  const llm: any = { model: () => ({ id: "fake", provider: "p", input: ["text"] }), models: { getModels: () => [], completeSimple: async (_m: any, req: any) => { calls.push(req.messages[0].content[0].text); return { content: [{ type: "text", text: JSON.stringify(answer) }] }; } } };
   const s = createServices({ db, domain, config: testConfig(dir, { sources: [] }) });
   (s as any).llm = llm;
   return { s, db, campaignId, calls, answer };
@@ -90,5 +91,15 @@ describe("notice.verify: read, ask once, check, file", () => {
     const companyId = (db.prepare("select id from company").get() as any).id;
     await expect(callTool("notice.account", { companyId, accountId: "MzA5", basis: "官网链到它" }, AGENT, s)).rejects.toThrow();
     expect(await callTool("notice.account", { companyId, accountId: "MzA5", basis: "官网链到它" }, HUMAN, s)).toEqual({ ok: true });
+  });
+});
+
+describe("the second reader of a poster", () => {
+  const first = { id: "a", provider: "p", input: ["text", "image"] };
+  const llm = (models: any[], route?: string): any => ({ route: route ? () => ({ kind: route, name: "codex" }) : undefined, models: { getModels: () => models } });
+  it("is another model of the provider that can see; none when a harness answers or there is no other", () => {
+    expect(otherSeeingModels(llm([first, { id: "b", input: ["text"] }, { id: "c", input: ["text", "image"] }, { id: "d", input: ["image"] }]), first).map((m) => m.id)).toEqual(["c", "d"]);
+    expect(otherSeeingModels(llm([first, { id: "b", input: ["text"] }]), first)).toEqual([]);
+    expect(otherSeeingModels(llm([first, { id: "c", input: ["text", "image"] }], "harness"), first)).toEqual([]);
   });
 });
