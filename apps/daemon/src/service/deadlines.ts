@@ -366,7 +366,7 @@ export function campaignClosesAt(db: Db, campaignId: string, sourceDate: string 
 }
 
 // ---------- writing ----------
-export interface FactInput { positionId?: string; campaignId?: string; companyId?: string; event?: DeadlineEvent; policy: Policy; date?: string; dateStart?: string; precision?: Precision; applies?: Applies; grade: string; sourceKind?: string; url?: string; evidence: string; by?: string }
+export interface FactInput { positionId?: string; campaignId?: string; companyId?: string; event?: DeadlineEvent; policy: Policy; date?: string; dateStart?: string; precision?: Precision; applies?: Applies; grade: string; sourceKind?: string; url?: string; evidence: string; by?: string; /** the announcement check it came from (notice.ts) */ checkId?: string }
 
 /**
  * Record what a source said. The evidence sentence is required: a deadline with no words behind it is a guess. The same
@@ -390,14 +390,14 @@ export function recordFact(db: Db, p: FactInput): { id: string; created: boolean
   const dup = db.prepare("select id from deadline_fact where subject_type = ? and subject_id = ? and content_hash = ?").get(subjectType, subjectId, hash) as { id: string } | undefined;
   if (dup) {
     // A → B → A: A stands again and B, which had replaced it, no longer does
-    db.prepare("update deadline_fact set superseded_at = null where id = ?").run(dup.id);
+    db.prepare("update deadline_fact set superseded_at = null, check_id = coalesce(?, check_id) where id = ?").run(p.checkId ?? null, dup.id);
     supersedeOthers(dup.id);
     return { id: dup.id, created: false };
   }
   supersedeOthers("");
   const id = ulid();
-  db.prepare("insert into deadline_fact(id, subject_type, subject_id, event, policy, date_start, date_end, precision, applies, grade, source_kind, url, evidence, content_hash, by, created_at) values (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)")
-    .run(id, subjectType, subjectId, event, p.policy, p.dateStart ?? null, dated || event !== "application_close" ? (p.date ?? null) : null, p.precision ?? "day", applies, p.grade, p.sourceKind ?? "", p.url ?? "", p.evidence.trim().slice(0, 600), hash, p.by ?? "", now());
+  db.prepare("insert into deadline_fact(id, subject_type, subject_id, event, policy, date_start, date_end, precision, applies, grade, source_kind, url, evidence, content_hash, by, created_at, check_id) values (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)")
+    .run(id, subjectType, subjectId, event, p.policy, p.dateStart ?? null, dated || event !== "application_close" ? (p.date ?? null) : null, p.precision ?? "day", applies, p.grade, p.sourceKind ?? "", p.url ?? "", p.evidence.trim().slice(0, 600), hash, p.by ?? "", now(), p.checkId ?? null);
   return { id, created: true };
 }
 
