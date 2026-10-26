@@ -50,6 +50,7 @@ describe("公告核实: only a deadline that passes all four checks becomes a fa
     expect(readDeadline("网申截止 10月31日，笔试 2099年11月5日")).toEqual({ unclear: "一句话里有好几个日期" }); // never the 笔试 day
     expect(readDeadline("2099-10-01、2099-10-31")).toEqual({ unclear: "一句话里有好几个日期" }); // hyphens inside dates are no range
     expect(readDeadline("10月31日截止")).toEqual({ unclear: "原文没写年份" });
+    expect(readDeadline("网上报名 9月2日—10月7日")).toEqual({ unclear: "原文没写年份" }); // a range with no year is yearless, not 「several days」
     expect(readDeadline("岗位招满即止")).toEqual({ policy: "until_filled" });
     expect(check({ text: "网申 10月31日截止" }, { deadlineText: "网申 10月31日截止", deadlineDate: "" }).outcome).toBe("review");
   });
@@ -62,6 +63,8 @@ describe("公告核实: only a deadline that passes all four checks becomes a fa
 
   it("season: last year's cohort fails; no cohort but a day inside this season passes; neither is unknown", () => {
     expect(check({}, { cohort: "2026届" }).gates.season.result).toBe("fail");
+    expect(check({}, { cohort: "27届" }).gates.season.result).toBe("pass");
+    expect(check({}, { cohort: "26届" }).gates.season.result).toBe("fail");
     expect(check({}, { cohort: "" }).gates.season.result).toBe("pass");
     expect(check({}, { cohort: "", deadlineText: "", deadlineDate: "" }).gates.season.result).toBe("unknown");
   });
