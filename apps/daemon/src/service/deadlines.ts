@@ -384,10 +384,17 @@ export function recordFact(db: Db, p: FactInput): { id: string; created: boolean
   if (event === "application_close" && dated && !/^\d{4}-\d{2}-\d{2}/.test(p.date ?? "")) throw new DomainError("BAD_DATE", "具体截止要给 date（YYYY-MM-DD；「12 月底」写 date=12-31、precision=month_end）");
   const applies = p.applies ?? (subjectType === "position" ? "this_position" : "all_campaign_positions");
   const hash = createHash("sha256").update([event, p.policy, p.dateStart ?? "", p.date ?? "", p.precision ?? "day", applies, p.grade, p.url ?? "", p.evidence.trim()].join("|")).digest("hex").slice(0, 32);
+  // the same page saying something new about the same subject, event and reach: its earlier statement no longer stands.
+  // What it says of another reach (all of a batch's posts vs. one post) is a different statement and stays.
+  const supersedeOthers = (keep: string) => { if (p.url) db.prepare("update deadline_fact set superseded_at = ? where subject_type = ? and subject_id = ? and event = ? and url = ? and applies = ? and superseded_at is null and id != ?").run(now(), subjectType, subjectId, event, p.url, applies, keep); };
   const dup = db.prepare("select id from deadline_fact where subject_type = ? and subject_id = ? and content_hash = ?").get(subjectType, subjectId, hash) as { id: string } | undefined;
-  if (dup) { db.prepare("update deadline_fact set superseded_at = null where id = ?").run(dup.id); return { id: dup.id, created: false }; }
-  // the same page saying something new about the same subject and event: its earlier statement no longer stands
-  if (p.url) db.prepare("update deadline_fact set superseded_at = ? where subject_type = ? and subject_id = ? and event = ? and url = ? and superseded_at is null").run(now(), subjectType, subjectId, event, p.url);
+  if (dup) {
+    // A → B → A: A stands again and B, which had replaced it, no longer does
+    db.prepare("update deadline_fact set superseded_at = null where id = ?").run(dup.id);
+    supersedeOthers(dup.id);
+    return { id: dup.id, created: false };
+  }
+  supersedeOthers("");
   const id = ulid();
   db.prepare("insert into deadline_fact(id, subject_type, subject_id, event, policy, date_start, date_end, precision, applies, grade, source_kind, url, evidence, content_hash, by, created_at) values (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)")
     .run(id, subjectType, subjectId, event, p.policy, p.dateStart ?? null, dated || event !== "application_close" ? (p.date ?? null) : null, p.precision ?? "day", applies, p.grade, p.sourceKind ?? "", p.url ?? "", p.evidence.trim().slice(0, 600), hash, p.by ?? "", now());
