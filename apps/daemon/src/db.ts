@@ -468,6 +468,18 @@ export const MIGRATIONS: string[] = [
   create table feed_run (feed_id text primary key, seq integer not null, created_at text not null, applied_at text not null);
   create table feed_applied (feed_id text not null, sub_id text not null, source text not null, state text not null, observed_at text not null, sha256 text not null, applied_at text not null, primary key (feed_id, sub_id)) without rowid;
   `,
+  // v47: 公告核实 (service/notice.ts) — each reading of an announcement, each check of it for a batch or a post, and
+  // which check a deadline fact came from. Empty at first.
+  `
+  create table notice_read (id text primary key, url text not null, final_url text not null, via text not null, status text not null, note text not null default '',
+    title text not null default '', account_id text not null default '', account_name text not null default '', text_path text not null, fingerprint text not null,
+    images text not null default '[]', complete integer not null, read_at text not null);
+  create index notice_read_url on notice_read(url, read_at);
+  create table notice_check (id text primary key, subject_type text not null, subject_id text not null, read_id text not null references notice_read(id),
+    rule_version integer not null, extract text not null, gates text not null, outcome text not null, by text not null default '', checked_at text not null);
+  create index notice_check_subject on notice_check(subject_type, subject_id, checked_at);
+  alter table deadline_fact add column check_id text;
+  `,
 ];
 
 /**
