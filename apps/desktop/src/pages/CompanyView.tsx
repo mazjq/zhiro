@@ -291,6 +291,7 @@ export function PostDetails({ p, always }: { p: any; always?: boolean }) {
   return (
     <div className="text-xs text-ink-2 mb-1.5 border border-line rounded-md bg-ground/50 p-2.5 space-y-1.5">
       <div className="flex gap-3 flex-wrap text-ink-3">{d.position.degreeReq && <span>学历 {d.position.degreeReq}</span>}{d.majorReq && <span>专业 {d.majorReq}</span>}{d.deadline?.say ? <span className={d.deadline.status === "verified" ? "" : "text-amber"}>{d.deadline.say}</span> : d.closesAt && <span>截止 {d.closesAt}</span>}<span>来源 {d.sourceKind}</span>{d.applyUrl && <a className="text-accent" href={d.applyUrl} target="_blank" rel="noreferrer">投递页</a>}</div>
+      {d.notice?.lines?.length > 0 && <div className="text-xs text-ink-3 space-y-0.5" title="公告核实：Zhiro 读公告、核对原文后的结果">{d.notice.lines.map((l: string) => <div key={l}>{l}</div>)}</div>}
       {d.position.jdText ? <div className="whitespace-pre-wrap max-h-72 overflow-auto">{d.position.jdText}</div> : <div className="text-ink-3">这条只有岗位名，没有岗位描述；来源是汇总表或一行公告。线索补全会尝试从公告页抓具体岗位。</div>}
       {a?.judgements?.length > 0 && <div className="border-t border-line pt-1.5">{a.judgements.filter((j: any) => j.modality === "required").map((j: any, i: number) => <div key={i}><span className="text-ink-3">{st[j.status] ?? j.status}</span> · {j.quote}</div>)}</div>}
     </div>
