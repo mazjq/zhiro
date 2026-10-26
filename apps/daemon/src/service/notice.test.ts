@@ -90,6 +90,8 @@ describe("公告核实: only a deadline that passes all four checks becomes a fa
     expect(check({ text }, named).gates.issuer.result).toBe("pass");
     expect(check({ text: text.replace("（以下简称示例重工）", "") }, named).gates.issuer.result).toBe("fail"); // the sentence is not there
     expect(check({ text }, { ...named, issuerNames: [{ name: "示例重工", quote: "示例装备集团股份有限公司研发总院与示例重工" }] }).gates.issuer.result).toBe("fail"); // no 简称
+    const apart = "示例装备集团股份有限公司研发总院（简称研发总院）与示例重工合作";
+    expect(check({ text: apart }, { ...named, issuerNames: [{ name: "示例重工", quote: apart }] }).gates.issuer.result).toBe("fail"); // the word ties another name
   });
 
   it("season: last year's cohort fails; no cohort but a day inside this season passes; neither is unknown", () => {

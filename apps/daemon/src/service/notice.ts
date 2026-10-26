@@ -47,7 +47,8 @@ export type Outcome = "fact" | "not_stated" | "review" | "unreadable" | "not_rec
 // 2: doubts are only about what is written (an absent deadline is not a doubt); 「27届」 read as 2027
 // 3: posters read twice by two models; cohort sentence checked; what the model was shown counted; 「以下简称」
 // 4: the title counts as the material's words; the batch's own cohort is no longer told to the model; 「中国」 in front
-export const RULE_VERSION = 4;
+// 5: 「简称」 only as 「甲（以下简称乙）」 written together; the title and the account are part of what 「unchanged」 means
+export const RULE_VERSION = 5;
 
 const pass = (why: string): Gate => ({ result: "pass", why }), fail = (why: string): Gate => ({ result: "fail", why }), unknown = (why: string): Gate => ({ result: "unknown", why });
 
@@ -71,7 +72,7 @@ export function siteKey(url: string): string | null {
 
 // legal form only: 「集团」「股份」 stay, they tell a group from its parts (catalog.ts companyKey)
 // 「中国航天502所」 and 「航天502所」 are one name written two ways
-const nameKey = (s: string) => companyKey(s).replace(/[（）()【】\[\]·・\-—]/g, "").replace(/(股份有限公司|有限责任公司|有限公司|公司)$/, "").replace(/^中国(?=.{2,})/, "");
+const nameKey = (s: string) => companyKey(s).replace(/[（）()【】\[\]·・\-—]/g, "").replace(/(股份有限公司|有限责任公司|有限公司|公司)$/, "").replace(/^中国(?=.{3,})/, ""); // never down to two characters (中国电信 is not 电信)
 
 /** 发布者: the company's own site or hiring-system tenant, or a WeChat account on record as its own. */
 export function publisherGate(doc: NoticeDoc, co: CompanyIdentity): Gate {
@@ -86,14 +87,15 @@ export function publisherGate(doc: NoticeDoc, co: CompanyIdentity): Gate {
 }
 
 /** 主体: the employer the announcement names is this company — by full name or a recorded alias, never by likeness. */
-const SHORT_FOR = /以下简称|下称|简称|全称/;
+// 「甲（以下简称乙）」「甲(简称:乙)」: the two names joined by the word, nothing else between them
+const shortFor = (quote: string, full: string, short: string) => ["以下简称", "下称", "简称"].some((w) => norm(quote).includes(norm(full) + w + norm(short)));
 export function issuerGate(ex: Extract, co: CompanyIdentity, doc?: NoticeDoc): Gate {
   const issuer = nameKey(ex.issuer ?? "");
   if (!issuer) return unknown("公告没写招聘主体");
   const names = [co.name, ...co.aliases].map(nameKey).filter(Boolean);
   if (names.includes(issuer)) return pass(`招聘主体「${ex.issuer}」`);
   // the material itself says the full name is short for this one: 「甲有限公司（以下简称乙）」, word for word on the page
-  const tie = (ex.issuerNames ?? []).find((x) => names.includes(nameKey(x.name)) && SHORT_FOR.test(x.quote) && x.quote.includes(x.name) && x.quote.includes(ex.issuer) && onPage(doc, x.quote));
+  const tie = (ex.issuerNames ?? []).find((x) => names.includes(nameKey(x.name)) && shortFor(x.quote, ex.issuer, x.name) && onPage(doc, x.quote));
   if (tie) return pass(`原文「${tie.quote.trim().slice(0, 60)}」：「${ex.issuer}」简称「${tie.name}」`);
   if (names.some((n) => n.includes(issuer) || issuer.includes(n))) return unknown(`招聘主体「${ex.issuer}」和「${co.name}」名字相近，可能是集团或下属单位`);
   return fail(`招聘主体是「${ex.issuer}」，不是「${co.name}」`);
@@ -200,7 +202,7 @@ export function checkNotice(doc: NoticeDoc, ex: Extract, co: CompanyIdentity, se
 }
 
 /** What a reading looks like, to tell next time whether anything changed: the words (dates kept), the links, the images. */
-export const fingerprint = (doc: NoticeDoc) => createHash("sha256").update([doc.text.normalize("NFKC").replace(/\s+/g, " ").trim(), ...(doc.links ?? []).slice().sort(), ...doc.images.map((i) => `${i.n}:${i.hash}`)].join("\n")).digest("hex").slice(0, 32);
+export const fingerprint = (doc: NoticeDoc) => createHash("sha256").update([doc.title, doc.account?.id ?? "", doc.account?.name ?? "", doc.text.normalize("NFKC").replace(/\s+/g, " ").trim(), ...(doc.links ?? []).slice().sort(), ...doc.images.map((i) => `${i.n}:${i.hash}`)].join("\n")).digest("hex").slice(0, 32);
 
 /**
  * File one check: the reading, what was found, and — when everything passed — the deadline fact, in one transaction.

@@ -73,17 +73,15 @@ describe("notice.verify: read, ask once, check, file", () => {
     expect((db.prepare("select count(*) n from deadline_fact where superseded_at is null and check_id is not null").get() as any).n).toBe(1);
   });
 
-  it("the company's own site naming its employer wholly otherwise suggests an alias; a part of it does not; doubts are said", async () => {
+  it("the model's doubts are said among the reasons; nobody is asked to put a name on record", async () => {
     const { s, campaignId, answer } = setup();
+    answer.issuer = "示例装备集团股份有限公司研发总院"; answer.doubts = "截止只写了月日";
     serve({ "/notice/1": { body: page() } });
-    answer.issuer = "示例装备集团股份有限公司研发总院";
     const r: any = await callTool("notice.verify", { campaignId, url: `${SITE}/notice/1` }, HUMAN, s);
-    expect(r.results[0]).toMatchObject({ outcome: "review", aliasHint: { alias: "示例装备集团股份有限公司研发总院" } });
-    answer.issuer = "示例重工股份有限公司东北分公司"; answer.doubts = "截止只写了月日";
-    serve({ "/notice/1": { body: page("2099年11月30日") } });
-    const part: any = await callTool("notice.verify", { campaignId, url: `${SITE}/notice/1` }, HUMAN, s);
-    expect(part.results[0].aliasHint).toBeUndefined();
-    expect(part.results[0].reasons).toContain("模型存疑：截止只写了月日");
+    expect(r.results[0].outcome).toBe("review");
+    expect(r.results[0].reasons).toContain("模型存疑：截止只写了月日");
+    expect(r.results[0].aliasHint).toBeUndefined();
+    expect(r.results[0].reasons.join("")).not.toContain("company.alias");
   });
 
   it("only the person puts an account on record", async () => {
