@@ -7,7 +7,7 @@ import { Domain } from "./domain.js";
 import { createServices, testConfig } from "../services.js";
 import { callTool, type Actor } from "../registry.js";
 import { ingest, type Listing } from "../data/index.js";
-import { otherSeeingModel } from "./notice-verify.js";
+import { otherSeeingModels } from "./notice-verify.js";
 
 // a public address written as a number: no name to look up, so the guard lets the stubbed fetch answer
 const SITE = "http://93.184.216.34";
@@ -98,8 +98,8 @@ describe("the second reader of a poster", () => {
   const first = { id: "a", provider: "p", input: ["text", "image"] };
   const llm = (models: any[], route?: string): any => ({ route: route ? () => ({ kind: route, name: "codex" }) : undefined, models: { getModels: () => models } });
   it("is another model of the provider that can see; none when a harness answers or there is no other", () => {
-    expect(otherSeeingModel(llm([first, { id: "b", input: ["text"] }, { id: "c", input: ["text", "image"] }]), first)?.id).toBe("c");
-    expect(otherSeeingModel(llm([first, { id: "b", input: ["text"] }]), first)).toBeNull();
-    expect(otherSeeingModel(llm([first, { id: "c", input: ["text", "image"] }], "harness"), first)).toBeNull();
+    expect(otherSeeingModels(llm([first, { id: "b", input: ["text"] }, { id: "c", input: ["text", "image"] }, { id: "d", input: ["image"] }]), first).map((m) => m.id)).toEqual(["c", "d"]);
+    expect(otherSeeingModels(llm([first, { id: "b", input: ["text"] }]), first)).toEqual([]);
+    expect(otherSeeingModels(llm([first, { id: "c", input: ["text", "image"] }], "harness"), first)).toEqual([]);
   });
 });
