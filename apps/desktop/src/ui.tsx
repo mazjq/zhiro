@@ -63,3 +63,11 @@ export function deadlineTone(days: number | null): "bad" | "amber" | "" {
   if (days == null) return "";
   return days <= 3 ? "bad" : days <= 7 ? "amber" : "";
 }
+
+/** 找岗位 opened on one company — and one of its posts unfolded — from another page (今日, the brief, 调研). */
+export const JOBS_QUERY_KEY = "jobos.jobs.query", JOBS_POST_KEY = "jobos.jobs.post";
+export function openInJobs(companyName: string, positionId?: string | null): void {
+  sessionStorage.setItem(JOBS_QUERY_KEY, companyName);
+  if (positionId) sessionStorage.setItem(JOBS_POST_KEY, positionId); else sessionStorage.removeItem(JOBS_POST_KEY);
+  window.dispatchEvent(new CustomEvent("jobos:go", { detail: "jobs" }));
+}

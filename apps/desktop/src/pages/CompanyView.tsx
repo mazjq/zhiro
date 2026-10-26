@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import { call, daysLeft } from "../api";
 import { useLatest, useOnDataChange } from "../refresh";
-import { Card, Chip, Button, gradeTone, deadlineTone, deadlineShort, STATE_LABEL, plain } from "../ui";
+import { Card, Chip, Button, gradeTone, deadlineTone, deadlineShort, STATE_LABEL, plain, JOBS_POST_KEY } from "../ui";
 
 /** A 公众号 article is a poster, not a place to apply — whichever column the sheet put it in. */
 const isPoster = (u: string) => u.includes("mp.weixin.qq.com");
@@ -273,11 +273,12 @@ function FitLine({ p, companyId }: { p: any; companyId: string }) {
 /** 点开看岗位要求: the post's own description, requirements and per-requirement judgement, fetched once on click. */
 export function PostDetails({ p, always }: { p: any; always?: boolean }) {
   const [d, setD] = useState<any>(null);
-  const [open, setOpen] = useState(!!always);
+  // a post handed over from another page (openInJobs) opens unfolded, once
+  const [open, setOpen] = useState(() => { const handed = sessionStorage.getItem(JOBS_POST_KEY) === p.id; if (handed) sessionStorage.removeItem(JOBS_POST_KEY); return !!always || handed; });
   const latest = useLatest();
   const fetch = () => latest("post", call("position.get", { id: p.id })).then(setD).catch(() => setD({ error: true }));
   const load = () => { if (!d) fetch(); };
-  useEffect(() => { if (always) load(); }, [p.id]);
+  useEffect(() => { if (always || open) load(); }, [p.id]);
   useOnDataChange(() => { if (d) fetch(); }); // once read (open, or opened before), kept current; stays open or closed as it was
   useEffect(() => {
     const on = (e: any) => { if (e.detail !== p.id) return; setOpen((o) => !o); load(); };

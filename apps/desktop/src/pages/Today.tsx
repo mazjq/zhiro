@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { call } from "../api";
 import { useLatest, useOnDataChange } from "../refresh";
-import { H1, Card, Chip, Button, Empty, deadlineTone } from "../ui";
+import { H1, Card, Chip, Button, Empty, deadlineTone, openInJobs } from "../ui";
 import { describeProposal, FRIENDLY } from "../describe";
 
 /** 今天的简报 (P4): what changed since the last one, made each morning at the person's hour. */
@@ -17,7 +17,7 @@ function BriefCard({ go }: { go: (p: string) => void }) {
     <div className="mb-2"><div className="text-xs text-ink-3 mb-1">{title} · {xs.length}</div>
       {xs.map((x: any) => (
         <div key={x.key} className="text-sm py-0.5 flex gap-2 items-baseline">
-          <span className="flex-1 hover:text-accent cursor-pointer" title={x.why} onClick={() => x.link && go(x.link.page)}>{x.text}</span>
+          <span className="flex-1 hover:text-accent cursor-pointer" title={x.why} onClick={() => x.link?.company ? openInJobs(x.link.company, x.link.id) : x.link && go(x.link.page)}>{x.text}</span>
           {x.url && <a className="text-xs text-accent shrink-0" href={x.url} target="_blank" rel="noreferrer">打开</a>}
         </div>))}
     </div>) : null;
@@ -133,7 +133,7 @@ export default function Today({ go }: { go: (p: any) => void }) {
       {data.deadlines.length === 0 ? <Empty>没有</Empty> : (
         <Card>
           {data.deadlines.map((d: any) => (
-            <div key={d.positionId ?? d.companyId} className="px-4 py-2.5 border-t first:border-t-0 border-line flex items-center gap-2 hover:bg-ground cursor-pointer" onClick={() => go(d.positionId ? "pipeline" : "jobs")} title={d.say}>
+            <div key={d.positionId ?? d.companyId} className="px-4 py-2.5 border-t first:border-t-0 border-line flex items-center gap-2 hover:bg-ground cursor-pointer" onClick={() => openInJobs(d.companyName, d.positionId)} title={d.say}>
               <span className="font-medium shrink-0">{d.companyName}</span><span className="text-sm text-ink-2 flex-1 truncate">{d.title}{d.cities?.length > 0 && <span className="ml-1.5 text-xs text-ink-3">{d.cities.slice(0, 3).join("/")}</span>}</span>
               {d.applied && <Chip tone="good">已投递</Chip>}
               {!d.verified && <Chip tone="amber">待核实</Chip>}
@@ -149,7 +149,7 @@ export default function Today({ go }: { go: (p: any) => void }) {
           <h2 className="font-bold mb-2 mt-6">截止待核实</h2>
           <Card>
             {data.verify.map((d: any) => (
-              <div key={d.positionId ?? d.companyId} className="px-4 py-2.5 border-t first:border-t-0 border-line hover:bg-ground cursor-pointer" onClick={() => go(d.positionId ? "pipeline" : "jobs")}>
+              <div key={d.positionId ?? d.companyId} className="px-4 py-2.5 border-t first:border-t-0 border-line hover:bg-ground cursor-pointer" onClick={() => openInJobs(d.companyName, d.positionId)}>
                 <div className="flex items-center gap-2"><span className="font-medium shrink-0">{d.companyName}</span><span className="text-sm text-ink-2 flex-1 truncate">{d.title}</span>{d.url && <a className="text-accent text-xs shrink-0" href={d.url} target="_blank" rel="noreferrer" onClick={(e) => e.stopPropagation()}>去官网看</a>}</div>
                 <div className="text-xs text-ink-3 mt-0.5">{d.say} · {d.why}</div>
               </div>

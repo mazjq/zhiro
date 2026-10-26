@@ -16,7 +16,7 @@ import { deadlineBoard } from "../service/pool.js";
 import { enqueue } from "../notify/center.js";
 
 /** `state` is what the item is about (not its wording, which may count days): an item comes back only when it changes. */
-export interface BriefItem { key: string; text: string; why?: string; link?: { page: string; id?: string }; url?: string; state?: string }
+export interface BriefItem { key: string; text: string; why?: string; link?: { page: string; id?: string; company?: string }; url?: string; state?: string }
 export interface Brief { id: string; at: string; since: string; must: BriefItem[]; fresh: BriefItem[]; found: BriefItem[]; hanging: BriefItem[] }
 
 const H = 3600_000, DAY = 24 * H;
@@ -56,7 +56,7 @@ export function makeBrief(db: Db, now = Date.now()): Brief {
         and not exists (select 1 from application a where a.position_id = p.id) and (r.reason like '优先考虑%' or r.reason like '可迁移%')
         and not exists (select 1 from brief_item b where b.key = 'new:' || p.id)
       group by p.id order by score desc limit ?`).all(floor, FRESH_MAX) as any[])
-    .map((r) => ({ key: `new:${r.id}`, state: "new", text: `${String(r.reason).startsWith("优先考虑") ? "很对口" : "部分对口"} · ${r.company} · ${r.title}`, why: String(r.reason).replace(/^(优先考虑|可迁移)[：:]?\s*/, "").slice(0, 60), link: { page: "jobs", id: r.id } }));
+    .map((r) => ({ key: `new:${r.id}`, state: "new", text: `${String(r.reason).startsWith("优先考虑") ? "很对口" : "部分对口"} · ${r.company} · ${r.title}`, why: String(r.reason).replace(/^(优先考虑|可迁移)[：:]?\s*/, "").slice(0, 60), link: { page: "jobs", id: r.id, company: r.company } }));
 
   // 重新找过的: every run of the daily lookup of thin companies since the last brief, added up
   const found: BriefItem[] = [];
