@@ -8,7 +8,7 @@ import { now } from "../db.js";
 import type { Services } from "../services.js";
 import type { WorkflowDef } from "./workflow.js";
 import { readZipEntry, docxText } from "./documents.js";
-import { readBase, parseBaseUrl } from "../data/index.js";
+import { readBase, parseBaseUrl, guardedFetch } from "../data/index.js";
 import { spawnRun, readRun } from "../agent/worker.js";
 
 /**
@@ -42,7 +42,7 @@ export async function listText(url: string): Promise<string> {
     const { records } = await readBase(url);
     return Object.values(records).map((r) => Object.values(r).map((c: any) => (typeof c?.value === "string" ? c.value : JSON.stringify(c?.value ?? ""))).join(" ")).join("\n");
   }
-  const res = await fetch(url, { headers: { "user-agent": UA }, signal: AbortSignal.timeout(60_000) });
+  const res = await guardedFetch(url, { headers: { "user-agent": UA }, signal: AbortSignal.timeout(60_000) });
   if (!res.ok) throw new Error(`HTTP ${res.status}`);
   const buf = Buffer.from(await res.arrayBuffer());
   const ct = res.headers.get("content-type") ?? "";
