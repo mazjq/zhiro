@@ -480,6 +480,11 @@ export const MIGRATIONS: string[] = [
   create index notice_check_subject on notice_check(subject_type, subject_id, checked_at);
   alter table deadline_fact add column check_id text;
   `,
+  // v48: WeChat accounts the person has put on record as a company's own (公告核实: their posts count as official)
+  `
+  create table company_account (company_id text not null references company(id) on delete cascade, account_id text not null, name text not null default '',
+    basis text not null, at text not null, primary key (company_id, account_id)) without rowid;
+  `,
 ];
 
 /**
