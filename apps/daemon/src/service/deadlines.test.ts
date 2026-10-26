@@ -8,7 +8,7 @@ import { Domain } from "./domain.js";
 import { callTool, type Services, type Actor } from "../registry.js";
 import { ingest } from "../data/index.js";
 import type { Listing } from "../data/index.js";
-import { localDay } from "./deadlines.js";
+import { localDay, recordFact } from "./deadlines.js";
 
 const HUMAN: Actor = { kind: "human", via: "desktop" };
 function setup() {
@@ -222,5 +222,22 @@ describe("campaign.move", () => {
     ingest(domain, dir, "dayee", "d1", [listing({ company: "国望光学", externalId: "1", publisher: "dayee:SU1" })]);
     expect(db.prepare("select count(*) n from campaign").get()).toEqual({ n: 1 });
     expect((await company(s, "国望光学")).positions).toEqual([expect.objectContaining({ id: pid, watched: true })]);
+  });
+});
+
+describe("a page's statements replace its own earlier ones, and only those", () => {
+  const active = (db: any, cid: string) => (db.prepare("select date_end, applies from deadline_fact where subject_type = 'campaign' and subject_id = ? and superseded_at is null order by date_end").all(cid) as any[]).map((r) => `${r.date_end} ${r.applies}`);
+  it("A → B → A leaves A alone standing; another reach on the same page stays", () => {
+    const { dir, domain, db } = setup();
+    ingest(domain, dir, "capture", "c1", [listing({ company: "示例重工" })]);
+    const cid = (db.prepare("select id from campaign").get() as any).id;
+    const say = (date: string, applies?: "all_campaign_positions" | "campaign_unspecified") => recordFact(db, { campaignId: cid, policy: "date", date, applies, grade: "官方", url: "https://example.com/notice", evidence: `网申截止 ${date}` });
+    say("2099-10-31");
+    say("2099-11-15");
+    expect(active(db, cid)).toEqual(["2099-11-15 all_campaign_positions"]);
+    say("2099-10-31");
+    expect(active(db, cid)).toEqual(["2099-10-31 all_campaign_positions"]);
+    say("2099-12-01", "campaign_unspecified");
+    expect(active(db, cid)).toEqual(["2099-10-31 all_campaign_positions", "2099-12-01 campaign_unspecified"]);
   });
 });
