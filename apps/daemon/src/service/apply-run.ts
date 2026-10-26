@@ -1,7 +1,7 @@
 import { join } from "node:path";
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import type { Frame, Page } from "playwright-core";
-import type { Services } from "../registry.js";
+import type { Services } from "../services.js";
 import type { Db } from "../db.js";
 import { DomainError, NotFound } from "./domain.js";
 import { openBrowser, browserOpen, activePage, readForm, mapFields, normLabel, SENSITIVE, peopleSection, type Mapped, type FormField } from "./apply.js";

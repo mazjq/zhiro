@@ -1,10 +1,9 @@
 import { describe, it, expect, afterEach } from "vitest";
+import { createServices, testConfig } from "./services.js";
 import { mkdtempSync, mkdirSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { openDb } from "./db.js";
-import { Domain } from "./service/domain.js";
-import { WorkflowEngine } from "./service/workflow.js";
 import { callTool, type Services } from "./registry.js";
 import { sources, type Source } from "./data/index.js";
 
@@ -25,7 +24,7 @@ function setup() {
   mkdirSync(join(dir, "config"));
   writeFileSync(join(dir, "config", "jobos.yaml"), "sources: []\n", "utf8");
   const db = openDb(join(dir, "t.db"));
-  const s: Services = { domain: new Domain(db), workflows: new WorkflowEngine(db), config: { vault: dir, http: { host: "127.0.0.1", port: 0 }, llm: { provider: "x", model: "y" }, feishu: {}, reminders: { daysBefore: [7, 3, 1] }, sources: [] } };
+  const s: Services = createServices({ db: db, config: testConfig(dir, { sources: [] }) });
   return { db, s };
 }
 afterEach(() => { delete sources.fakesite; });

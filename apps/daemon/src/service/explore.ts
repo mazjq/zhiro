@@ -1,4 +1,4 @@
-import type { Services } from "../registry.js";
+import type { Services } from "../services.js";
 import { listPool } from "./pool.js";
 
 /**

@@ -1,5 +1,5 @@
 import { ulid } from "ulid";
-import type { Services } from "../registry.js";
+import type { Services } from "../services.js";
 import { json, now, tx } from "../db.js";
 import { DomainError, NotFound } from "../service/domain.js";
 import { terms, loadContext, type Candidate } from "./common.js";

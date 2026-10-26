@@ -1,5 +1,5 @@
 import { ulid } from "ulid";
-import type { Services } from "../registry.js";
+import type { Services } from "../services.js";
 import { now, tx } from "../db.js";
 import { NotFound } from "../service/domain.js";
 import { profileMatch } from "./profile-match.js";

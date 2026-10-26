@@ -1,7 +1,7 @@
 import { createHash } from "node:crypto";
 import { withPurpose } from "../service/usage.js";
 import type { WorkflowDef } from "../service/workflow.js";
-import type { Services } from "../registry.js";
+import type { Services } from "../services.js";
 import { now } from "../db.js";
 import { httpContext } from "../data/index.js";
 import { fetchArticle, extractNotice, noticeToListings } from "../service/extract.js";

@@ -1,7 +1,7 @@
 import { updateConfig } from "../config.js";
 import { ulid } from "ulid";
 import type { ToolContract } from "@zhiro/contracts";
-import type { Services } from "../registry.js";
+import type { Services } from "../services.js";
 import { DomainError, NotFound } from "./domain.js";
 import { listPresets } from "../recommenders/preset.js";
 import { isLocalPath } from "../data/index.js";

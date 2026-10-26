@@ -1,5 +1,5 @@
 import type { WorkflowDef } from "../service/workflow.js";
-import type { Services } from "../registry.js";
+import type { Services } from "../services.js";
 import { resolveLeads } from "../service/leads.js";
 
 /** lead_resolve: once a day, read the most relevant announcement pages behind 待补资料 leads (ADR-035), within the budget. */

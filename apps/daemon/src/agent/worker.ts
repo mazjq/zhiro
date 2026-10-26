@@ -5,7 +5,7 @@ import { join } from "node:path";
 import { nodeArgs } from "../paths.js";
 import { ulid } from "ulid";
 import { now } from "../db.js";
-import type { Services } from "../registry.js";
+import type { Services } from "../services.js";
 import { callingAgent } from "../service/usage.js";
 import { researchTarget } from "./route.js";
 import { codexLauncher } from "./backends/codex.js";

@@ -4,6 +4,7 @@
  * that behaves like one — including a real tool call through the turn token, over HTTP, into this daemon.
  */
 import { describe, it, expect } from "vitest";
+import { createServices, testConfig } from "../../services.js";
 import { mkdtempSync, readFileSync, writeFileSync, mkdirSync, existsSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -11,10 +12,9 @@ import { serve } from "@hono/node-server";
 import { openDb } from "../../db.js";
 import { Domain } from "../../service/domain.js";
 import { importCsv } from "../../service/import-csv.js";
-import { WorkflowEngine } from "../../service/workflow.js";
 import { createApp } from "../../http.js";
 import { Auth, loadCredentials } from "../../auth.js";
-import type { Services } from "../../registry.js";
+import type { Services } from "../../services.js";
 import { ChatHub, builtinBackend } from "../backend.js";
 import { cliBackend, type CliSpec } from "./cli.js";
 import { claudeSpec } from "./claude.js";
@@ -83,7 +83,7 @@ async function daemon() {
   writeFileSync(join(dir, "config", "jobos.yaml"), "agent:\n  mode: default\n", "utf8");
   const db = openDb(join(dir, "t.db"));
   const domain = new Domain(db);
-  const s: Services = { domain, workflows: new WorkflowEngine(db), config: { vault: dir, http: { host: "127.0.0.1", port: 0 }, llm: { provider: "x", model: "y" }, feishu: {}, reminders: { daysBefore: [7, 3, 1] }, sources: [], agent: { mode: "default", maxWritesPerTurn: 10 } } };
+  const s: Services = createServices({ db: db, domain, config: testConfig(dir, { sources: [], agent: { mode: "default", maxWritesPerTurn: 10 } }) });
   const csv = join(dir, "a.csv"); writeFileSync(csv, CSV, "utf8"); importCsv(domain, csv);
   const auth = new Auth(loadCredentials(dir));
   const career = { ask: async () => ({ answer: "builtin", actions: [], proposals: [] }), onEvent: () => () => {}, history: () => [], reset: () => {} };

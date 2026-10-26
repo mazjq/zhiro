@@ -10,7 +10,7 @@
  * places live in memory — after a restart each agent's first call says so instead of listing, at most 50 labels kept.
  */
 import { tools, type ToolContract } from "@zhiro/contracts";
-import type { Services } from "../registry.js";
+import type { Services } from "../services.js";
 
 const seen = new Map<string, number>(); // agent label → the last audit row it was told about
 const MAX_ROWS = 10, CELL = 40;

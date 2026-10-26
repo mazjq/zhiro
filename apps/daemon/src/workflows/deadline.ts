@@ -1,5 +1,5 @@
 import type { WorkflowDef } from "../service/workflow.js";
-import type { Services } from "../registry.js";
+import type { Services } from "../services.js";
 import { enqueue } from "../notify/center.js";
 import { resolveFor, sayDate, type Resolution } from "../service/deadlines.js";
 
