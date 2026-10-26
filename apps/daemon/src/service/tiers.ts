@@ -7,7 +7,7 @@ import { listPresets } from "../recommenders/preset.js";
 import { isLocalPath } from "../data/index.js";
 
 /** Tools whose only outward flow is the prompt to the model (and read-only fetches): when an external agent calls them it answers that prompt itself (ADR-032, ADR-057), so nothing leaves for anyone else. */
-const MODEL_ONLY_EGRESS = new Set(["inbox.paste", "inbox.pull", "profile.import", "profile.scan", "document.reextract", "resume.analyze", "listing.capture", "research.company", "research.topic", "company.find", "intel.smeResearch", "fit.deep", "lead.resolve"]);
+const MODEL_ONLY_EGRESS = new Set(["inbox.paste", "inbox.pull", "profile.import", "profile.scan", "document.reextract", "resume.analyze", "listing.capture", "research.company", "research.topic", "company.find", "intel.smeResearch", "fit.deep", "lead.resolve", "notice.verify"]);
 
 /**
  * ADR-025: what the assistant may do without asking. Three tiers for an agent's write:

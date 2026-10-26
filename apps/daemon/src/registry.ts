@@ -96,6 +96,7 @@ import { sameCompanies } from "./service/same-company.js";
 import { enqueueFit, listFit } from "./service/fit.js";
 import { listGaps, confirmGap } from "./service/opportunity-gaps.js";
 import { listLeads, resolveLeads } from "./service/leads.js";
+import { verifyNotice, noticeChecks, recordAccount } from "./service/notice-verify.js";
 import { loadSources, startSmeResearch } from "./service/sme.js";
 import { listChannels } from "./channels.js";
 
@@ -412,6 +413,13 @@ const handlers: { [N in ToolName]: Handler<N> } = {
   },
   "lead.list": (_i, _a, s) => ({ items: listLeads(s) }),
   "lead.resolve": (i, _a, s) => resolveLeads(s, i.budget, i.companyIds),
+  "notice.verify": (i, _a, s) => verifyNotice(s, i),
+  "notice.checks": (i, _a, s) => {
+    const cid = i.campaignId ?? (i.positionId ? (s.domain.db.prepare("select campaign_id from position where id = ?").get(i.positionId) as { campaign_id: string } | undefined)?.campaign_id : undefined);
+    if (!cid) throw new DomainError("MISSING_FIELD", "要给 campaignId 或 positionId");
+    return { items: noticeChecks(s.domain.db, cid, i.limit) };
+  },
+  "notice.account": (i, _a, s) => recordAccount(s.domain.db, i),
   "gap.list": (i, _a, s) => listGaps(s, i),
   "gap.confirm": (i, _a, s) => confirmGap(s, i),
   "company.similar": (i, _a, s) => ({ items: sameCompanies(s.domain.db, i.companyId).map((c) => {
@@ -627,7 +635,7 @@ function executeDirect<N extends ToolName>(name: N, input: ToolInput<N>, actor: 
  *  - agent + write/effect tool → proposal (returned as { proposal }) instead of execution
  *  - audit row for every call
  */
-export const HUMAN_ONLY = new Set(["feed.pull", "brief.at", "brief.make", "notify.setup", "notice.ack", "proposal.dismiss", "proposal.renew", "agent.model", "gap.confirm", "model.login", "model.answer", "model.cancel", "model.provider", "model.select", "model.refresh", "inbox.connect", "inbox.disconnect", "history.undo", "agent.mode", "agent.backend", "agent.harnessConfirm", "agent.background", "data.export", "data.move"]);
+export const HUMAN_ONLY = new Set(["notice.account", "feed.pull", "brief.at", "brief.make", "notify.setup", "notice.ack", "proposal.dismiss", "proposal.renew", "agent.model", "gap.confirm", "model.login", "model.answer", "model.cancel", "model.provider", "model.select", "model.refresh", "inbox.connect", "inbox.disconnect", "history.undo", "agent.mode", "agent.backend", "agent.harnessConfirm", "agent.background", "data.export", "data.move"]);
 
 /** What an actor may call at all: agents never see the human-only tools or proposal.decide (they would only be refused) — except the person's own harness, when confirmation happens there (ADR-047). */
 export const callableBy = (actor: Actor, s?: Services) => {
