@@ -22,28 +22,36 @@ export interface NoticeDoc {
   account?: { id: string; name: string };
   text: string; links?: string[]; images: { n: number; hash: string }[]; complete: boolean;
 }
+/** A second, independent reading of the posters by another model: what it says the deadline is. */
+export interface PosterRead { model: string; deadlineText: string; deadlineDate: string; scope: string; image: number | null }
 /** What the model copied out (the prompt asks for words as written, nothing guessed). */
 export interface Extract {
   isRecruitment: boolean; issuer: string; cohort: string; cohortQuote: string; cohortImage: number | null;
   deadlineText: string; deadlineDate: string; deadlineImage: number | null; applyEntry: string; scope: string; doubts: string;
+  /** the material's own words tying the employer's full name to a short one: 「甲有限公司（以下简称乙）」 */
+  issuerNames?: { name: string; quote: string }[];
+  /** filled by the run, not the model: how much of the material the model was shown, and by which model */
+  seen?: { chars: number; images: number; model: string };
+  poster?: PosterRead;
 }
 /** What is known of the company the material is checked for. `sites`: siteKey()s of its official subscriptions. */
 export interface CompanyIdentity { name: string; aliases: string[]; sites: Set<string>; accounts: Set<string> }
-export interface Season { cohort: string; since: string }
+export interface Season { cohort: string; since: string; until: string }
 // ponytail: one season, as the rest of Zhiro (A9 turns 「2027」 into the recruiting season)
-export const SEASON: Season = { cohort: "2027", since: "2026-03-01" };
+export const SEASON: Season = { cohort: "2027", since: "2026-03-01", until: "2027-08-31" };
 
 export type GateResult = "pass" | "fail" | "unknown";
 export interface Gate { result: GateResult; why: string }
 export interface Gates { publisher: Gate; issuer: Gate; evidence: Gate; season: Gate }
 export type Outcome = "fact" | "not_stated" | "review" | "unreadable" | "not_recruitment";
 // 2: doubts are only about what is written (an absent deadline is not a doubt); 「27届」 read as 2027
-export const RULE_VERSION = 2;
+// 3: posters read twice by two models; cohort sentence checked; what the model was shown counted; 「以下简称」
+export const RULE_VERSION = 3;
 
 const pass = (why: string): Gate => ({ result: "pass", why }), fail = (why: string): Gate => ({ result: "fail", why }), unknown = (why: string): Gate => ({ result: "unknown", why });
 
 // hosts many companies share: the host alone never says whose page it is
-const SHARED = /(^|\.)(mp\.weixin\.qq\.com|weixin\.qq\.com|zhaopin\.com|51job\.com|iguopin\.com|nowcoder\.com|shixiseng\.com|yingjiesheng\.com|liepin\.com|zhipin\.com|lagou\.com|feishu\.cn|larksuite\.com|qq\.com|baidu\.com|sohu\.com|163\.com|sina\.com\.cn|toutiao\.com|zhihu\.com|bilibili\.com)$/i;
+const SHARED = /(^|\.)(mokahr\.com|hotjob\.cn|mp\.weixin\.qq\.com|weixin\.qq\.com|zhaopin\.com|51job\.com|iguopin\.com|nowcoder\.com|shixiseng\.com|yingjiesheng\.com|liepin\.com|zhipin\.com|lagou\.com|feishu\.cn|larksuite\.com|qq\.com|baidu\.com|sohu\.com|163\.com|sina\.com\.cn|toutiao\.com|zhihu\.com|bilibili\.com)$/i;
 /**
  * Whose site a link is on: a hiring system's tenant (app.mokahr.com/campus-recruitment/<tenant>, <tenant>.zhiye.com,
  * <tenant>.jobs.feishu.cn …), else the host without www. Null for a host many companies share and no tenant in sight.
@@ -54,6 +62,8 @@ export function siteKey(url: string): string | null {
   const host = u.hostname.toLowerCase().replace(/^www\./, "");
   const moka = /^app\.mokahr\.com$/.test(host) && /^\/(?:campus|social)[-_]recruitment\/([^/#?]+)/.exec(u.pathname);
   if (moka) return `mokahr:${moka[1].toLowerCase()}`;
+  const hotjob = /^wecruit\.hotjob\.cn$/.test(host) && /^\/(SU[0-9a-z]+)/i.exec(u.pathname);
+  if (hotjob) return `hotjob:${hotjob[1].toLowerCase()}`;
   if (/^[^.]+\.jobs\.feishu\.cn$/.test(host)) return host; // the tenant is the first label
   return SHARED.test(host) ? null : host;
 }
@@ -74,15 +84,20 @@ export function publisherGate(doc: NoticeDoc, co: CompanyIdentity): Gate {
 }
 
 /** 主体: the employer the announcement names is this company — by full name or a recorded alias, never by likeness. */
-export function issuerGate(ex: Extract, co: CompanyIdentity): Gate {
+const SHORT_FOR = /以下简称|下称|简称|全称/;
+export function issuerGate(ex: Extract, co: CompanyIdentity, doc?: NoticeDoc): Gate {
   const issuer = nameKey(ex.issuer ?? "");
   if (!issuer) return unknown("公告没写招聘主体");
   const names = [co.name, ...co.aliases].map(nameKey).filter(Boolean);
   if (names.includes(issuer)) return pass(`招聘主体「${ex.issuer}」`);
+  // the material itself says the full name is short for this one: 「甲有限公司（以下简称乙）」, word for word on the page
+  const tie = (ex.issuerNames ?? []).find((x) => names.includes(nameKey(x.name)) && SHORT_FOR.test(x.quote) && x.quote.includes(x.name) && x.quote.includes(ex.issuer) && onPage(doc, x.quote));
+  if (tie) return pass(`原文「${tie.quote.trim().slice(0, 60)}」：「${ex.issuer}」简称「${tie.name}」`);
   if (names.some((n) => n.includes(issuer) || issuer.includes(n))) return unknown(`招聘主体「${ex.issuer}」和「${co.name}」名字相近，可能是集团或下属单位`);
   return fail(`招聘主体是「${ex.issuer}」，不是「${co.name}」`);
 }
 
+const onPage = (doc: NoticeDoc | undefined, q: string) => !!doc && !!norm(q) && norm(doc.text).includes(norm(q));
 const norm = (s: string) => (s ?? "").normalize("NFKC").replace(/\s+/g, "").replace(/[，,。.：:；;（）()【】\[\]“”"'、]/g, "");
 /** The days a sentence names, in order; a day without a year takes the year of the one before it. */
 export function datesIn(text: string): { dates: string[]; yearless: boolean; between: string[]; named: number } {
@@ -95,7 +110,8 @@ export function datesIn(text: string): { dates: string[]; yearless: boolean; bet
     if (m[1]) year = m[1];
     if (!year) { yearless = true; continue; }
     const mo = Number(m[2]), d = Number(m[3]);
-    if (mo < 1 || mo > 12 || d < 1 || d > 31) continue;
+    const day = new Date(Date.UTC(Number(year), mo - 1, d));
+    if (mo < 1 || mo > 12 || day.getUTCMonth() !== mo - 1 || day.getUTCDate() !== d) continue; // 2 月 30 日 is no day
     if (last >= 0) between.push(t.slice(last, m.index));
     last = m.index! + m[0].length;
     out.push(`${year}-${String(mo).padStart(2, "0")}-${String(d).padStart(2, "0")}`);
@@ -112,48 +128,70 @@ export function readDeadline(quote: string): { policy: Policy; date?: string } |
   if (!dates.length) return { unclear: yearless ? "原文没写年份" : "原文里没有日期" };
   if (dates.length === 1) return { policy: "date", date: dates[0] };
   // 「9月1日-11月30日」「10月8日至11月9日」: the end of the range
-  if (dates.length === 2 && /^\s*(至|到|~|～|—|–|-)\s*$/.test(between[0])) return { policy: "date", date: dates[1] };
+  if (dates.length === 2 && /^\s*(至|到|~|～|—|–|-)\s*$/.test(between[0])) return dates[0] <= dates[1] ? { policy: "date", date: dates[1] } : { unclear: "日期区间前后颠倒" };
   return { unclear: "一句话里有好几个日期" };
 }
 
-/** 证据: the sentence is on the page word for word, and the day the model gave is the day the sentence names. */
+// words that make a deadline narrower than the whole batch, or not final
+const NARROWER = /部分|除外|以外|另行|暂定|视情况|以.{0,8}为准|仅限|分别/;
+const sameScope = (a: string, b: string) => norm(a) === norm(b);
+
+/**
+ * 证据: the sentence is on the page word for word and names the day the model gave. On a poster there are no words to
+ * find, so a second model reads the posters on its own: both must name the same day, the same reach, the same terms.
+ */
 export function evidenceGate(doc: NoticeDoc, ex: Extract): Gate {
   const q = ex.deadlineText ?? "";
+  const said = readDeadline(q);
   if (ex.deadlineImage != null) {
     if (!Number.isInteger(ex.deadlineImage) || !doc.images.some((im) => im.n === ex.deadlineImage)) return fail(`说截止在图 ${ex.deadlineImage}，这份材料没有这张图`);
-    return unknown(`截止在海报图 ${ex.deadlineImage} 上：要本人看图确认`); // ponytail: posters are confirmed by the person in v1
+    if ("unclear" in said) return unknown(`海报上的截止：${said.unclear}`);
+    const p = ex.poster;
+    if (!p) return unknown("海报只读了一遍（没有第二个能看图的模型）");
+    if (p.model === ex.seen?.model) return unknown("两遍用的是同一个模型，不算独立");
+    const again = readDeadline(p.deadlineText ?? "");
+    if ("unclear" in again) return unknown(`第二遍读海报：${again.unclear}`);
+    if (again.policy !== said.policy || again.date !== said.date) return unknown(`两遍读海报不一致：「${q.slice(0, 40)}」/「${(p.deadlineText ?? "").slice(0, 40)}」`);
+    if (!sameScope(ex.scope ?? "", p.scope ?? "")) return unknown(`两遍读到的适用范围不同：「${ex.scope}」/「${p.scope}」`);
+    if (NARROWER.test(q) !== NARROWER.test(p.deadlineText ?? "")) return unknown("两遍读到的限定语不同");
+    const img = doc.images.find((im) => im.n === ex.deadlineImage)!;
+    return pass(`海报图 ${ex.deadlineImage}（${img.hash}）二次读取一致：「${q.trim().slice(0, 50)}」（${ex.seen?.model ?? "?"} / ${p.model}）`);
   }
-  if (!norm(q) || !norm(doc.text).includes(norm(q))) return fail("截止原句在页面上找不到");
-  const said = readDeadline(q);
+  if (!onPage(doc, q)) return fail("截止原句在页面上找不到");
   if ("unclear" in said) return unknown(`截止原句：${said.unclear}`);
   if (said.policy === "date" && ex.deadlineDate && ex.deadlineDate !== said.date) return fail(`原句是 ${said.date}，抽出来的是 ${ex.deadlineDate}`);
   return pass(`原句「${q.trim().slice(0, 60)}」`);
 }
 
-/** 本季: the cohort the announcement names (or, failing that, a day inside this season) is this season's. */
-export function seasonGate(ex: Extract, season: Season, date?: string): Gate {
+/** 本季: the cohort the announcement names, its words on the page (or on a poster), is this season's; else a day inside it. */
+export function seasonGate(ex: Extract, season: Season, date?: string, doc?: NoticeDoc): Gate {
   // 「2027届」「2027 届」「27届」
   const years = [...new Set([...(ex.cohort ?? "").matchAll(/(?<!\d)(20)?(\d{2})(?!\d)/g)].map((m) => `20${m[2]}`))];
+  const shown = ex.cohortImage != null ? !!doc?.images.some((im) => im.n === ex.cohortImage) : onPage(doc, ex.cohortQuote ?? "") && norm(ex.cohortQuote).includes(norm(ex.cohort));
+  if (years.length && !shown) return unknown(`届别「${ex.cohort}」的原句在材料里找不到`);
   if (years.includes(season.cohort)) return pass(`届别「${ex.cohort}」`);
   if (years.length) return fail(`届别是「${ex.cohort}」，不是 ${season.cohort} 届`);
-  if (date && date >= season.since) return pass(`没写届别；截止 ${date} 在本季之内`);
+  if (date && date >= season.since && date <= season.until) return pass(`没写届别；截止 ${date} 在本季之内`);
   return unknown("公告没写届别");
 }
 
 export function checkNotice(doc: NoticeDoc, ex: Extract, co: CompanyIdentity, season: Season = SEASON): { gates: Gates; outcome: Outcome; fact?: { policy: Policy; date?: string; evidence: string } } {
-  const said = ex.deadlineText && ex.deadlineImage == null ? readDeadline(ex.deadlineText) : null;
+  const said = ex.deadlineText ? readDeadline(ex.deadlineText) : null;
   const date = said && !("unclear" in said) ? said.date : undefined;
-  const gates: Gates = { publisher: publisherGate(doc, co), issuer: issuerGate(ex, co), evidence: ex.deadlineText ? evidenceGate(doc, ex) : unknown("公告没写截止"), season: seasonGate(ex, season, date) };
+  const gates: Gates = { publisher: publisherGate(doc, co), issuer: issuerGate(ex, co, doc), evidence: ex.deadlineText ? evidenceGate(doc, ex) : unknown("公告没写截止"), season: seasonGate(ex, season, date, doc) };
   if (doc.status !== "ok" && doc.status !== "partial") return { gates, outcome: "unreadable" };
   if (!ex.isRecruitment) return { gates, outcome: "not_recruitment" };
   const all = (Object.values(gates) as Gate[]).every((g) => g.result === "pass");
-  const whole = !(ex.scope ?? "").trim() || /^(全部|所有|全体|均|全部岗位)/.test(ex.scope.trim());
+  // the whole batch: nothing said, or exactly 「全部 / 所有岗位」 — 「全部岗位，部分除外」 is not the whole
+  const whole = (!(ex.scope ?? "").trim() || /^(全部|所有|全体)(岗位|职位)?$/.test(norm(ex.scope))) && !NARROWER.test(ex.deadlineText ?? "");
   if (ex.deadlineText) {
-    if (all && whole && !ex.doubts && said && !("unclear" in said)) return { gates, outcome: "fact", fact: { ...said, evidence: ex.deadlineText.trim() } };
+    if (all && whole && !ex.doubts && said && !("unclear" in said)) return { gates, outcome: "fact", fact: { ...said, evidence: ex.deadlineImage != null ? `海报图 ${ex.deadlineImage}：${ex.deadlineText.trim()}` : ex.deadlineText.trim() } };
     return { gates, outcome: "review" };
   }
-  // no deadline in it: worth saying only of the whole of an official announcement for this company, this season
-  const sure = doc.status === "ok" && doc.complete && gates.publisher.result === "pass" && gates.issuer.result === "pass" && gates.season.result !== "fail" && !ex.doubts;
+  // no deadline in it: worth saying only of the whole of an official announcement for this company, this season, all of
+  // which the model was shown — a cut-off text or a poster it did not see may be where the deadline is
+  const shownAll = !!ex.seen && ex.seen.chars >= doc.text.length && ex.seen.images >= doc.images.length;
+  const sure = doc.status === "ok" && doc.complete && shownAll && gates.publisher.result === "pass" && gates.issuer.result === "pass" && gates.season.result !== "fail" && !ex.doubts;
   return { gates, outcome: sure ? "not_stated" : "review" };
 }
 

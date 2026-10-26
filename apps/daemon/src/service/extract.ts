@@ -26,17 +26,18 @@ export function articleText(html: string, url: string): Article {
 }
 
 /** Download up to `max` images (each ≤ maxBytes) for vision extraction. Referer set for mmbiz CDN. */
-export async function loadImages(urls: string[], ctx: SourceContext, max = 8, maxBytes = 4_000_000): Promise<{ data: string; mimeType: string; qr: string[] }[]> {
+export async function loadImages(urls: string[], ctx: SourceContext, max = 8, maxBytes = 4_000_000, stats?: { failed: number }): Promise<{ data: string; mimeType: string; qr: string[] }[]> {
   const out: { data: string; mimeType: string; qr: string[] }[] = [];
   for (const u of urls.slice(0, max)) {
     try {
       const res = await guardedFetch(u, { headers: { referer: "https://mp.weixin.qq.com/", "user-agent": "Mozilla/5.0" }, signal: ctx.signal });
       const mime = res.headers.get("content-type")?.split(";")[0] ?? "";
-      if (!res.ok || !/^image\/(png|jpeg|webp|gif)$/.test(mime)) continue;
+      if (!res.ok || !/^image\/(png|jpeg|webp|gif)$/.test(mime)) { if (stats) stats.failed++; continue; }
       const buf = Buffer.from(await res.arrayBuffer());
-      if (buf.length > maxBytes || buf.length < 2_000) continue;
+      if (buf.length > maxBytes) { if (stats) stats.failed++; continue; }
+      if (buf.length < 2_000) continue; // an icon or a divider: nothing to read, nothing missed
       out.push({ data: buf.toString("base64"), mimeType: mime, qr: decodeQr(buf, mime) });
-    } catch { /* skip */ }
+    } catch { if (stats) stats.failed++; }
   }
   return out;
 }

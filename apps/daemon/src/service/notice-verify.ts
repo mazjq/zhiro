@@ -35,16 +35,21 @@ export function companyIdentity(db: Db, companyId: string): CompanyIdentity {
 /** One reading: a WeChat post with its account and posters, else the page as it ended up (the browser when HTTP is thin). */
 export async function readNotice(s: Services, url: string): Promise<{ doc: NoticeDoc; pics: { data: string; mimeType: string }[] }> {
   const blank = (o: Partial<NoticeDoc>): NoticeDoc => ({ url, finalUrl: url, via: "http", status: "failed", title: "", text: "", images: [], complete: false, ...o });
+  const ctx = httpContext();
+  // the images of a page, with whether all could be had: a poster that did not load may be where the deadline is
+  const images = async (urls: string[]) => {
+    const stats = { failed: 0 };
+    const pics = await loadImages(urls, ctx, MAX_IMAGES, 4_000_000, stats);
+    return { pics, all: stats.failed === 0 && urls.length <= MAX_IMAGES };
+  };
   if (/^https?:\/\/mp\.weixin\.qq\.com\//i.test(url)) {
-    const ctx = httpContext();
     try {
       const a = await fetchArticle(url, ctx);
       const id = /var biz = "([^"]+)"/.exec(a.html)?.[1] ?? /__biz=([^&"#]+)/.exec(a.html)?.[1] ?? "";
       const name = /var nickname = htmlDecode\("([^"]*)"\)/.exec(a.html)?.[1] ?? /id="js_name">\s*([^<]+)/.exec(a.html)?.[1]?.trim() ?? "";
-      const pics = await loadImages(a.images, ctx, MAX_IMAGES);
+      const { pics, all } = await images(a.images);
       const doc = blank({ via: "wechat", title: a.title, text: a.text, account: id ? { id, name } : undefined, images: pics.map((p, n) => ({ n, hash: sha(p.data) })),
-        // ponytail: an image that failed to load and a skipped icon look the same here; counted as complete when none was cut off by the cap
-        complete: a.text.length < MAX_TEXT && a.images.length <= MAX_IMAGES, status: a.text.trim() || pics.length ? "ok" : "empty" });
+        complete: a.text.length < MAX_TEXT && all, status: a.text.trim() || pics.length ? "ok" : "empty" });
       return { doc, pics };
     } catch (e: any) {
       return { doc: blank({ via: "wechat", status: e?.code === "VERIFY_REQUIRED" ? "blocked" : "failed", note: String(e?.message ?? e).slice(0, 160) }), pics: [] };
@@ -55,41 +60,82 @@ export async function readNotice(s: Services, url: string): Promise<{ doc: Notic
     const res = await guardedFetch(url, { headers: { accept: "text/html", "user-agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130 Safari/537.36" }, signal: AbortSignal.timeout(20_000) });
     if (res.ok) {
       const html = await res.text(), a = articleText(html, url);
-      if (a.text.replace(/\s+/g, "").length >= 1_200) return { doc: blank({ finalUrl: res.url || url, title: a.title, text: a.text, links: [...html.matchAll(/href=["'](https?:[^"']+)["']/gi)].map((m) => m[1]).slice(0, 200), complete: a.text.length < MAX_TEXT, status: "ok" }), pics: [] };
+      if (a.text.replace(/\s+/g, "").length >= 1_200) {
+        const { pics, all } = await images(a.images.map((u) => { try { return new URL(u, res.url || url).href; } catch { return ""; } }).filter(Boolean));
+        return { doc: blank({ finalUrl: res.url || url, title: a.title, text: a.text, links: [...html.matchAll(/href=["'](https?:[^"']+)["']/gi)].map((m) => m[1]).slice(0, 200),
+          images: pics.map((p, n) => ({ n, hash: sha(p.data) })), complete: a.text.length < MAX_TEXT && all, status: "ok" }), pics };
+      }
     } else if (res.status === 401) return { doc: blank({ status: "login", note: `HTTP ${res.status}` }), pics: [] };
   } catch (e: any) {
     if (/^BLOCKED/.test(e?.message ?? "")) return { doc: blank({ status: "blocked", note: e.message }), pics: [] };
   }
+  // ponytail: a page drawn by script is read as text; its pictures are not fetched (hiring-system pages carry logos, not
+  // posters). Add the snapshot's large images if a poster ever turns up there.
   const r = await readPage(s, { url, browser: true, maxChars: 60_000, refresh: true });
   const status = r.status === "ok" ? "ok" : r.status === "needsLogin" ? "login" : r.status === "blocked" ? "blocked" : r.status === "empty" ? "empty" : "failed";
   return { doc: blank({ via: "browser", finalUrl: r.finalUrl || url, title: r.title, text: r.text, links: r.links.map((l) => l.href), complete: !r.truncated, status, note: r.status === "busy" ? "网申正在用浏览器" : "" }), pics: [] };
 }
 
-const PROMPT = `你是校招公告核实员。下面是一份招聘材料（网页文字，或公众号文章的配图按顺序编号 0、1、2…）。只输出一个 JSON 对象，不要解释：
+const PROMPT = `你是校招公告核实员。下面是一份招聘材料（网页文字，可能附有配图，配图按顺序编号 0、1、2…）。只输出一个 JSON 对象，不要解释：
 {"isRecruitment":true/false,
  "issuer":"招聘主体（招人的公司 / 单位全称，原文怎么写就怎么写）",
- "cohort":"届别原文，如 2027届；没写就空", "cohortQuote":"写届别的原文逐字（文字材料）", "cohortImage":图序号或null,
- "deadlineText":"网申或投递截止的原文逐字（整句）；写的是招满即止 / 长期有效也照抄；没写就空", "deadlineDate":"YYYY-MM-DD，原文没年份就空", "deadlineImage":截止写在第几张图上（只在图上时），否则 null,
+ "issuerNames":[{"name":"材料里明确给招聘主体起的简称","quote":"写明这层关系的原句逐字，如「××有限公司（以下简称××）」"}]（没有就空数组）,
+ "cohort":"届别原文，如 2027届；没写就空", "cohortQuote":"写届别的原文逐字（文字材料）", "cohortImage":届别只写在图上时的图序号，否则 null,
+ "deadlineText":"网申或投递截止的原文逐字（整句；在图上就照图抄整句）；写的是招满即止 / 长期有效也照抄；没写就空", "deadlineDate":"YYYY-MM-DD，原文没年份就空", "deadlineImage":截止只写在图上时的图序号，否则 null,
  "applyEntry":"投递入口原文（网址或「官网 / 小程序」等说法）",
- "scope":"截止适用哪些岗位 / 地区 / 下属单位；全部则写全部",
- "doubts":"只写对已抄出内容的疑问：看不清 / 多个截止 / 年份缺失 / 不确定是不是截止；某项原文没写就让那一项留空，不要写进这里；没有疑问就空"}
-规则：只抄原文，不推测、不补全；网申开始、宣讲、笔试、面试的日期不是截止；文字里有的就不要说在图上。`;
+ "scope":"截止适用哪些岗位 / 地区 / 下属单位，照原文；没说就空；明确写全部就写全部",
+ "doubts":"只写对已抄出内容的疑问：看不清 / 多个截止 / 年份缺失 / 不确定是不是截止 / 文字和图上的截止不一致；某项原文没写就让那一项留空，不要写进这里；没有疑问就空"}
+规则：只抄原文，不推测、不补全；网申开始、宣讲、笔试、面试的日期不是截止；文字和图都要看，图上的延期、例外也算。`;
 
-/** The model copies out what the material says. Posters only reach a model that can see; otherwise the reading is left to a person. */
+const POSTER_PROMPT = `下面是一份招聘材料的配图，按顺序编号 0、1、2…。只看图，找出网申或投递的截止。只输出一个 JSON 对象，不要解释：
+{"deadlineText":"图上写截止的整句，逐字照抄（含限定语，如「部分岗位」「以…为准」）；招满即止 / 长期有效也照抄；图上没有就空",
+ "deadlineDate":"YYYY-MM-DD，图上没年份就空", "image":这句在第几张图上（序号）或 null,
+ "scope":"这个截止适用哪些岗位 / 地区 / 下属单位，照图上原文；没说就空；明确写全部就写全部"}
+规则：只抄图上的字，不推测；网申开始、宣讲、笔试、面试的日期不是截止。`;
+
+const str = (v: unknown) => (typeof v === "string" ? v.trim() : "");
+const num = (v: unknown) => (typeof v === "number" && Number.isInteger(v) ? v : null);
+const json = (msg: any) => parseJsonWithRepair<any>(contentText(msg.content).trim().replace(/^```(?:json)?\s*|\s*```$/g, ""));
+
+/**
+ * The model copies out what the material says, text and pictures together. A deadline found only on a poster is read
+ * again by another model that can see, on its own, from all the pictures: the evidence check compares the two.
+ */
 export async function askNotice(llm: Llm, doc: NoticeDoc, pics: { data: string; mimeType: string }[], company: string, batch: string): Promise<Extract | null> {
   const model = llm.model();
   const canSee = (model as any).input?.includes?.("image");
-  const posters = pics.length > 0 && doc.text.replace(/\s+/g, "").length < 400;
-  if (posters && !canSee) return null;
+  if (pics.length && !canSee && doc.text.replace(/\s+/g, "").length < 400) return null; // nothing but posters, and no eyes
+  const shown = canSee ? pics : [];
   const head = `要核实的公司：${company}\n批次：${batch}\n材料：${doc.finalUrl || doc.url}\n发布者：${doc.account?.name ?? ""}\n标题：${doc.title}\n`;
-  const body = posters ? `\n这份材料是 ${pics.length} 张图片，按顺序编号 0…${pics.length - 1}。\n文字部分：${doc.text.slice(0, 2_000)}` : `\n正文：\n${doc.text.slice(0, 24_000)}`;
-  const content: any[] = [{ type: "text", text: `${head}${body}` }, ...(posters ? pics.map((p) => ({ type: "image", data: p.data, mimeType: p.mimeType })) : [])];
-  const msg = await llm.models.completeSimple(model, { systemPrompt: PROMPT, messages: [{ role: "user", content, timestamp: Date.now() }] }, { reasoning: "low" });
-  const j = parseJsonWithRepair<Partial<Extract>>(contentText(msg.content).trim().replace(/^```(?:json)?\s*|\s*```$/g, ""));
-  const str = (v: unknown) => (typeof v === "string" ? v.trim() : "");
-  const num = (v: unknown) => (typeof v === "number" && Number.isInteger(v) ? v : null);
-  return { isRecruitment: j.isRecruitment !== false, issuer: str(j.issuer), cohort: str(j.cohort), cohortQuote: str(j.cohortQuote), cohortImage: num(j.cohortImage),
-    deadlineText: str(j.deadlineText), deadlineDate: str(j.deadlineDate), deadlineImage: num(j.deadlineImage), applyEntry: str(j.applyEntry), scope: str(j.scope), doubts: str(j.doubts) };
+  const text = doc.text.slice(0, MAX_TEXT);
+  const body = `\n正文：\n${text}${shown.length ? `\n\n附 ${shown.length} 张配图，按顺序编号 0…${shown.length - 1}。` : ""}`;
+  const pictures = shown.map((p) => ({ type: "image", data: p.data, mimeType: p.mimeType }));
+  const j = json(await llm.models.completeSimple(model, { systemPrompt: PROMPT, messages: [{ role: "user", content: [{ type: "text", text: `${head}${body}` }, ...pictures] as any, timestamp: Date.now() }] }, { reasoning: "low" }));
+  const ex: Extract = { isRecruitment: j.isRecruitment !== false, issuer: str(j.issuer), cohort: str(j.cohort), cohortQuote: str(j.cohortQuote), cohortImage: num(j.cohortImage),
+    deadlineText: str(j.deadlineText), deadlineDate: str(j.deadlineDate), deadlineImage: num(j.deadlineImage), applyEntry: str(j.applyEntry), scope: str(j.scope), doubts: str(j.doubts),
+    issuerNames: Array.isArray(j.issuerNames) ? j.issuerNames.map((x: any) => ({ name: str(x?.name), quote: str(x?.quote) })).filter((x: any) => x.name && x.quote) : [],
+    seen: { chars: text.length, images: shown.length, model: String((model as any).id ?? "") } };
+  if (ex.deadlineImage != null && shown.length) {
+    const second = otherSeeingModel(llm, model);
+    if (second) {
+      const p = json(await llm.models.completeSimple(second, { systemPrompt: POSTER_PROMPT, messages: [{ role: "user", content: [{ type: "text", text: `${head}\n附 ${shown.length} 张配图。` }, ...pictures] as any, timestamp: Date.now() }] }, { reasoning: "low" }));
+      ex.poster = { model: String(second.id ?? ""), deadlineText: str(p.deadlineText), deadlineDate: str(p.deadlineDate), scope: str(p.scope), image: num(p.image) };
+    }
+  }
+  return ex;
+}
+
+/**
+ * Another model of the same provider that can see, for the second reading of a poster. None when the work goes to a
+ * harness (it answers with its own model, so a second call is not a second reader) or the provider has no other.
+ * ponytail: the first such model in the provider's list; a setting when someone wants to pick it
+ */
+export function otherSeeingModel(llm: Llm, first: any): any | null {
+  if (llm.route?.().kind === "harness") return null;
+  try {
+    const all = (llm.models as any).getModels(first.provider) as any[];
+    return all.find((m) => m.id !== first.id && m.input?.includes?.("image")) ?? null;
+  } catch { return null; }
 }
 
 export interface VerifyResult { url: string; outcome: Outcome; reasons: string[]; deadline: string; factId?: string; unchanged: boolean;
