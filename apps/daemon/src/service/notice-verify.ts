@@ -45,7 +45,8 @@ export async function readNotice(s: Services, url: string): Promise<{ doc: Notic
   if (/^https?:\/\/mp\.weixin\.qq\.com\//i.test(url)) {
     try {
       const a = await fetchArticle(url, ctx);
-      const id = /var biz = "([^"]+)"/.exec(a.html)?.[1] ?? /__biz=([^&"#]+)/.exec(a.html)?.[1] ?? "";
+      // the post's own account only: a __biz anywhere else on the page may be a recommended post's
+      const id = /var biz = "([^"]+)"/.exec(a.html)?.[1] ?? "";
       const name = /var nickname = htmlDecode\("([^"]*)"\)/.exec(a.html)?.[1] ?? /id="js_name">\s*([^<]+)/.exec(a.html)?.[1]?.trim() ?? "";
       // a picture post (图片消息) keeps its pictures in picture_page_info_list, on another image host
       const list = a.html.indexOf("picture_page_info_list");
@@ -183,10 +184,8 @@ export async function verifyNotice(s: Services, input: { campaignId?: string; po
     }
     const result = checkNotice(doc, ex, co);
     const r = recordCheck({ db, vault: s.config.vault }, subject, doc, ex, result, unchanged ? "notice.verify:unchanged" : "notice.verify");
-    // only a name wholly unlike the one on record, on the company's own site: a name that contains it is a part or a parent, not another way to write it
-    const other = result.gates.publisher.result === "pass" && result.gates.issuer.result === "fail" && !db.prepare("select 1 from company where name = ?").get(ex.issuer);
-    const why = [...reasons(result.gates), ...(ex.doubts ? [`模型存疑：${ex.doubts}`] : []), ...(other ? [`这家公司官网上写的招聘主体是「${ex.issuer}」：如果它就是「${co.name}」的全称，用 company.alias 登记后再核`] : [])];
-    results.push({ url, outcome: result.outcome, reasons: why, deadline: ex.deadlineText, factId: r.factId, unchanged, ...(other ? { aliasHint: { companyId: c.company_id, alias: ex.issuer } } : {}) });
+    const why = [...reasons(result.gates), ...(ex.doubts ? [`模型存疑：${ex.doubts}`] : [])];
+    results.push({ url, outcome: result.outcome, reasons: why, deadline: ex.deadlineText, factId: r.factId, unchanged });
   }
   if (results.some((r) => r.factId)) s.onDataChanged?.();
   const say = input.positionId ? resolveFor(db, [input.positionId]).get(input.positionId)?.say : campaignSaying(loadContext(db, [c.company_id]), c.id).say;
