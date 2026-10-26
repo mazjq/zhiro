@@ -1,7 +1,7 @@
 import { existsSync, readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import type { Source } from "../types.js";
-import { publicUrl, isLocalPath } from "../http.js";
+import { publicUrl, isLocalPath, guardedFetch } from "../http.js";
 import { listingsFromTable, csvToTable } from "../sheet.js";
 
 /**
@@ -32,7 +32,7 @@ async function read(where: string, signal?: AbortSignal): Promise<Uint8Array> {
     return readFileSync(where);
   }
   if (!publicUrl(where)) throw new Error(`BLOCKED: 只读公网上的链接，不读本机或内网地址：${where}`);
-  const res = await fetch(where, { signal: signal ?? AbortSignal.timeout(60_000), headers: { "user-agent": UA } });
+  const res = await guardedFetch(where, { signal: signal ?? AbortSignal.timeout(60_000), headers: { "user-agent": UA } });
   if (!publicUrl(res.url)) throw new Error(`BLOCKED: 链接跳到了本机或内网地址：${res.url}`);
   if (res.status === 401 || res.status === 403) throw new Error(`NOT_PUBLIC: 这个链接要登录才能看（HTTP ${res.status}），请换成任何人都能打开的链接`);
   if (!res.ok) throw new Error(`SITE_DOWN: 这个链接打不开（HTTP ${res.status}）。检查链接是否完整、是否还有效`);

@@ -4,7 +4,7 @@ import { ulid } from "ulid";
 import { now } from "../db.js";
 import type { Services } from "../services.js";
 import { DomainError } from "./domain.js";
-import { httpContext, publicUrl } from "../data/index.js";
+import { httpContext, publicUrl, assertPublic } from "../data/index.js";
 import { articleText } from "./extract.js";
 import { readerPage } from "./apply.js";
 import { currentRun } from "./apply-run.js";
@@ -201,8 +201,18 @@ async function browserRead(s: Services, url: string, input: PageReadInput, finis
   lastByOrigin.set(origin, Date.now());
   if (input.mode === "open" && [...sessions.values()].filter((x) => !expired(x)).length >= SESSION.maxOpen) throw new DomainError("SESSIONS", `同时最多 ${SESSION.maxOpen} 个读页会话：先 close 一个`);
   const opened = await readerPage(s.config.vault);
+  // every request while this read is open — the page, its redirects, what its scripts load, a tab a step opens — is
+  // checked like the address itself: a page cannot walk the browser into this machine or the local network.
+  // ponytail: WebSockets and service-worker requests are not routed; add routeWebSocket / serviceWorkers: "block" if needed
+  const context = opened.page.context();
+  const guard = async (route: import("playwright-core").Route) => {
+    const u = route.request().url();
+    const ok = !/^https?:/i.test(u) || (await assertPublic(u).then(() => true, () => false)); // data: / blob: carry nothing out
+    await (ok ? route.continue() : route.abort("blockedbyclient")).catch(() => {});
+  };
+  await context.route("**/*", guard);
   let page = opened.page;
-  const done = async () => { if (page !== opened.page) await page.close().catch(() => {}); await opened.done(); };
+  const done = async () => { if (page !== opened.page) await page.close().catch(() => {}); await opened.done(); await context.unroute("**/*", guard).catch(() => {}); };
   let keep = false;
   try {
     // a page that keeps polling never reaches "networkidle": wait for the DOM, then until the visible text stops growing
