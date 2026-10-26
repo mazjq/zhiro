@@ -54,6 +54,7 @@ describe("公告核实: only a deadline that passes all four checks becomes a fa
     expect(readDeadline("10月31日截止")).toEqual({ unclear: "原文没写年份" });
     expect(readDeadline("网上报名 9月2日—10月7日")).toEqual({ unclear: "原文没写年份" }); // a range with no year is yearless, not 「several days」
     expect(readDeadline("岗位招满即止")).toEqual({ policy: "until_filled" });
+    expect(readDeadline("网申时间 2026 8.10 ▶ 12.31")).toEqual({ policy: "date", date: "2026-12-31" }); // a poster's way
     expect(check({ text: "网申 10月31日截止" }, { deadlineText: "网申 10月31日截止", deadlineDate: "" }).outcome).toBe("review");
   });
 

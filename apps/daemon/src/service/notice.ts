@@ -107,7 +107,8 @@ export function datesIn(text: string): { dates: string[]; yearless: boolean; bet
   const out: string[] = [], between: string[] = [];
   let year = "", yearless = false, last = -1, named = 0;
   const t = text.normalize("NFKC");
-  const re = /(?:(\d{4})\s*[年\-/.])?\s*(\d{1,2})\s*[月\-/.]\s*(\d{1,2})\s*[日号]?/g;
+  // 「2026年8月10日」「2026-8-10」「2026 8.10」（a poster's year, a space, then the day）
+  const re = /(?:(\d{4})\s*(?:[年\-/.]|\s))?\s*(\d{1,2})\s*[月\-/.]\s*(\d{1,2})\s*[日号]?/g;
   for (const m of t.matchAll(re)) {
     named++; // every day the sentence names counts, with a year or without
     if (m[1]) year = m[1];
@@ -131,7 +132,7 @@ export function readDeadline(quote: string): { policy: Policy; date?: string } |
   if (!dates.length) return { unclear: yearless ? "原文没写年份" : "原文里没有日期" };
   if (dates.length === 1) return { policy: "date", date: dates[0] };
   // 「9月1日-11月30日」「10月8日至11月9日」: the end of the range
-  if (dates.length === 2 && /^\s*(至|到|~|～|—|–|-)\s*$/.test(between[0])) return dates[0] <= dates[1] ? { policy: "date", date: dates[1] } : { unclear: "日期区间前后颠倒" };
+  if (dates.length === 2 && /^\s*(至|到|~|～|—|–|-|－|▶|►|→|⇀|➡)\s*$/.test(between[0])) return dates[0] <= dates[1] ? { policy: "date", date: dates[1] } : { unclear: "日期区间前后颠倒" };
   return { unclear: "一句话里有好几个日期" };
 }
 
