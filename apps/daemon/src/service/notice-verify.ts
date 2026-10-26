@@ -47,7 +47,10 @@ export async function readNotice(s: Services, url: string): Promise<{ doc: Notic
       const a = await fetchArticle(url, ctx);
       const id = /var biz = "([^"]+)"/.exec(a.html)?.[1] ?? /__biz=([^&"#]+)/.exec(a.html)?.[1] ?? "";
       const name = /var nickname = htmlDecode\("([^"]*)"\)/.exec(a.html)?.[1] ?? /id="js_name">\s*([^<]+)/.exec(a.html)?.[1]?.trim() ?? "";
-      const { pics, all } = await images(a.images);
+      // a picture post (图片消息) keeps its pictures in picture_page_info_list, on another image host
+      const list = a.html.indexOf("picture_page_info_list");
+      const posted = list < 0 ? [] : [...new Set([...a.html.slice(list, list + 80_000).matchAll(/cdn_url:\s*'(https?:\/\/[^']+qpic\.cn\/[^']+)'/g)].map((m) => m[1].replace(/&amp;/g, "&")))];
+      const { pics, all } = await images([...a.images, ...posted.filter((u) => !a.images.includes(u))]);
       const doc = blank({ via: "wechat", title: a.title, text: a.text, account: id ? { id, name } : undefined, images: pics.map((p, n) => ({ n, hash: sha(p.data) })),
         complete: a.text.length < MAX_TEXT && all, status: a.text.trim() || pics.length ? "ok" : "empty" });
       return { doc, pics };
@@ -106,7 +109,9 @@ export async function askNotice(llm: Llm, doc: NoticeDoc, pics: { data: string; 
   const canSee = (model as any).input?.includes?.("image");
   if (pics.length && !canSee && doc.text.replace(/\s+/g, "").length < 400) return null; // nothing but posters, and no eyes
   const shown = canSee ? pics : [];
-  const head = `要核实的公司：${company}\n批次：${batch}\n材料：${doc.finalUrl || doc.url}\n发布者：${doc.account?.name ?? ""}\n标题：${doc.title}\n`;
+  // what the batch is said to be is not told: the model must find the cohort in the material, not repeat ours
+  void batch;
+  const head = `要核实的公司：${company}\n材料：${doc.finalUrl || doc.url}\n发布者：${doc.account?.name ?? ""}\n标题：${doc.title}\n`;
   const text = doc.text.slice(0, MAX_TEXT);
   const body = `\n正文：\n${text}${shown.length ? `\n\n附 ${shown.length} 张配图，按顺序编号 0…${shown.length - 1}。` : ""}`;
   const pictures = shown.map((p) => ({ type: "image", data: p.data, mimeType: p.mimeType }));

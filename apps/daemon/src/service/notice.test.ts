@@ -38,6 +38,7 @@ describe("公告核实: only a deadline that passes all four checks becomes a fa
     expect(check({}, { issuer: "示例重工集团" }).outcome).toBe("review");
     expect(check({}, { issuer: "另一家机械有限公司" }).gates.issuer.result).toBe("fail");
     expect(check({}, { issuer: "示例重工" }).gates.issuer.result).toBe("pass"); // a recorded alias
+    expect(check({}, { issuer: "中国示例重工股份有限公司" }).gates.issuer.result).toBe("pass"); // 「中国」 in front
   });
 
   it("the sentence must be on the page, and say the day the model gave", () => {
@@ -77,8 +78,9 @@ describe("公告核实: only a deadline that passes all four checks becomes a fa
     expect(check({}, { scope: "全部岗位，部分地区另行通知" }).outcome).toBe("review");
   });
 
-  it("the cohort's words must be in the material", () => {
+  it("the cohort's words must be in the material — its title counts", () => {
     expect(check({}, { cohortQuote: "招聘对象：2027届本科及以上毕业生" }).gates.season.result).toBe("unknown");
+    expect(check({ title: "示例重工2027届校园招聘正式启动" }, { cohortQuote: "示例重工2027届校园招聘正式启动" }).gates.season.result).toBe("pass");
   });
 
   it("「甲（以下简称乙）」 in the material ties a full name to the one on record; a likeness does not", () => {
