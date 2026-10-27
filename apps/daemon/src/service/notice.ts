@@ -43,7 +43,9 @@ export interface Extract {
  */
 export interface CompanyIdentity { name: string; aliases: string[]; sites: Set<string>; accounts: Set<string>; siteIds?: Map<string, string[]>;
   /** full names known from the same outside records as its sites (trust.ts), with the records that vouch for each */
-  names?: Map<string, string[]> }
+  names?: Map<string, string[]>;
+  /** hiring sites of central enterprises on the 国资委 list (their built-in or linked hiring platforms, not their main sites): group, records */
+  groupSites?: Map<string, { group: string; ids: string[]; names: string[] }> }
 export interface Season { cohort: string; since: string; until: string }
 // ponytail: one season, as the rest of Zhiro (A9 turns 「2027」 into the recruiting season)
 export const SEASON: Season = { cohort: "2027", since: "2026-03-01", until: "2027-08-31" };
@@ -61,7 +63,8 @@ export type Outcome = "fact" | "not_stated" | "review" | "unreadable" | "not_rec
 // 5: 「简称」 only as 「甲（以下简称乙）」 written together; the title and the account are part of what 「unchanged」 means
 // 6: a company's own sites are only those on record with their evidence (trust.ts), not every batch labelled 官方
 // 7: a full name on record (巨潮, Zhiro's own readers) passes the issuer check
-// 8: the material must be the batch's kind of recruitment (实习 / 正式, which round), both ways
+// 8: the material must be the batch's kind of recruitment (实习 / 正式, which round), both ways; a central enterprise's
+//    hiring platform carrying the announcement in the company's exact name counts as its publisher
 export const RULE_VERSION = 8;
 
 const pass = (why: string): Gate => ({ result: "pass", why }), fail = (why: string): Gate => ({ result: "fail", why }), unknown = (why: string): Gate => ({ result: "unknown", why });
@@ -88,8 +91,13 @@ export function siteKey(url: string): string | null {
 // 「中国航天502所」 and 「航天502所」 are one name written two ways
 const nameKey = (s: string) => companyKey(s).replace(/[（）()【】\[\]·・\-—]/g, "").replace(/(股份有限公司|有限责任公司|有限公司|公司)$/, "").replace(/^中国(?=.{3,})/, ""); // never down to two characters (中国电信 is not 电信)
 
-/** 发布者: the company's own site or hiring-system tenant, or a WeChat account on record as its own. */
-export function publisherGate(doc: NoticeDoc, co: CompanyIdentity): Gate {
+/**
+ * 发布者: the company's own site or hiring-system tenant, or a WeChat account on record as its own — or a central
+ * enterprise's own hiring platform carrying this announcement in this company's name, exactly (its name, or a full name
+ * on record): the group's platform saying this unit is hiring. That counts for this announcement only; the platform
+ * does not become the company's site.
+ */
+export function publisherGate(doc: NoticeDoc, co: CompanyIdentity, ex?: Extract): Gate {
   if (doc.via === "wechat") {
     if (doc.account?.id && co.accounts.has(doc.account.id)) return { ...pass(`公众号「${doc.account.name}」已登记为这家公司的`), deps: [{ kind: "account", id: doc.account.id }] };
     return unknown(`公众号「${doc.account?.name || "未知"}」是不是这家公司的官方号还没核实`);
@@ -97,6 +105,13 @@ export function publisherGate(doc: NoticeDoc, co: CompanyIdentity): Gate {
   const k = siteKey(doc.finalUrl || doc.url);
   if (!k) return unknown("这个网站很多公司共用，看不出是谁的页面");
   if (co.sites.has(k)) return { ...pass(`这家公司已确认的官网 / 招聘系统（${k}）`), deps: (co.siteIds?.get(k) ?? []).map((id) => ({ kind: "site" as const, id })) };
+  const g = co.groupSites?.get(k);
+  if (g) {
+    const i = nameKey(ex?.issuer ?? ""), full = [...(co.names ?? [])].find(([n]) => nameKey(n) === i);
+    if (i && (nameKey(co.name) === i || full) && onPage(doc, ex!.issuer))
+      return { ...pass(`「${g.group}」自己的招聘平台（${k}）以「${ex!.issuer}」的名义发布`), deps: [...g.ids.map((id) => ({ kind: "site" as const, id })), ...(full?.[1] ?? []).map((id) => ({ kind: "name" as const, id }))] };
+    return unknown(`${k} 是「${g.group}」的招聘平台，但这份材料没写明是「${co.name}」招人`);
+  }
   return unknown(`${k} 不在这家公司已确认的官网里`);
 }
 
@@ -247,7 +262,7 @@ export function batchGate(ex: Extract, doc: NoticeDoc | undefined, b: Batch): Ga
 export function checkNotice(doc: NoticeDoc, ex: Extract, co: CompanyIdentity, season: Season = SEASON, batch: Batch = { kind: "校招", batch: "" }): { gates: Gates; outcome: Outcome; fact?: { policy: Policy; date?: string; evidence: string } } {
   const said = ex.deadlineText ? readDeadline(ex.deadlineText) : null;
   const date = said && !("unclear" in said) ? said.date : undefined;
-  const gates: Gates = { publisher: publisherGate(doc, co), issuer: issuerGate(ex, co, doc), evidence: ex.deadlineText ? evidenceGate(doc, ex) : unknown("公告没写截止"), season: seasonGate(ex, season, date, doc), batch: batchGate(ex, doc, batch) };
+  const gates: Gates = { publisher: publisherGate(doc, co, ex), issuer: issuerGate(ex, co, doc), evidence: ex.deadlineText ? evidenceGate(doc, ex) : unknown("公告没写截止"), season: seasonGate(ex, season, date, doc), batch: batchGate(ex, doc, batch) };
   if (doc.status !== "ok" && doc.status !== "partial") return { gates, outcome: "unreadable" };
   if (!ex.isRecruitment) return { gates, outcome: "not_recruitment" };
   const all = (Object.values(gates) as Gate[]).every((g) => g.result === "pass");
