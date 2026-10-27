@@ -97,11 +97,12 @@ const PROMPT = `你是校招公告核实员。下面是一份招聘材料（网�
  "issuer":"招聘主体（招人的公司 / 单位全称，原文怎么写就怎么写）",
  "issuerNames":[{"name":"材料里明确给招聘主体起的简称","quote":"写明这层关系的原句逐字，如「××有限公司（以下简称××）」"}]（没有就空数组）,
  "batchQuote":"标题或正文里说明这是什么招聘的原文逐字，取最能看出招聘类型和批次的一句，如「2027届秋季校园招聘公告」「2027届暑期实习生招聘」「春季补录」；没写就空",
+ "published":"这篇公告自己的发布日期原文逐字（如「发布时间：2026-09-01」）；转载、更新、页脚的日期不算；没有就空",
  "cohort":"届别原文，如 2027届；没写就空", "cohortQuote":"写届别的原文逐字（文字材料）", "cohortImage":届别只写在图上时的图序号，否则 null,
  "deadlineText":"网申或投递截止的原文逐字（整句；在图上就照图抄整句）；写的是招满即止 / 长期有效也照抄；没写就空", "deadlineDate":"YYYY-MM-DD，原文没年份就空", "deadlineImage":截止只写在图上时的图序号，否则 null,
  "applyEntry":"投递入口原文（网址或「官网 / 小程序」等说法）",
  "scope":"截止适用哪些岗位 / 地区 / 下属单位，照原文；没说就空；明确写全部就写全部",
- "doubts":"只写对已抄出内容的疑问：看不清 / 多个截止 / 一份材料里有几种招聘（如实习和正式、不同批次）各有截止 / 年份缺失 / 不确定是不是截止 / 文字和图上的截止不一致；某项原文没写就让那一项留空，不要写进这里；没有疑问就空"}
+ "doubts":"只写对已抄出内容的疑问：看不清 / 多个截止 / 一份材料里有几种招聘（如实习和正式、不同批次）各有截止 / 不确定是不是截止 / 文字和图上的截止不一致；某项原文没写就让那一项留空，不要写进这里；没有疑问就空"}
 规则：只抄原文，不推测、不补全；网申开始、宣讲、笔试、面试的日期不是截止；文字和图都要看，图上的延期、例外也算。`;
 
 const POSTER_PROMPT = `下面是一份招聘材料的配图，按顺序编号 0、1、2…。只看图，找出网申或投递的截止。只输出一个 JSON 对象，不要解释：
@@ -132,7 +133,7 @@ export async function askNotice(llm: Llm, doc: NoticeDoc, pics: { data: string; 
   const j = json(await llm.models.completeSimple(model, { systemPrompt: PROMPT, messages: [{ role: "user", content: [{ type: "text", text: `${head}${body}` }, ...pictures] as any, timestamp: Date.now() }] }, { reasoning: "low" }));
   const ex: Extract = { isRecruitment: j.isRecruitment !== false, issuer: str(j.issuer), cohort: str(j.cohort), cohortQuote: str(j.cohortQuote), cohortImage: num(j.cohortImage),
     deadlineText: str(j.deadlineText), deadlineDate: str(j.deadlineDate), deadlineImage: num(j.deadlineImage), applyEntry: str(j.applyEntry), scope: str(j.scope), doubts: str(j.doubts),
-    batchQuote: str(j.batchQuote),
+    batchQuote: str(j.batchQuote), published: str(j.published),
     issuerNames: Array.isArray(j.issuerNames) ? j.issuerNames.map((x: any) => ({ name: str(x?.name), quote: str(x?.quote) })).filter((x: any) => x.name && x.quote) : [],
     seen: { chars: text.length, images: shown.length, model: String((model as any).id ?? "") } };
   if (ex.deadlineImage != null && shown.length) {
