@@ -4,7 +4,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { openDb } from "../db.js";
 import { ingest, type Listing } from "../data/index.js";
-import { addSite, revokeSite, trustedSites, trustedNames, listSites, listNames, pickExchange, parseProfile, linkFromRoots, hiringLinksTo, type ExchangeHit, type PageLinks } from "./trust.js";
+import { addSite, revokeSite, trustedSites, trustedNames, listSites, listNames, pickExchange, parseProfile, linkFromRoots, hiringLinksTo, parseSasac, pickGov, govRoot, type ExchangeHit, type PageLinks, type GovEntry } from "./trust.js";
 import { checkNotice, recordCheck, type NoticeDoc, type Extract } from "./notice.js";
 import { companyIdentity } from "./notice-verify.js";
 
@@ -183,5 +183,37 @@ describe("full names known from the same outside records as the sites", () => {
     revokeSite(db, name.id, "test", "全称写错了");
     expect(trustedSites(db, energy).size).toBe(1);
     expect(checkNotice(energyDoc(), energyEx, companyIdentity(db, energy), SEASON).gates.issuer.result).toBe("fail");
+  });
+});
+
+describe("国资委「中央企业网站」: a central enterprise's site from the list", () => {
+  const html = `<div><a href="http://www.sasac.gov.cn/n1/index.html">首页</a><a target="_blank" href="http://www.cnnc.com.cn/">中国核工业集团有限公司</a>
+    <a target="_blank" href="http://www.ceic.com">国家能源投资集团有限责任公司</a><a href="https://www.crc.com.hk/">华润（集团）有限公司</a><a href="http://www.x.cn/">更多</a></div>`;
+  it("reads the entries, nothing else on the page", () => {
+    expect(parseSasac(html).map((e) => e.name)).toEqual(["中国核工业集团有限公司", "国家能源投资集团有限责任公司", "华润(集团)有限公司"]);
+  });
+  it("the company is the entry by its own name or a full name on record, up to the legal form; never a part of it", () => {
+    const e = parseSasac(html);
+    const none = () => false;
+    expect(pickGov(["中国核工业集团"], e, none)?.url).toBe("http://www.cnnc.com.cn/"); // 有限公司 left off
+    expect(pickGov(["华润（集团）有限公司"], e, none)?.name).toBe("华润(集团)有限公司");
+    expect(pickGov(["中国核电"], e, none)).toBeNull(); // its group is on the list, not it
+    expect(pickGov(["中核集团"], e, none)).toBeNull(); // a short name is not the full one
+    expect(pickGov(["中国核工业集团有限公司"], e, () => true)).toBeNull(); // another library company has the name too
+  });
+  it("puts the site on record with the full name; an entry gone from the list takes them back", async () => {
+    const { db, co } = setup();
+    const energy = co("国家能源集团");
+    const list: GovEntry[] = [...Array(60)].map((_, n) => ({ name: `示例${n}集团有限公司`, url: `http://www.x${n}.cn/` }));
+    // 国家能源集团 is on the list by the full name its built-in record gives
+    const r = await govRoot(db, energy, true, async () => [...list, { name: "国家能源投资集团有限责任公司", url: "http://www.ceic.com" }]);
+    expect(r.status).toBe("added");
+    expect(trustedSites(db, energy).has("ceic.com")).toBe(true);
+    expect(listNames(db, energy).filter((n) => n.how === "gov").map((n) => n.name)).toEqual(["国家能源投资集团有限责任公司"]);
+    await govRoot(db, energy, true, async () => list);
+    expect(trustedSites(db, energy).has("ceic.com")).toBe(false);
+    expect(trustedSites(db, energy).has("zhaopin.chnenergy.com.cn")).toBe(true); // its own evidence stands
+    // a list not read leaves what is on record, and is not counted as looked up
+    expect((await govRoot(db, energy, true, async () => null)).note).toBe("国资委名录这次没读到");
   });
 });
