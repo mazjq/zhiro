@@ -4,7 +4,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { openDb } from "../db.js";
 import { ingest, type Listing } from "../data/index.js";
-import { addSite, revokeSite, trustedSites, listSites } from "./trust.js";
+import { addSite, revokeSite, trustedSites, listSites, pickExchange, parseProfile, type ExchangeHit } from "./trust.js";
 import { checkNotice, recordCheck, type NoticeDoc, type Extract } from "./notice.js";
 import { companyIdentity } from "./notice-verify.js";
 
@@ -75,5 +75,24 @@ describe("官网信任根: only sites on record, with their evidence, are a comp
     addSite(db, { companyId: company, siteKey: "careers.example-heavy.cn", rootKind: "exchange", basisUrl: "https://x/e", basisQuote: "q", fingerprint: "b" });
     revokeSite(db, a.id, "test", "撤回");
     expect(trustedSites(db, company).has("careers.example-heavy.cn")).toBe(true);
+  });
+});
+
+describe("exchange disclosures: one listed company, by its exact name", () => {
+  const hit = (code: string, zwjc: string, o: Partial<ExchangeHit> = {}): ExchangeHit => ({ code, zwjc, category: "A股", delisted: "false", ...o });
+  const orgs: Record<string, string> = { "300161": "武汉华中数控股份有限公司", "600000": "示例集团股份有限公司", "600001": "示例科技股份有限公司" };
+  const org = (c: string) => orgs[c];
+  it("matches the short name or the full name exactly, and only when one live A-share does", () => {
+    expect(pickExchange(["华中数控"], [hit("300161", "华中数控")], org)?.code).toBe("300161");
+    expect(pickExchange(["武汉华中数控股份有限公司"], [hit("300161", "华中数控")], org)?.code).toBe("300161");
+    expect(pickExchange(["华中数控集团"], [hit("300161", "华中数控")], org)).toBeNull(); // a name containing another is no match
+    expect(pickExchange(["示例"], [hit("600000", "示例集团"), hit("600001", "示例科技")], org)).toBeNull();
+    expect(pickExchange(["华中数控"], [hit("300161", "华中数控", { delisted: "true" })], org)).toBeNull();
+    expect(pickExchange(["华中数控"], [hit("01810", "华中数控", { category: "港股" })], org)).toBeNull();
+  });
+  it("reads the full name and every disclosed website", () => {
+    expect(parseProfile({ data: { records: [{ basicInformation: [{ ORGNAME: "武汉华中数控股份有限公司", F011V: "www.huazhongcnc.com；http://www.hzncc.com" }] }] } }))
+      .toEqual({ orgName: "武汉华中数控股份有限公司", websites: ["www.huazhongcnc.com", "http://www.hzncc.com"] });
+    expect(parseProfile({ data: { records: [] } })).toBeNull();
   });
 });

@@ -9,7 +9,7 @@ import { articleText, fetchArticle, loadImages } from "./extract.js";
 import { readPage } from "./page-read.js";
 import { withPurpose } from "./usage.js";
 import { resolveFor, campaignSaying, loadContext } from "./deadlines.js";
-import { trustedSites } from "./trust.js";
+import { trustedSites, exchangeRoot } from "./trust.js";
 import { checkNotice, recordCheck, fingerprint, RULE_VERSION, type NoticeDoc, type Extract, type CompanyIdentity, type Outcome, type Gates, type Gate } from "./notice.js";
 
 /**
@@ -165,6 +165,8 @@ export async function verifyNotice(s: Services, input: { campaignId?: string; po
   if (!c) throw new NotFound(`campaign ${campaignId}`);
   const urls = input.url ? [input.url] : [...new Set([c.notice_url, c.apply_url].filter((u) => /^https?:\/\//i.test(u ?? "")))].slice(0, 2);
   if (!urls.length) throw new DomainError("NO_MATERIAL", "这个批次没有公告或网申链接：用 url 指定要读的公告");
+  // the company's sites on record first: a listed company's disclosed website, looked up once a month (trust.ts)
+  await exchangeRoot(db, c.company_id).catch(() => null);
   const co = companyIdentity(db, c.company_id), subject = { type: "campaign" as const, id: c.id };
   const last = db.prepare(`select k.extract, r.fingerprint from notice_check k join notice_read r on r.id = k.read_id
     where k.subject_type = 'campaign' and k.subject_id = ? and r.url = ? and k.rule_version = ? and r.status in ('ok', 'partial') and k.outcome != 'unreadable' order by k.checked_at desc limit 1`);
