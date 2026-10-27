@@ -1,5 +1,7 @@
 import { ulid } from "ulid";
 import { now, type Db } from "../db.js";
+import { companyKey, guardedFetch } from "../data/index.js";
+import { siteKey as siteKeyOf } from "./notice.js";
 
 /**
  * 官网信任根: which sites are known to be a company's own, and how that is known. Only these count as 「this company
@@ -103,4 +105,68 @@ export function listSites(db: Db, companyId: string) {
     status: (r.status === "active" && r.expires_at && r.expires_at <= now() ? "expired" : r.status) as string, verifiedAt: r.verified_at as string, expiresAt: (r.expires_at ?? null) as string | null,
     revoked: r.revoked_at ? { at: r.revoked_at as string, by: r.revoked_by as string, reason: r.revoke_reason as string } : null,
   }));
+}
+
+// ---------- exchange disclosures (巨潮资讯, the disclosure platform the CSRC designates) ----------
+
+export interface ExchangeHit { code: string; category: string; zwjc: string; delisted?: string }
+export interface ExchangeProfile { orgName: string; websites: string[] }
+
+/**
+ * The one listed A-share company a library name stands for: its short name or its full name is that name exactly,
+ * and no other live A-share is. Anything looser (a name containing another, 集团 / 科技 dropped) is no match: a group,
+ * its listed part and a namesake are told apart by the disclosure, not by likeness.
+ */
+export function pickExchange(names: string[], hits: ExchangeHit[], orgNameOf: (code: string) => string | undefined): ExchangeHit | null {
+  const keys = new Set(names.map(companyKey));
+  const live = hits.filter((h) => h.delisted !== "true" && h.category === "A股");
+  const same = live.filter((h) => keys.has(companyKey(h.zwjc)) || keys.has(companyKey(orgNameOf(h.code) ?? "")));
+  return same.length === 1 ? same[0] : null;
+}
+
+/** 巨潮's company overview: the full name and the website(s) the company discloses (F011V, may list several). */
+export function parseProfile(x: any): ExchangeProfile | null {
+  const b = x?.data?.records?.[0]?.basicInformation?.[0];
+  if (!b?.ORGNAME) return null;
+  const websites = String(b.F011V ?? "").split(/[;；,，\s]+/).map((w) => w.trim()).filter((w) => /^(https?:\/\/)?[a-z0-9-]+(\.[a-z0-9-]+)+/i.test(w));
+  return { orgName: String(b.ORGNAME).trim(), websites };
+}
+
+const CNINFO = "http://www.cninfo.com.cn";
+const getJson = async (url: string, init?: RequestInit) => (await guardedFetch(url, { ...init, headers: { "user-agent": "Mozilla/5.0", ...(init?.headers as any) }, signal: AbortSignal.timeout(20_000) })).json();
+
+/**
+ * Put on record the website a listed company discloses on 巨潮, for a library company that is that listed company —
+ * the exact host, valid 90 days. Looked up once a month per company; what was found (or why not) is kept.
+ */
+export async function exchangeRoot(db: Db, companyId: string, force = false): Promise<{ status: "added" | "kept" | "none" | "skipped"; note: string }> {
+  // a disclosure on record and not about to lapse: nothing to look up
+  const soon = new Date(Date.now() + 7 * 86400_000).toISOString();
+  if (!force && db.prepare("select 1 from company_site where company_id = ? and root_kind = 'exchange' and status = 'active' and (expires_at is null or expires_at > ?)").get(companyId, soon)) return { status: "skipped", note: "已有交易所披露的网址" };
+  const last = db.prepare("select at from trust_lookup where company_id = ? and kind = 'exchange'").get(companyId) as { at: string } | undefined;
+  if (!force && last && last.at > new Date(Date.now() - 30 * 86400_000).toISOString()) return { status: "skipped", note: "这个月查过" };
+  const co = db.prepare("select name, aliases from company where id = ?").get(companyId) as { name: string; aliases: string } | undefined;
+  if (!co) return { status: "none", note: "没有这家公司" };
+  let aliases: string[] = [];
+  try { aliases = JSON.parse(co.aliases || "[]"); } catch { /* none */ }
+  const done = (status: "added" | "kept" | "none", note: string) => { db.prepare("insert or replace into trust_lookup(company_id, kind, at, outcome, note) values (?,?,?,?,?)").run(companyId, "exchange", now(), status, note); return { status, note }; };
+  const hits = (await getJson(`${CNINFO}/new/information/topSearch/query`, { method: "POST", headers: { "content-type": "application/x-www-form-urlencoded" }, body: new URLSearchParams({ keyWord: co.name, maxNum: "10" }).toString() }).catch(() => null)) as ExchangeHit[] | null;
+  if (!Array.isArray(hits)) return done("none", "巨潮没查到");
+  const profiles = new Map<string, ExchangeProfile | null>();
+  for (const h of hits.filter((x) => x.delisted !== "true" && x.category === "A股").slice(0, 5)) {
+    profiles.set(h.code, parseProfile(await getJson(`${CNINFO}/data20/companyOverview/getCompanyIntroduction?scode=${h.code}`).catch(() => null)));
+  }
+  const hit = pickExchange([co.name, ...aliases], hits, (code) => profiles.get(code)?.orgName);
+  if (!hit) return done("none", "不是一家上市公司，或名字对得上的不止一家");
+  const p = profiles.get(hit.code);
+  if (!p?.websites.length) return done("none", `${hit.zwjc}（${hit.code}）没披露网址`);
+  const url = `${CNINFO}/data20/companyOverview/getCompanyIntroduction?scode=${hit.code}`;
+  let added = 0;
+  for (const w of p.websites) {
+    const key = siteKeyOf(/^https?:\/\//i.test(w) ? w : `http://${w}`);
+    if (!key) continue;
+    const r = addSite(db, { companyId, siteKey: key, rootKind: "exchange", basisUrl: url, basisQuote: `${p.orgName}（${hit.code} ${hit.zwjc}）在巨潮资讯披露的公司网址：${w}`, fingerprint: `exchange:${hit.code}:${p.orgName}:${w.toLowerCase()}`, days: 90 });
+    if ("id" in r) added++;
+  }
+  return done(added ? "added" : "kept", `${p.orgName}（${hit.code}）：${p.websites.join("、")}`);
 }
