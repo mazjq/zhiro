@@ -501,6 +501,15 @@ export const MIGRATIONS: string[] = [
   `
   create table trust_lookup (company_id text not null references company(id) on delete cascade, kind text not null, at text not null, outcome text not null, note text not null default '', primary key (company_id, kind)) without rowid;
   `,
+  // v51: a company's full names known from the same outside records as its sites (巨潮's disclosed name, Zhiro's own
+  // readers), each tied to the site record it came with: revoking that site revokes the name
+  `
+  create table company_identity (id text primary key, company_id text not null references company(id) on delete cascade, kind text not null, value text not null,
+    root_kind text not null, basis_url text not null default '', basis_quote text not null default '', basis_fingerprint text not null default '', site_id text,
+    status text not null default 'active', verified_at text not null, expires_at text, revoked_at text, revoked_by text not null default '', revoke_reason text not null default '');
+  create index company_identity_company on company_identity(company_id, status);
+  create index company_identity_site on company_identity(site_id);
+  `,
 ];
 
 /**

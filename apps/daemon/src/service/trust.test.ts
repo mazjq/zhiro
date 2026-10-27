@@ -4,7 +4,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { openDb } from "../db.js";
 import { ingest, type Listing } from "../data/index.js";
-import { addSite, revokeSite, trustedSites, listSites, pickExchange, parseProfile, linkFromRoots, hiringLinksTo, type ExchangeHit, type PageLinks } from "./trust.js";
+import { addSite, revokeSite, trustedSites, trustedNames, listSites, listNames, pickExchange, parseProfile, linkFromRoots, hiringLinksTo, type ExchangeHit, type PageLinks } from "./trust.js";
 import { checkNotice, recordCheck, type NoticeDoc, type Extract } from "./notice.js";
 import { companyIdentity } from "./notice-verify.js";
 
@@ -152,5 +152,36 @@ describe("a home page in another language", () => {
       "https://www.example-heavy.cn/cn": { url: "https://www.example-heavy.cn/cn", title: "示例重工", links: [{ text: "校园招聘", href: `http://${T}/campus` }] },
     } as Record<string, PageLinks>)[u] ?? null;
     expect((await linkFromRoots(read, db, company, T)).status).toBe("added");
+  });
+});
+
+describe("full names known from the same outside records as the sites", () => {
+  const energyDoc = (): NoticeDoc => ({ url: "https://zhaopin.chnenergy.com.cn/annc/1", finalUrl: "https://zhaopin.chnenergy.com.cn/annc/1", via: "http", status: "ok", title: "国家能源集团2027届统招公告",
+    text: "国家能源投资集团有限责任公司 2027届高校毕业生招聘公告。招聘对象：2027届毕业生。网申截止时间：2099年10月31日。", images: [], complete: true });
+  const energyEx: Extract = { ...ex, issuer: "国家能源投资集团有限责任公司" };
+
+  it("an announcement naming the built-in company by its full name passes the issuer check, leaning on that name", () => {
+    const { dir, db, co, camp } = setup();
+    const energy = co("国家能源集团");
+    const r = checkNotice(energyDoc(), energyEx, companyIdentity(db, energy), SEASON);
+    expect(r.gates.issuer.result).toBe("pass");
+    expect(r.gates.issuer.deps?.[0].kind).toBe("name");
+    expect(r.outcome).toBe("fact");
+    const rec = recordCheck({ db, vault: dir }, { type: "campaign", id: camp("国家能源集团") }, energyDoc(), energyEx, r);
+    expect(rec.factId).toBeTruthy();
+    // the name goes with its site: revoking the site undoes the check and its deadline
+    const site = listSites(db, energy)[0];
+    const out = revokeSite(db, site.id, "test", "撤回");
+    expect(out).toMatchObject({ checks: 1, facts: 1 });
+    expect(trustedNames(db, energy).size).toBe(0);
+  });
+
+  it("a name record revoked on its own: the site stands, the name no longer passes", () => {
+    const { db, co } = setup();
+    const energy = co("国家能源集团");
+    const [name] = listNames(db, energy);
+    revokeSite(db, name.id, "test", "全称写错了");
+    expect(trustedSites(db, energy).size).toBe(1);
+    expect(checkNotice(energyDoc(), energyEx, companyIdentity(db, energy), SEASON).gates.issuer.result).toBe("fail");
   });
 });

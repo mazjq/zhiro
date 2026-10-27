@@ -17,11 +17,11 @@ export interface SiteRow { id: string; company_id: string; site_key: string; roo
  * Sites written into Zhiro's own readers, each read from one company's own hiring site, reviewed with the code: the
  * exact host, never its whole domain. A company here that is not in the library yet is skipped until it is.
  */
-export const BUILTIN_SITES: { company: string; site: string; why: string }[] = [
-  { company: "国家能源集团", site: "zhaopin.chnenergy.com.cn", why: "Zhiro 内置读取器 chnenergy：国家能源集团招聘平台" },
-  { company: "中国华能", site: "zhaopin.chng.com.cn", why: "Zhiro 内置读取器 chng：中国华能招聘平台" },
-  { company: "快手", site: "campus.kuaishou.cn", why: "Zhiro 内置读取器 kuaishou：快手校园招聘" },
-  { company: "小红书", site: "job.xiaohongshu.com", why: "Zhiro 内置读取器 xiaohongshu：小红书招聘" },
+export const BUILTIN_SITES: { company: string; site: string; why: string; fullName: string }[] = [
+  { company: "国家能源集团", site: "zhaopin.chnenergy.com.cn", why: "Zhiro 内置读取器 chnenergy：国家能源集团招聘平台", fullName: "国家能源投资集团有限责任公司" },
+  { company: "中国华能", site: "zhaopin.chng.com.cn", why: "Zhiro 内置读取器 chng：中国华能招聘平台", fullName: "中国华能集团有限公司" },
+  { company: "快手", site: "campus.kuaishou.cn", why: "Zhiro 内置读取器 kuaishou：快手校园招聘", fullName: "北京快手科技有限公司" },
+  { company: "小红书", site: "job.xiaohongshu.com", why: "Zhiro 内置读取器 xiaohongshu：小红书招聘", fullName: "行吟信息科技（上海）有限公司" },
 ];
 
 /** Put the built-in sites on record for the companies the library has. A site once revoked is never brought back here. */
@@ -31,8 +31,33 @@ export function syncBuiltinSites(db: Db): void {
   for (const b of BUILTIN_SITES) {
     const co = company.get(b.company) as { id: string } | undefined;
     if (!co || known.get(co.id, b.site)) continue;
-    db.prepare("insert into company_site(id, company_id, site_key, root_kind, basis_quote, basis_fingerprint, verified_at) values (?,?,?,?,?,?,?)").run(ulid(), co.id, b.site, "builtin", b.why, `builtin:${b.site}`, now());
+    const site = ulid();
+    db.prepare("insert into company_site(id, company_id, site_key, root_kind, basis_quote, basis_fingerprint, verified_at) values (?,?,?,?,?,?,?)").run(site, co.id, b.site, "builtin", b.why, `builtin:${b.site}`, now());
+    addName(db, { companyId: co.id, value: b.fullName, rootKind: "builtin", basisUrl: "", basisQuote: `${b.why}；全称 ${b.fullName}`, fingerprint: `builtin:${b.site}:${b.fullName}`, siteId: site });
   }
+}
+
+/** Put a company's full name on record, tied to the site record it came with. Refused when the same evidence was revoked. */
+export function addName(db: Db, p: { companyId: string; value: string; rootKind: "builtin" | "exchange"; basisUrl: string; basisQuote: string; fingerprint: string; siteId: string; days?: number }): { id: string } | { refused: string } {
+  const value = p.value.trim();
+  if (!value) return { refused: "没有名字" };
+  if (db.prepare("select 1 from company_identity where company_id = ? and kind = 'name' and basis_fingerprint = ? and status = 'revoked'").get(p.companyId, p.fingerprint)) return { refused: "这条证据之前被撤回过" };
+  const expires = p.days ? new Date(Date.now() + p.days * 86400_000).toISOString() : null;
+  const same = db.prepare("select id from company_identity where company_id = ? and kind = 'name' and basis_fingerprint = ? and status = 'active'").get(p.companyId, p.fingerprint) as { id: string } | undefined;
+  if (same) { db.prepare("update company_identity set verified_at = ?, expires_at = ?, site_id = ? where id = ?").run(now(), expires, p.siteId, same.id); return { id: same.id }; }
+  const id = ulid();
+  db.prepare("insert into company_identity(id, company_id, kind, value, root_kind, basis_url, basis_quote, basis_fingerprint, site_id, verified_at, expires_at) values (?,?,?,?,?,?,?,?,?,?,?)")
+    .run(id, p.companyId, "name", value, p.rootKind, p.basisUrl, p.basisQuote.slice(0, 600), p.fingerprint, p.siteId, now(), expires);
+  return { id };
+}
+
+/** The company's full names that stand now: name → the ids of the records that vouch for it. */
+export function trustedNames(db: Db, companyId: string): Map<string, string[]> {
+  syncBuiltinSites(db);
+  const out = new Map<string, string[]>();
+  for (const r of db.prepare("select id, value from company_identity where company_id = ? and kind = 'name' and status = 'active' and (expires_at is null or expires_at > ?)").all(companyId, now()) as { id: string; value: string }[])
+    out.set(r.value, [...(out.get(r.value) ?? []), r.id]);
+  return out;
 }
 
 /** The company's sites that stand now: site key → the ids of the records that vouch for it (one is enough). */
@@ -59,11 +84,12 @@ export function addSite(db: Db, p: { companyId: string; siteKey: string; rootKin
   return { id };
 }
 
-export type Dep = { kind: "site" | "account"; id: string };
+export type Dep = { kind: "site" | "account" | "name"; id: string };
 /** Whether everything a check leaned on still stands (checked inside the transaction that writes its deadline). */
 export function depsStand(db: Db, deps: Dep[]): boolean {
   const site = db.prepare("select 1 from company_site where id = ? and status = 'active' and (expires_at is null or expires_at > ?)");
-  return deps.every((d) => d.kind !== "site" || !!site.get(d.id, now()));
+  const name = db.prepare("select 1 from company_identity where id = ? and status = 'active' and (expires_at is null or expires_at > ?)");
+  return deps.every((d) => (d.kind === "site" ? !!site.get(d.id, now()) : d.kind === "name" ? !!name.get(d.id, now()) : true));
 }
 
 /**
@@ -75,17 +101,26 @@ export function revokeSite(db: Db, id: string, by: string, reason: string): { re
   const at = now();
   db.exec("begin");
   try {
-    const revoked: string[] = [];
-    const queue = [id];
+    const revoked: string[] = [], names: string[] = [];
+    // a name record revoked on its own: only it, and what leaned on it
+    if (db.prepare("select 1 from company_identity where id = ?").get(id)) {
+      if (db.prepare("update company_identity set status = 'revoked', revoked_at = ?, revoked_by = ?, revoke_reason = ? where id = ? and status != 'revoked'").run(at, by, reason, id).changes) names.push(id);
+    }
+    const queue = names.length ? [] : [id];
     while (queue.length) {
       const x = queue.shift()!;
       const r = db.prepare("update company_site set status = 'revoked', revoked_at = ?, revoked_by = ?, revoke_reason = ? where id = ? and status != 'revoked'").run(at, by, revoked.length ? `依据 ${id} 已撤回` : reason, x);
       if (!r.changes) continue;
       revoked.push(x);
       for (const c of db.prepare("select id from company_site where parent_id = ? and status != 'revoked'").all(x) as { id: string }[]) queue.push(c.id);
+      // the names that came with this site go with it
+      for (const n of db.prepare("select id from company_identity where site_id = ? and status != 'revoked'").all(x) as { id: string }[]) {
+        db.prepare("update company_identity set status = 'revoked', revoked_at = ?, revoked_by = ?, revoke_reason = ? where id = ?").run(at, by, `依据 ${id} 已撤回`, n.id);
+        names.push(n.id);
+      }
     }
-    const marks = revoked.map(() => "?").join(",");
-    const checks = revoked.length ? (db.prepare(`select distinct d.check_id, k.subject_type, k.subject_id from notice_check_dep d join notice_check k on k.id = d.check_id where d.kind = 'site' and d.ref_id in (${marks}) and k.invalidated_at is null`).all(...revoked) as { check_id: string; subject_type: string; subject_id: string }[]) : [];
+    const refs = [...revoked.map((r) => ["site", r]), ...names.map((n) => ["name", n])];
+    const checks = refs.length ? (db.prepare(`select distinct d.check_id, k.subject_type, k.subject_id from notice_check_dep d join notice_check k on k.id = d.check_id where (${refs.map(() => "(d.kind = ? and d.ref_id = ?)").join(" or ")}) and k.invalidated_at is null`).all(...refs.flat()) as { check_id: string; subject_type: string; subject_id: string }[]) : [];
     let facts = 0;
     for (const k of checks) {
       db.prepare("update notice_check set invalidated_at = ? where id = ?").run(at, k.check_id);
@@ -93,8 +128,18 @@ export function revokeSite(db: Db, id: string, by: string, reason: string): { re
     }
     db.exec("commit");
     const campaigns = [...new Set(checks.filter((k) => k.subject_type === "campaign").map((k) => k.subject_id))];
-    return { revoked, checks: checks.length, facts, campaigns };
+    return { revoked: [...revoked, ...names], checks: checks.length, facts, campaigns };
   } catch (e) { db.exec("rollback"); throw e; }
+}
+
+/** A company's full-name records, newest first. */
+export function listNames(db: Db, companyId: string) {
+  syncBuiltinSites(db);
+  return (db.prepare("select * from company_identity where company_id = ? and kind = 'name' order by verified_at desc").all(companyId) as any[]).map((r) => ({
+    id: r.id as string, name: r.value as string, how: r.root_kind as string, basisUrl: r.basis_url as string, basisQuote: r.basis_quote as string, siteId: (r.site_id ?? null) as string | null,
+    status: (r.status === "active" && r.expires_at && r.expires_at <= now() ? "expired" : r.status) as string, verifiedAt: r.verified_at as string,
+    revoked: r.revoked_at ? { at: r.revoked_at as string, by: r.revoked_by as string, reason: r.revoke_reason as string } : null,
+  }));
 }
 
 /** A company's site records, newest first, with how each is known and whether it stands. */
@@ -161,13 +206,15 @@ export async function exchangeRoot(db: Db, companyId: string, force = false): Pr
   const p = profiles.get(hit.code);
   if (!p?.websites.length) return done("none", `${hit.zwjc}（${hit.code}）没披露网址`);
   const url = `${CNINFO}/data20/companyOverview/getCompanyIntroduction?scode=${hit.code}`;
-  let added = 0;
+  let added = 0, first = "";
   for (const w of p.websites) {
     const key = siteKeyOf(/^https?:\/\//i.test(w) ? w : `http://${w}`);
     if (!key) continue;
     const r = addSite(db, { companyId, siteKey: key, rootKind: "exchange", basisUrl: url, basisQuote: `${p.orgName}（${hit.code} ${hit.zwjc}）在巨潮资讯披露的公司网址：${w}`, fingerprint: `exchange:${hit.code}:${p.orgName}:${w.toLowerCase()}`, days: 90 });
-    if ("id" in r) added++;
+    if ("id" in r) { added++; first ||= r.id; }
   }
+  // the full name disclosed with it is the company's own, tied to that site record
+  if (first) addName(db, { companyId, value: p.orgName, rootKind: "exchange", basisUrl: url, basisQuote: `巨潮资讯：${hit.zwjc}（${hit.code}）的公司全称为 ${p.orgName}`, fingerprint: `exchange:${hit.code}:${p.orgName}`, siteId: first, days: 90 });
   return done(added ? "added" : "kept", `${p.orgName}（${hit.code}）：${p.websites.join("、")}`);
 }
 

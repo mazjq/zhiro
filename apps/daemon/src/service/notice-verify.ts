@@ -9,7 +9,7 @@ import { articleText, fetchArticle, loadImages } from "./extract.js";
 import { readPage } from "./page-read.js";
 import { withPurpose } from "./usage.js";
 import { resolveFor, campaignSaying, loadContext } from "./deadlines.js";
-import { trustedSites, exchangeRoot, linkFromRoots, anchors, type PageLinks } from "./trust.js";
+import { trustedSites, trustedNames, exchangeRoot, linkFromRoots, anchors, type PageLinks } from "./trust.js";
 import { checkNotice, recordCheck, siteKey, fingerprint, RULE_VERSION, type NoticeDoc, type Extract, type CompanyIdentity, type Outcome, type Gates, type Gate } from "./notice.js";
 
 /**
@@ -33,7 +33,7 @@ export function companyIdentity(db: Db, companyId: string): CompanyIdentity {
   const accounts = new Set((db.prepare("select account_id from company_account where company_id = ?").all(companyId) as { account_id: string }[]).map((r) => r.account_id));
   let aliases: string[] = [];
   try { aliases = JSON.parse(co.aliases || "[]"); } catch { /* none */ }
-  return { name: co.name, aliases, sites, accounts, siteIds };
+  return { name: co.name, aliases, sites, accounts, siteIds, names: trustedNames(db, companyId) };
 }
 
 /** One reading: a WeChat post with its account and posters, else the page as it ended up (the browser when HTTP is thin). */
