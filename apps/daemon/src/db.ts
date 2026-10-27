@@ -497,6 +497,10 @@ export const MIGRATIONS: string[] = [
   create index notice_check_dep_ref on notice_check_dep(kind, ref_id);
   alter table notice_check add column invalidated_at text;
   `,
+  // v50: when a company's sites were last looked up in an outside record (巨潮 for listed companies), and what came of it
+  `
+  create table trust_lookup (company_id text not null references company(id) on delete cascade, kind text not null, at text not null, outcome text not null, note text not null default '', primary key (company_id, kind)) without rowid;
+  `,
 ];
 
 /**
