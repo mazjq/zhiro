@@ -1,10 +1,10 @@
-import { describe, it, expect } from "vitest";
+import { describe, it, expect, vi, afterEach } from "vitest";
 import { mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { openDb } from "../db.js";
 import { ingest, type Listing } from "../data/index.js";
-import { addSite, revokeSite, trustedSites, listSites, pickExchange, parseProfile, type ExchangeHit } from "./trust.js";
+import { addSite, revokeSite, trustedSites, listSites, pickExchange, parseProfile, linkFromRoots, hiringLinksTo, type ExchangeHit, type PageLinks } from "./trust.js";
 import { checkNotice, recordCheck, type NoticeDoc, type Extract } from "./notice.js";
 import { companyIdentity } from "./notice-verify.js";
 
@@ -94,5 +94,63 @@ describe("exchange disclosures: one listed company, by its exact name", () => {
     expect(parseProfile({ data: { records: [{ basicInformation: [{ ORGNAME: "武汉华中数控股份有限公司", F011V: "www.huazhongcnc.com；http://www.hzncc.com" }] }] } }))
       .toEqual({ orgName: "武汉华中数控股份有限公司", websites: ["www.huazhongcnc.com", "http://www.hzncc.com"] });
     expect(parseProfile({ data: { records: [] } })).toBeNull();
+  });
+});
+
+describe("one hop from a known site to its hiring site", () => {
+  afterEach(() => vi.unstubAllGlobals());
+  const T = "93.184.216.34"; // a public address written as a number: the guard needs no lookup in a test
+  const pages = (o: Record<string, PageLinks>) => async (u: string) => o[u] ?? null;
+  const home = (links: { text: string; href: string }[]): PageLinks => ({ url: "https://example-heavy.cn/", title: "示例重工", links });
+  function withRoot() {
+    const { db, co } = setup();
+    const company = co("示例重工股份有限公司");
+    const root = addSite(db, { companyId: company, siteKey: "example-heavy.cn", rootKind: "exchange", basisUrl: "https://x/d", basisQuote: "公司网址", fingerprint: "a" }) as { id: string };
+    return { db, company, root };
+  }
+
+  it("a hiring link on the known site's hiring page puts the target on record, with the site it came from", async () => {
+    vi.stubGlobal("fetch", vi.fn(async () => new Response("ok")));
+    const { db, company, root } = withRoot();
+    const read = pages({
+      "https://example-heavy.cn/": home([{ text: "人才招聘", href: "https://example-heavy.cn/career" }, { text: "新闻", href: "https://example-heavy.cn/news" }]),
+      "https://example-heavy.cn/career": { url: "https://example-heavy.cn/career", title: "人才招聘", links: [{ text: "校园招聘入口", href: `http://${T}/campus` }] },
+    });
+    expect((await linkFromRoots(read, db, company, T)).status).toBe("added");
+    const s = listSites(db, company).find((x) => x.site === T)!;
+    expect(s).toMatchObject({ how: "linked", parentId: root.id, basisUrl: "https://example-heavy.cn/career" });
+  });
+
+  it("not from a link that is not a hiring entry, nor through the known site's own redirect, nor to a page that ends elsewhere", async () => {
+    const { db, company } = withRoot();
+    vi.stubGlobal("fetch", vi.fn(async () => new Response("ok")));
+    expect((await linkFromRoots(pages({ "https://example-heavy.cn/": home([{ text: "合作伙伴", href: `http://${T}/` }]) }), db, company, T)).status).toBe("none");
+    expect(hiringLinksTo([home([{ text: "人才招聘", href: `https://example-heavy.cn/go?u=http://${T}/` }])], T)).toEqual([]);
+    vi.stubGlobal("fetch", vi.fn(async (u: string) => (u.includes(T) ? new Response(null, { status: 302, headers: { location: "http://1.1.1.1/elsewhere" } }) : new Response("ok"))));
+    expect((await linkFromRoots(pages({ "https://example-heavy.cn/": home([{ text: "加入我们", href: `http://${T}/` }]) }), db, company, T, true)).status).toBe("none");
+  });
+
+  it("a site found this way vouches for nothing further", async () => {
+    vi.stubGlobal("fetch", vi.fn(async () => new Response("ok")));
+    const { db, co: id } = setup();
+    const company = id("示例重工股份有限公司");
+    addSite(db, { companyId: company, siteKey: "example-heavy.cn", rootKind: "linked", basisUrl: "x", basisQuote: "x", fingerprint: "l" });
+    expect((await linkFromRoots(pages({ "https://example-heavy.cn/": home([{ text: "人才招聘", href: `http://${T}/` }]) }), db, company, T)).note).toBe("这家公司还没有已确认的官网");
+  });
+});
+
+describe("a home page in another language", () => {
+  afterEach(() => vi.unstubAllGlobals());
+  it("its own Chinese version is read too", async () => {
+    vi.stubGlobal("fetch", vi.fn(async () => new Response("ok")));
+    const { db, co: id } = setup();
+    const company = id("示例重工股份有限公司");
+    addSite(db, { companyId: company, siteKey: "example-heavy.cn", rootKind: "exchange", basisUrl: "https://x/d", basisQuote: "q", fingerprint: "a" });
+    const T = "93.184.216.34";
+    const read = async (u: string): Promise<PageLinks | null> => ({
+      "https://www.example-heavy.cn/": { url: "https://www.example-heavy.cn/en/", title: "Example Heavy", links: [{ text: "China - 中文", href: "https://www.example-heavy.cn/cn" }] },
+      "https://www.example-heavy.cn/cn": { url: "https://www.example-heavy.cn/cn", title: "示例重工", links: [{ text: "校园招聘", href: `http://${T}/campus` }] },
+    } as Record<string, PageLinks>)[u] ?? null;
+    expect((await linkFromRoots(read, db, company, T)).status).toBe("added");
   });
 });
