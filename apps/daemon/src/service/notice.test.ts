@@ -5,7 +5,7 @@ import { join } from "node:path";
 import { openDb } from "../db.js";
 import { ingest, type Listing } from "../data/index.js";
 import { resolveFor } from "./deadlines.js";
-import { checkNotice, recordCheck, siteKey, readDeadline, type NoticeDoc, type Extract, type CompanyIdentity } from "./notice.js";
+import { checkNotice, recordCheck, siteKey, readDeadline, kindsIn, batchKinds, type NoticeDoc, type Extract, type CompanyIdentity } from "./notice.js";
 
 const SEASON = { cohort: "2027", since: "2026-03-01", until: "2027-08-31" };
 const CO: CompanyIdentity = { name: "示例重工股份有限公司", aliases: ["示例重工"], sites: new Set(["mokahr:acme", "careers.example-heavy.cn"]), accounts: new Set(["MzA5biz"]) };
@@ -15,6 +15,34 @@ const ex = (o: Partial<Extract> = {}): Extract => ({ isRecruitment: true, issuer
   deadlineText: "网申截止时间：2099年10月31日", deadlineDate: "2099-10-31", deadlineImage: null, applyEntry: "官网", scope: "全部", doubts: "",
   seen: { chars: 1_000_000, images: 99, model: "first" }, ...o });
 const check = (d: Partial<NoticeDoc> = {}, e: Partial<Extract> = {}) => checkNotice(doc(d), ex(e), CO, SEASON);
+
+describe("批次: the material is the batch's kind of recruitment, both ways", () => {
+  const b = (kind: string, batch: string, title: string, batchQuote = "") => checkNotice(doc({ title }), ex({ batchQuote }), CO, SEASON, { kind, batch }).gates.batch;
+  it("kinds and rounds", () => {
+    expect(kindsIn("2027届秋季校园招聘暨实习生招聘")).toEqual(new Set(["intern", "main"]));
+    expect(kindsIn("2027届实习生招聘")).toEqual(new Set(["intern"]));
+    expect(kindsIn("某所2027届招聘启事")).toEqual(new Set(["main"]));
+    expect(batchKinds({ kind: "校招", batch: "秋招提前批" })).toEqual(new Set(["early"]));
+    expect(batchKinds({ kind: "实习", batch: "春招、实习" })).toEqual(new Set(["spring", "intern"]));
+    expect(batchKinds({ kind: "校招", batch: "" })).toEqual(new Set(["main"]));
+  });
+  it("the same recruitment passes; another round or kind does not; one that does not say is left for review", () => {
+    expect(b("校招", "秋招", "2027届校园招聘公告").result).toBe("pass");
+    expect(b("校招", "秋招", "2027届秋季校园招聘提前批").result).toBe("fail"); // the early round is another batch
+    expect(b("校招", "秋招提前批", "2027届秋季校园招聘公告").result).toBe("fail"); // and the other way round
+    expect(b("校招", "秋招提前批", "2027届提前批招聘").result).toBe("pass");
+    expect(b("校招", "秋招", "2027届暑期实习生招聘").result).toBe("fail");
+    expect(b("实习", "春招、实习", "2027届暑期实习生招聘").result).toBe("pass");
+    expect(b("校招", "秋招", "2027届春季补录公告").result).toBe("fail");
+    expect(b("校招", "2027年度高校毕业生统招公告", "2027年度西藏青海新疆高校毕业生专项招聘公告").result).toBe("fail");
+    expect(b("校招", "秋招", "招聘岗位一览").result).toBe("unknown");
+    expect(b("校招", "秋招", "招聘岗位一览", "2027届校园招聘").result).toBe("pass"); // the words in the body, on the page
+    expect(b("校招", "秋招", "招聘岗位一览", "2027届秋季校园招聘（不在页上）").result).toBe("unknown");
+  });
+  it("another batch's announcement writes no deadline", () => {
+    expect(checkNotice(doc({ title: "2027届暑期实习生招聘" }), ex(), CO, SEASON, { kind: "校招", batch: "秋招" }).outcome).toBe("review");
+  });
+});
 
 describe("公告核实: only a deadline that passes all four checks becomes a fact", () => {
   it("the company's own announcement, sentence on the page, this season → a fact", () => {
