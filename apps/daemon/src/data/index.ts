@@ -6,7 +6,7 @@
 export type { Listing, Source, SourceConfig, SourceContext, DataContext, GradeT } from "./types.js";
 export { pullOnce } from "./types.js";
 export { sources, sourceFor, siteKeyOf, aggregateIds, isAggregate, aggregateSql, isNotices, readerName } from "./readers/index.js";
-export { httpContext, publicUrl, isLocalPath, assertPublic, guardedFetch } from "./http.js";
+export { httpContext, publicUrl, isLocalPath, assertPublic, guardedFetch, guardedFetchTo } from "./http.js";
 export { ingest, recordFailedRun, campaignUrl, releaseClaims, type IngestResult, type Listed } from "./ingest.js";
 export { importFeed, liveFeedConfigs, feedConfigId, checkManifest, cleanListing, signedPart, FEED_PROTOCOL, type FeedConfig, type FeedManifest, type FeedSub, type FeedResult } from "./feed.js";
 export { runSource, type Progress, listSources, previewSource, forgetPreviews, reasonOf, SYNC_REASONS, sourceScan, scheduleSources } from "./sync.js";
