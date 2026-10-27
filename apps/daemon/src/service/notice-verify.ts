@@ -9,7 +9,7 @@ import { articleText, fetchArticle, loadImages } from "./extract.js";
 import { readPage } from "./page-read.js";
 import { withPurpose } from "./usage.js";
 import { resolveFor, campaignSaying, loadContext } from "./deadlines.js";
-import { trustedSites, trustedNames, exchangeRoot, govRoot, linkFromRoots, anchors, hiringPagesOn, type PageLinks } from "./trust.js";
+import { trustedSites, trustedNames, exchangeRoot, syncGov, linkFromRoots, anchors, hiringPagesOn, type PageLinks } from "./trust.js";
 import { checkNotice, recordCheck, siteKey, fingerprint, RULE_VERSION, SEASON, type NoticeDoc, type Extract, type CompanyIdentity, type Outcome, type Gates, type Gate } from "./notice.js";
 
 const unknown = (why: string): Gate => ({ result: "unknown", why });
@@ -35,7 +35,13 @@ export function companyIdentity(db: Db, companyId: string): CompanyIdentity {
   const accounts = new Set((db.prepare("select account_id from company_account where company_id = ?").all(companyId) as { account_id: string }[]).map((r) => r.account_id));
   let aliases: string[] = [];
   try { aliases = JSON.parse(co.aliases || "[]"); } catch { /* none */ }
-  return { name: co.name, aliases, sites, accounts, siteIds, names: trustedNames(db, companyId) };
+  // the hiring platforms of central enterprises on the 国资委 list (trust.ts govRoot), not their main sites: news there is not recruitment
+  const groupSites = new Map<string, { group: string; ids: string[]; names: string[] }>();
+  for (const r of db.prepare(`select s.id, s.site_key, s.company_id, g.name from company_site s join company g on g.id = s.company_id
+    where s.company_id != ? and s.root_kind in ('builtin', 'linked') and s.status = 'active' and (s.expires_at is null or s.expires_at > ?)
+    and exists (select 1 from company_site r where r.company_id = s.company_id and r.root_kind = 'gov' and r.status = 'active' and (r.expires_at is null or r.expires_at > ?))`).all(companyId, now(), now()) as { id: string; site_key: string; company_id: string; name: string }[])
+    groupSites.set(r.site_key, { group: r.name, ids: [...(groupSites.get(r.site_key)?.ids ?? []), r.id], names: groupSites.get(r.site_key)?.names ?? [r.name, ...trustedNames(db, r.company_id).keys()] });
+  return { name: co.name, aliases, sites, accounts, siteIds, names: trustedNames(db, companyId), groupSites };
 }
 
 /** One reading: a WeChat post with its account and posters, else the page as it ended up (the browser when HTTP is thin). */
@@ -199,7 +205,15 @@ export async function findOnSites(s: Services, companyId: string, campaignId: st
   const note = (outcome: string, n: string) => db.prepare("insert or replace into trust_lookup(company_id, kind, at, outcome, note) values (?,?,?,?,?)").run(companyId, kind, now(), outcome, n);
   note("running", ""); // ponytail: one daemon, so a row is enough to keep a second run off; a lease when lookups run elsewhere
   const out: string[] = [];
-  for (const site of [...trustedSites(db, companyId).keys()].filter((k) => !k.includes(":")).slice(0, 3)) {
+  const co = companyIdentity(db, companyId);
+  // a central enterprise's hiring platform too, when this company is plainly one of its units — named after the group,
+  // or its batch already links there — looking only for announcements in this company's name (E3; whose it is, is
+  // still for the checks to say)
+  const core = co.name.normalize("NFKC").replace(/(股份有限公司|有限责任公司|有限公司)$/, "");
+  const own = new Set(skip.size ? [...skip].map((u) => siteKey(u)).filter(Boolean) as string[] : []);
+  const groups = [...(co.groupSites ?? [])].filter(([k, g]) => !k.includes(":") && !co.sites.has(k) && (own.has(k) || g.names.some((n) => n && co.name.startsWith(n) && co.name !== n))).map(([k]) => k);
+  for (const site of [...[...co.sites].filter((k) => !k.includes(":")).slice(0, 3), ...groups.slice(0, 2)]) {
+    const group = !co.sites.has(site);
     let home: PageLinks | null = null;
     for (const u of [`https://${site}/`, `https://www.${site}/`, `http://${site}/`]) if ((home = await linksOf(s, u))) break;
     if (!home) continue;
@@ -207,7 +221,8 @@ export async function findOnSites(s: Services, companyId: string, campaignId: st
     // one level down: the hiring pages, not the announcements themselves (those are read as material below)
     const notices = new Set(home.links.filter((l) => NOTICE_LINK.test(l.text.normalize("NFKC"))).map((l) => l.href.split("#")[0]));
     for (const u of hiringPagesOn(home, site).filter((u) => !notices.has(u))) { if (pages.length >= 4) break; const p = await linksOf(s, u); if (p) pages.push(p); }
-    for (const u of noticeLinks(pages, site)) if (!skip.has(u) && !out.includes(u) && out.length < 5) out.push(u);
+    const mine = group ? pages.map((p) => ({ ...p, links: p.links.filter((l) => l.text.normalize("NFKC").includes(core)) })) : pages;
+    for (const u of noticeLinks(mine, site)) if (!skip.has(u) && !out.includes(u) && out.length < 5) out.push(u);
   }
   note(out.length ? "found" : "none", out.join(" ").slice(0, 600));
   return out;
@@ -231,7 +246,7 @@ export async function verifyNotice(s: Services, input: { campaignId?: string; po
   // the company's sites on record first: a listed company's disclosed website, a central enterprise's on the 国资委
   // list, each looked up once a month (trust.ts)
   await exchangeRoot(db, c.company_id).catch(() => null);
-  await govRoot(db, c.company_id).catch(() => null);
+  await syncGov(db).catch(() => 0);
   let co = companyIdentity(db, c.company_id);
   const subject = { type: "campaign" as const, id: c.id };
   // a known site's own page, as read for one hop to its hiring site (trust.ts linkFromRoots)

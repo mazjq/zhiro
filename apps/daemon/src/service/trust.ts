@@ -288,6 +288,27 @@ export async function govRoot(db: Db, companyId: string, force = false, read = r
   return done("added", `${hit.name}：${hit.url}`);
 }
 
+let govSynced = 0;
+/**
+ * Every library company that is on the 国资委 list, or was: looked up (each once a month, govRoot). A unit's check
+ * leans on its group's record, so the groups are put on record whichever company is being checked. Once a day at most.
+ */
+export async function syncGov(db: Db, read = readSasac): Promise<number> {
+  if (Date.now() - govSynced < 86400_000) return 0;
+  const entries = await read();
+  if (!entries) return 0;
+  govSynced = Date.now();
+  const byKey = new Map<string, Set<string>>();
+  const put = (name: string, id: string) => { const k = legalKey(name); if (k) byKey.set(k, new Set([...(byKey.get(k) ?? []), id])); };
+  for (const c of db.prepare("select id, name from company").all() as { id: string; name: string }[]) put(c.name, c.id);
+  for (const n of db.prepare("select company_id, value from company_identity where kind = 'name' and status = 'active'").all() as { company_id: string; value: string }[]) put(n.value, n.company_id);
+  const ids = new Set<string>();
+  for (const e of entries) { const hit = byKey.get(legalKey(e.name)); if (hit?.size === 1) ids.add([...hit][0]); }
+  for (const r of db.prepare("select distinct company_id from company_site where root_kind = 'gov' and status = 'active'").all() as { company_id: string }[]) ids.add(r.company_id);
+  for (const id of ids) await govRoot(db, id, false, async () => entries);
+  return ids.size;
+}
+
 // ---------- one hop from a known site to its hiring site ----------
 
 const RECRUIT = /招聘|加入我们|加入.{0,4}(团队|我们)|人才|校园|校招|join\s*us|careers?\b|jobs?\b/i;
