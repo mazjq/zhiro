@@ -171,3 +171,37 @@ describe("not taken from the batch's own links: look on the company's own sites 
     expect(r.results[0].reasons.join()).toContain("几份材料写的截止不同");
   });
 });
+
+describe("a unit's announcement on its group's hiring platform (E2, E3)", () => {
+  afterEach(() => vi.unstubAllGlobals());
+  it("found on the platform by the unit's name, and taken as published by the group", async () => {
+    const dir = mkdtempSync(join(tmpdir(), "zhiro-notice-group-"));
+    const db = openDb(join(dir, "t.db"));
+    const domain = new Domain(db);
+    const unit = "示例集团有限公司第一研究所";
+    ingest(domain, dir, "capture", "c1", [{ externalId: "u1", url: "https://mp.weixin.qq.com/s/x", title: "控制算法工程师", company: unit, locations: ["武汉"], publisher: "x", grade: "官方", isOriginal: true, confidence: 1, cohort: "2027届", batch: "秋招" } as Listing,
+      { externalId: "g1", url: "https://example-group.cn/jobs/1", title: "工程师", company: "示例集团", locations: ["北京"], publisher: "x", grade: "官方", isOriginal: true, confidence: 1, cohort: "2027届", batch: "秋招" } as Listing]);
+    const id = (n: string) => (db.prepare("select id from company where name = ?").get(n) as any).id as string;
+    const root = addSite(db, { companyId: id("示例集团"), siteKey: "example-group.cn", rootKind: "gov", basisUrl: "http://www.sasac.gov.cn/x", basisQuote: "示例集团有限公司 → example-group.cn", fingerprint: "g" }) as { id: string };
+    addSite(db, { companyId: id("示例集团"), siteKey: "93.184.216.34", rootKind: "linked", basisUrl: "https://example-group.cn/", basisQuote: "人才招聘", fingerprint: "l", parentId: root.id });
+    const campaignId = (db.prepare("select c.id from campaign c where c.company_id = ?").get(id(unit)) as any).id;
+    db.prepare("update campaign set notice_url = ?, apply_url = ? where id = ?").run("https://mp.weixin.qq.com/s/x", "", campaignId);
+    const llm: any = { model: () => ({ id: "fake", provider: "p", input: ["text"] }), models: { getModels: () => [], completeSimple: async () => ({ content: [{ type: "text", text: JSON.stringify({ isRecruitment: true, issuer: unit, cohort: "2027届", cohortQuote: "招聘对象：2027届毕业生", deadlineText: "网申截止时间：2099年10月31日", deadlineImage: null, scope: "全部", doubts: "", batchQuote: "2027届校园招聘公告" }) }] }) } };
+    const s = createServices({ db, domain, config: testConfig(dir, { sources: [] }) });
+    (s as any).llm = llm;
+    const body = `<html><head><title>${unit} 2027届校园招聘公告</title></head><body><article>${`${unit} 2027届校园招聘公告。招聘对象：2027届毕业生。`.repeat(40)}网申截止时间：2099年10月31日。</article></body></html>`;
+    vi.stubGlobal("fetch", vi.fn(async (u: string) => {
+      const url = new URL(u);
+      if (url.hostname === "mp.weixin.qq.com") return new Response("", { status: 401 });
+      if (url.pathname === "/") return new Response(home([[`${SITE}/n/unit`, `${unit}2027届校园招聘公告`], [`${SITE}/n/other`, "示例集团有限公司第二研究所2027届校园招聘公告"]]), { headers: { "content-type": "text/html" } });
+      if (url.pathname === "/n/unit") return new Response(body, { headers: { "content-type": "text/html" } });
+      return new Response("", { status: 404 });
+    }));
+    const r: any = await callTool("notice.verify", { campaignId }, HUMAN, s);
+    const found = r.results.filter((x: any) => x.found);
+    expect(found.map((x: any) => x.url)).toEqual([`${SITE}/n/unit`]); // the unit's, not its sibling's
+    expect(found[0]).toMatchObject({ outcome: "fact" });
+    const checks: any = await callTool("notice.checks", { campaignId }, HUMAN, s);
+    expect(checks.items.find((k: any) => k.url === `${SITE}/n/unit`).gates.publisher).toContain("「示例集团」自己的招聘平台");
+  });
+});

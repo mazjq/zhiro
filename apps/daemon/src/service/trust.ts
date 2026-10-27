@@ -10,7 +10,7 @@ import { siteKey as siteKeyOf } from "./notice.js";
  * what was concluded from it: the sites it vouched for, the checks that leaned on it and the deadlines they wrote.
  */
 
-export type RootKind = "builtin" | "exchange" | "linked";
+export type RootKind = "builtin" | "exchange" | "gov" | "linked";
 export interface SiteRow { id: string; company_id: string; site_key: string; root_kind: RootKind; basis_url: string; basis_quote: string; basis_fingerprint: string; parent_id: string | null; status: string; verified_at: string; expires_at: string | null }
 
 /**
@@ -38,7 +38,7 @@ export function syncBuiltinSites(db: Db): void {
 }
 
 /** Put a company's full name on record, tied to the site record it came with. Refused when the same evidence was revoked. */
-export function addName(db: Db, p: { companyId: string; value: string; rootKind: "builtin" | "exchange"; basisUrl: string; basisQuote: string; fingerprint: string; siteId: string; days?: number }): { id: string } | { refused: string } {
+export function addName(db: Db, p: { companyId: string; value: string; rootKind: "builtin" | "exchange" | "gov"; basisUrl: string; basisQuote: string; fingerprint: string; siteId: string; days?: number }): { id: string } | { refused: string } {
   const value = p.value.trim();
   if (!value) return { refused: "没有名字" };
   if (db.prepare("select 1 from company_identity where company_id = ? and kind = 'name' and basis_fingerprint = ? and status = 'revoked'").get(p.companyId, p.fingerprint)) return { refused: "这条证据之前被撤回过" };
@@ -218,6 +218,97 @@ export async function exchangeRoot(db: Db, companyId: string, force = false): Pr
   return done(added ? "added" : "kept", `${p.orgName}（${hit.code}）：${p.websites.join("、")}`);
 }
 
+// ---------- 国资委「中央企业网站」: the list of central enterprises with their sites ----------
+
+/** The one page read, reviewed: each entry is 「<a href=site>full name</a>」. Not any page on a gov.cn host. */
+export const SASAC_LIST = "http://www.sasac.gov.cn/n2588045/n27271785/n27271792/c14159097/content.html";
+export interface GovEntry { name: string; url: string }
+
+/** The entries of the list: links off sasac.gov.cn whose words are an organisation's full name. */
+export function parseSasac(html: string): GovEntry[] {
+  const out: GovEntry[] = [];
+  for (const l of anchors(html, SASAC_LIST)) {
+    const name = l.text.normalize("NFKC").replace(/\s+/g, "");
+    if (/(^|\.)sasac\.gov\.cn$/i.test(new URL(l.href).hostname) || !/(公司|集团|总局|研究院|总院)$/.test(name) || name.length < 6) continue;
+    if (!out.some((e) => e.name === name)) out.push({ name, url: l.href });
+  }
+  return out;
+}
+
+// the same name written with another legal form, or brackets of another width: nothing else is let go (集团, places, 研究院 stay)
+const legalKey = (s: string) => (s ?? "").normalize("NFKC").replace(/\s+/g, "").replace(/[（(]/g, "(").replace(/[）)]/g, ")").replace(/(股份有限公司|有限责任公司|有限公司)$/, "");
+
+/**
+ * The list's entry a library company is: its own name, or a full name already on record for it, is the entry's full
+ * name (up to the legal form) — exactly one entry, and no other library company has that name. Aliases (mostly from
+ * sheets) are not used.
+ */
+export function pickGov(names: string[], entries: GovEntry[], others: (key: string) => boolean): GovEntry | null {
+  const keys = new Set(names.map(legalKey).filter(Boolean));
+  const hits = entries.filter((e) => keys.has(legalKey(e.name)));
+  return hits.length === 1 && !others(legalKey(hits[0].name)) ? hits[0] : null;
+}
+
+let sasacCache: { at: number; entries: GovEntry[] } | null = null;
+const readSasac = async (): Promise<GovEntry[] | null> => {
+  if (sasacCache && Date.now() - sasacCache.at < 86400_000) return sasacCache.entries;
+  const res = await guardedFetch(SASAC_LIST, { headers: { "user-agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130 Safari/537.36" }, signal: AbortSignal.timeout(20_000) }).catch(() => null);
+  if (!res?.ok) return null;
+  const entries = parseSasac(await res.text());
+  if (entries.length < 50) return null; // not the list as reviewed: a changed or cut-off page renews nothing
+  sasacCache = { at: Date.now(), entries };
+  return entries;
+};
+
+/**
+ * Put on record the site the 国资委 list gives for a library company that is a central enterprise on it — the exact
+ * host, valid 90 days, with the full name. Looked up once a month per company. When the list was read whole and no
+ * longer has the entry (or gives another site), what the old entry vouched for is revoked.
+ */
+export async function govRoot(db: Db, companyId: string, force = false, read = readSasac): Promise<{ status: "added" | "kept" | "none" | "skipped"; note: string }> {
+  const last = db.prepare("select at from trust_lookup where company_id = ? and kind = 'gov'").get(companyId) as { at: string } | undefined;
+  if (!force && last && last.at > new Date(Date.now() - 30 * 86400_000).toISOString()) return { status: "skipped", note: "这个月查过" };
+  const co = db.prepare("select name from company where id = ?").get(companyId) as { name: string } | undefined;
+  if (!co) return { status: "none", note: "没有这家公司" };
+  const entries = await read();
+  if (!entries) return { status: "none", note: "国资委名录这次没读到" }; // not looked up: tried again next time, nothing renewed
+  const done = (status: "added" | "kept" | "none", note: string) => { db.prepare("insert or replace into trust_lookup(company_id, kind, at, outcome, note) values (?,?,?,?,?)").run(companyId, "gov", now(), status, note); return { status, note }; };
+  const others = (key: string) => (db.prepare("select name from company where id != ?").all(companyId) as { name: string }[]).some((c) => legalKey(c.name) === key);
+  const hit = pickGov([co.name, ...trustedNames(db, companyId).keys()], entries, others);
+  const fp = hit ? `gov:sasac:${hit.name}:${hit.url.toLowerCase()}` : "";
+  // an entry gone from the list, or changed: what it vouched for goes
+  for (const old of db.prepare("select id, basis_fingerprint from company_site where company_id = ? and root_kind = 'gov' and status = 'active'").all(companyId) as { id: string; basis_fingerprint: string }[])
+    if (old.basis_fingerprint !== fp) revokeSite(db, old.id, "国资委名录", "国资委「中央企业网站」上已没有这一条");
+  if (!hit) return done("none", "不在国资委「中央企业网站」上，或对得上的不止一家");
+  const key = siteKeyOf(hit.url);
+  if (!key) return done("none", `${hit.name} 的网址看不出是哪个站：${hit.url}`);
+  const r = addSite(db, { companyId, siteKey: key, rootKind: "gov", basisUrl: SASAC_LIST, basisQuote: `国资委「中央企业网站」：${hit.name} → ${hit.url}`, fingerprint: fp, days: 90 });
+  if (!("id" in r)) return done("none", r.refused);
+  addName(db, { companyId, value: hit.name, rootKind: "gov", basisUrl: SASAC_LIST, basisQuote: `国资委「中央企业网站」列出的中央企业全称：${hit.name}`, fingerprint: `${fp}:name`, siteId: r.id, days: 90 });
+  return done("added", `${hit.name}：${hit.url}`);
+}
+
+let govSynced = 0;
+/**
+ * Every library company that is on the 国资委 list, or was: looked up (each once a month, govRoot). A unit's check
+ * leans on its group's record, so the groups are put on record whichever company is being checked. Once a day at most.
+ */
+export async function syncGov(db: Db, read = readSasac): Promise<number> {
+  if (Date.now() - govSynced < 86400_000) return 0;
+  const entries = await read();
+  if (!entries) return 0;
+  govSynced = Date.now();
+  const byKey = new Map<string, Set<string>>();
+  const put = (name: string, id: string) => { const k = legalKey(name); if (k) byKey.set(k, new Set([...(byKey.get(k) ?? []), id])); };
+  for (const c of db.prepare("select id, name from company").all() as { id: string; name: string }[]) put(c.name, c.id);
+  for (const n of db.prepare("select company_id, value from company_identity where kind = 'name' and status = 'active'").all() as { company_id: string; value: string }[]) put(n.value, n.company_id);
+  const ids = new Set<string>();
+  for (const e of entries) { const hit = byKey.get(legalKey(e.name)); if (hit?.size === 1) ids.add([...hit][0]); }
+  for (const r of db.prepare("select distinct company_id from company_site where root_kind = 'gov' and status = 'active'").all() as { company_id: string }[]) ids.add(r.company_id);
+  for (const id of ids) await govRoot(db, id, false, async () => entries);
+  return ids.size;
+}
+
 // ---------- one hop from a known site to its hiring site ----------
 
 const RECRUIT = /招聘|加入我们|加入.{0,4}(团队|我们)|人才|校园|校招|join\s*us|careers?\b|jobs?\b/i;
@@ -261,8 +352,8 @@ export function hiringPagesOn(page: PageLinks, root: string): string[] {
 }
 
 /**
- * Put `target` on record as the company's hiring site when one of its sites from an outside record (built-in or
- * exchange — never one found this way) links to it from a hiring entry, on its home page or one hiring page down, and
+ * Put `target` on record as the company's hiring site when one of its sites from an outside record (built-in, exchange
+ * or the 国资委 list — never one found this way) links to it from a hiring entry, on its home page or one hiring page down, and
  * the link opens on the target itself. One hop only: a site found this way vouches for nothing further. Looked up
  * once a month per target.
  */
@@ -271,7 +362,7 @@ export async function linkFromRoots(read: (url: string) => Promise<PageLinks | n
   const last = db.prepare("select at from trust_lookup where company_id = ? and kind = ?").get(companyId, kind) as { at: string } | undefined;
   if (!force && last && last.at > new Date(Date.now() - 30 * 86400_000).toISOString()) return { status: "skipped", note: "这个月查过" };
   const done = (status: "added" | "none", note: string) => { db.prepare("insert or replace into trust_lookup(company_id, kind, at, outcome, note) values (?,?,?,?,?)").run(companyId, kind, now(), status, note); return { status, note }; };
-  const roots = db.prepare("select id, site_key from company_site where company_id = ? and root_kind in ('builtin', 'exchange') and status = 'active' and (expires_at is null or expires_at > ?)").all(companyId, now()) as { id: string; site_key: string }[];
+  const roots = db.prepare("select id, site_key from company_site where company_id = ? and root_kind in ('builtin', 'exchange', 'gov') and status = 'active' and (expires_at is null or expires_at > ?)").all(companyId, now()) as { id: string; site_key: string }[];
   if (!roots.length) return done("none", "这家公司还没有已确认的官网");
   for (const root of roots.slice(0, 3)) {
     if (root.site_key.includes(":")) continue; // a hiring-system tenant has no home page of its own to look on

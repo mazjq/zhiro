@@ -9,7 +9,7 @@ import { articleText, fetchArticle, loadImages } from "./extract.js";
 import { readPage } from "./page-read.js";
 import { withPurpose } from "./usage.js";
 import { resolveFor, campaignSaying, loadContext } from "./deadlines.js";
-import { trustedSites, trustedNames, exchangeRoot, linkFromRoots, anchors, hiringPagesOn, type PageLinks } from "./trust.js";
+import { trustedSites, trustedNames, exchangeRoot, syncGov, linkFromRoots, anchors, hiringPagesOn, type PageLinks } from "./trust.js";
 import { checkNotice, recordCheck, siteKey, fingerprint, RULE_VERSION, SEASON, type NoticeDoc, type Extract, type CompanyIdentity, type Outcome, type Gates, type Gate } from "./notice.js";
 
 const unknown = (why: string): Gate => ({ result: "unknown", why });
@@ -35,7 +35,13 @@ export function companyIdentity(db: Db, companyId: string): CompanyIdentity {
   const accounts = new Set((db.prepare("select account_id from company_account where company_id = ?").all(companyId) as { account_id: string }[]).map((r) => r.account_id));
   let aliases: string[] = [];
   try { aliases = JSON.parse(co.aliases || "[]"); } catch { /* none */ }
-  return { name: co.name, aliases, sites, accounts, siteIds, names: trustedNames(db, companyId) };
+  // the hiring platforms of central enterprises on the 国资委 list (trust.ts govRoot), not their main sites: news there is not recruitment
+  const groupSites = new Map<string, { group: string; ids: string[]; names: string[] }>();
+  for (const r of db.prepare(`select s.id, s.site_key, s.company_id, g.name from company_site s join company g on g.id = s.company_id
+    where s.company_id != ? and s.root_kind in ('builtin', 'linked') and s.status = 'active' and (s.expires_at is null or s.expires_at > ?)
+    and exists (select 1 from company_site r where r.company_id = s.company_id and r.root_kind = 'gov' and r.status = 'active' and (r.expires_at is null or r.expires_at > ?))`).all(companyId, now(), now()) as { id: string; site_key: string; company_id: string; name: string }[])
+    groupSites.set(r.site_key, { group: r.name, ids: [...(groupSites.get(r.site_key)?.ids ?? []), r.id], names: groupSites.get(r.site_key)?.names ?? [r.name, ...trustedNames(db, r.company_id).keys()] });
+  return { name: co.name, aliases, sites, accounts, siteIds, names: trustedNames(db, companyId), groupSites };
 }
 
 /** One reading: a WeChat post with its account and posters, else the page as it ended up (the browser when HTTP is thin). */
@@ -91,11 +97,12 @@ const PROMPT = `你是校招公告核实员。下面是一份招聘材料（网�
  "issuer":"招聘主体（招人的公司 / 单位全称，原文怎么写就怎么写）",
  "issuerNames":[{"name":"材料里明确给招聘主体起的简称","quote":"写明这层关系的原句逐字，如「××有限公司（以下简称××）」"}]（没有就空数组）,
  "batchQuote":"标题或正文里说明这是什么招聘的原文逐字，取最能看出招聘类型和批次的一句，如「2027届秋季校园招聘公告」「2027届暑期实习生招聘」「春季补录」；没写就空",
+ "published":"这篇公告自己的发布日期原文逐字（如「发布时间：2026-09-01」）；转载、更新、页脚的日期不算；没有就空",
  "cohort":"届别原文，如 2027届；没写就空", "cohortQuote":"写届别的原文逐字（文字材料）", "cohortImage":届别只写在图上时的图序号，否则 null,
  "deadlineText":"网申或投递截止的原文逐字（整句；在图上就照图抄整句）；写的是招满即止 / 长期有效也照抄；没写就空", "deadlineDate":"YYYY-MM-DD，原文没年份就空", "deadlineImage":截止只写在图上时的图序号，否则 null,
  "applyEntry":"投递入口原文（网址或「官网 / 小程序」等说法）",
  "scope":"截止适用哪些岗位 / 地区 / 下属单位，照原文；没说就空；明确写全部就写全部",
- "doubts":"只写对已抄出内容的疑问：看不清 / 多个截止 / 一份材料里有几种招聘（如实习和正式、不同批次）各有截止 / 年份缺失 / 不确定是不是截止 / 文字和图上的截止不一致；某项原文没写就让那一项留空，不要写进这里；没有疑问就空"}
+ "doubts":"只写对已抄出内容的疑问：看不清 / 多个截止 / 一份材料里有几种招聘（如实习和正式、不同批次）各有截止 / 不确定是不是截止 / 文字和图上的截止不一致；某项原文没写就让那一项留空，不要写进这里；没有疑问就空"}
 规则：只抄原文，不推测、不补全；网申开始、宣讲、笔试、面试的日期不是截止；文字和图都要看，图上的延期、例外也算。`;
 
 const POSTER_PROMPT = `下面是一份招聘材料的配图，按顺序编号 0、1、2…。只看图，找出网申或投递的截止。只输出一个 JSON 对象，不要解释：
@@ -126,7 +133,7 @@ export async function askNotice(llm: Llm, doc: NoticeDoc, pics: { data: string; 
   const j = json(await llm.models.completeSimple(model, { systemPrompt: PROMPT, messages: [{ role: "user", content: [{ type: "text", text: `${head}${body}` }, ...pictures] as any, timestamp: Date.now() }] }, { reasoning: "low" }));
   const ex: Extract = { isRecruitment: j.isRecruitment !== false, issuer: str(j.issuer), cohort: str(j.cohort), cohortQuote: str(j.cohortQuote), cohortImage: num(j.cohortImage),
     deadlineText: str(j.deadlineText), deadlineDate: str(j.deadlineDate), deadlineImage: num(j.deadlineImage), applyEntry: str(j.applyEntry), scope: str(j.scope), doubts: str(j.doubts),
-    batchQuote: str(j.batchQuote),
+    batchQuote: str(j.batchQuote), published: str(j.published),
     issuerNames: Array.isArray(j.issuerNames) ? j.issuerNames.map((x: any) => ({ name: str(x?.name), quote: str(x?.quote) })).filter((x: any) => x.name && x.quote) : [],
     seen: { chars: text.length, images: shown.length, model: String((model as any).id ?? "") } };
   if (ex.deadlineImage != null && shown.length) {
@@ -199,7 +206,15 @@ export async function findOnSites(s: Services, companyId: string, campaignId: st
   const note = (outcome: string, n: string) => db.prepare("insert or replace into trust_lookup(company_id, kind, at, outcome, note) values (?,?,?,?,?)").run(companyId, kind, now(), outcome, n);
   note("running", ""); // ponytail: one daemon, so a row is enough to keep a second run off; a lease when lookups run elsewhere
   const out: string[] = [];
-  for (const site of [...trustedSites(db, companyId).keys()].filter((k) => !k.includes(":")).slice(0, 3)) {
+  const co = companyIdentity(db, companyId);
+  // a central enterprise's hiring platform too, when this company is plainly one of its units — named after the group,
+  // or its batch already links there — looking only for announcements in this company's name (E3; whose it is, is
+  // still for the checks to say)
+  const core = co.name.normalize("NFKC").replace(/(股份有限公司|有限责任公司|有限公司)$/, "");
+  const own = new Set(skip.size ? [...skip].map((u) => siteKey(u)).filter(Boolean) as string[] : []);
+  const groups = [...(co.groupSites ?? [])].filter(([k, g]) => !k.includes(":") && !co.sites.has(k) && (own.has(k) || g.names.some((n) => n && co.name.startsWith(n) && co.name !== n))).map(([k]) => k);
+  for (const site of [...[...co.sites].filter((k) => !k.includes(":")).slice(0, 3), ...groups.slice(0, 2)]) {
+    const group = !co.sites.has(site);
     let home: PageLinks | null = null;
     for (const u of [`https://${site}/`, `https://www.${site}/`, `http://${site}/`]) if ((home = await linksOf(s, u))) break;
     if (!home) continue;
@@ -207,7 +222,8 @@ export async function findOnSites(s: Services, companyId: string, campaignId: st
     // one level down: the hiring pages, not the announcements themselves (those are read as material below)
     const notices = new Set(home.links.filter((l) => NOTICE_LINK.test(l.text.normalize("NFKC"))).map((l) => l.href.split("#")[0]));
     for (const u of hiringPagesOn(home, site).filter((u) => !notices.has(u))) { if (pages.length >= 4) break; const p = await linksOf(s, u); if (p) pages.push(p); }
-    for (const u of noticeLinks(pages, site)) if (!skip.has(u) && !out.includes(u) && out.length < 5) out.push(u);
+    const mine = group ? pages.map((p) => ({ ...p, links: p.links.filter((l) => l.text.normalize("NFKC").includes(core)) })) : pages;
+    for (const u of noticeLinks(mine, site)) if (!skip.has(u) && !out.includes(u) && out.length < 5) out.push(u);
   }
   note(out.length ? "found" : "none", out.join(" ").slice(0, 600));
   return out;
@@ -228,8 +244,10 @@ export async function verifyNotice(s: Services, input: { campaignId?: string; po
   if (!c) throw new NotFound(`campaign ${campaignId}`);
   const urls = input.url ? [input.url] : [...new Set([c.notice_url, c.apply_url].filter((u) => /^https?:\/\//i.test(u ?? "")))].slice(0, 2);
   if (!urls.length) throw new DomainError("NO_MATERIAL", "这个批次没有公告或网申链接：用 url 指定要读的公告");
-  // the company's sites on record first: a listed company's disclosed website, looked up once a month (trust.ts)
+  // the company's sites on record first: a listed company's disclosed website, a central enterprise's on the 国资委
+  // list, each looked up once a month (trust.ts)
   await exchangeRoot(db, c.company_id).catch(() => null);
+  await syncGov(db).catch(() => 0);
   let co = companyIdentity(db, c.company_id);
   const subject = { type: "campaign" as const, id: c.id };
   // a known site's own page, as read for one hop to its hiring site (trust.ts linkFromRoots)
