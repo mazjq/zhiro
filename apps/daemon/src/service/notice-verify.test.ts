@@ -8,6 +8,7 @@ import { createServices, testConfig } from "../services.js";
 import { callTool, type Actor } from "../registry.js";
 import { ingest, type Listing } from "../data/index.js";
 import { otherSeeingModels } from "./notice-verify.js";
+import { addSite } from "./trust.js";
 import { noticeVerify } from "../workflows/notice.js";
 
 // a public address written as a number: no name to look up, so the guard lets the stubbed fetch answer
@@ -24,6 +25,8 @@ function setup() {
   ingest(domain, dir, "capture", "c1", [listing]);
   const campaignId = (db.prepare("select id from campaign").get() as any).id;
   db.prepare("update campaign set source_grade = '官方', notice_url = ?, apply_url = ? where id = ?").run(`${SITE}/notice/1`, `${SITE}/jobs/j1`, campaignId);
+  // the company's site on record, as an exchange disclosure would put it (trust.ts): only such sites count as its own
+  addSite(db, { companyId: (db.prepare("select id from company").get() as any).id, siteKey: "93.184.216.34", rootKind: "exchange", basisUrl: "https://example.org/disclosure", basisQuote: "公司网址：93.184.216.34", fingerprint: "test" });
   const calls: string[] = [];
   const answer: any = { isRecruitment: true, issuer: "示例重工股份有限公司", cohort: "2027届", cohortQuote: "招聘对象：2027届毕业生", deadlineText: "网申截止时间：2099年10月31日", deadlineDate: "2099-10-31", deadlineImage: null, scope: "全部", doubts: "" };
   const llm: any = { model: () => ({ id: "fake", provider: "p", input: ["text"] }), models: { getModels: () => [], completeSimple: async (_m: any, req: any) => { calls.push(req.messages[0].content[0].text); return { content: [{ type: "text", text: JSON.stringify(answer) }] }; } } };
