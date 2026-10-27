@@ -9,7 +9,8 @@ import { articleText, fetchArticle, loadImages } from "./extract.js";
 import { readPage } from "./page-read.js";
 import { withPurpose } from "./usage.js";
 import { resolveFor, campaignSaying, loadContext } from "./deadlines.js";
-import { checkNotice, recordCheck, siteKey, fingerprint, RULE_VERSION, type NoticeDoc, type Extract, type CompanyIdentity, type Outcome, type Gates, type Gate } from "./notice.js";
+import { trustedSites } from "./trust.js";
+import { checkNotice, recordCheck, fingerprint, RULE_VERSION, type NoticeDoc, type Extract, type CompanyIdentity, type Outcome, type Gates, type Gate } from "./notice.js";
 
 /**
  * 公告核实, the run: read a batch's announcement (its notice link, else its application link), have the model copy out
@@ -20,16 +21,19 @@ import { checkNotice, recordCheck, siteKey, fingerprint, RULE_VERSION, type Noti
 const sha = (s: string | Buffer) => createHash("sha256").update(s).digest("hex").slice(0, 16);
 const MAX_IMAGES = 20, MAX_TEXT = 40_000;
 
-/** What is on record about a company: its name and aliases, the sites of its official subscriptions, its accounts. */
+/**
+ * What is on record about a company: its name and aliases, its sites on record with their evidence (trust.ts — not the
+ * links of batches a source labelled 官方, which mostly came from a sheet), its accounts.
+ */
 export function companyIdentity(db: Db, companyId: string): CompanyIdentity {
   const co = db.prepare("select name, aliases from company where id = ?").get(companyId) as { name: string; aliases: string } | undefined;
   if (!co) throw new NotFound(`company ${companyId}`);
-  const urls = (db.prepare("select apply_url, notice_url from campaign where company_id = ? and source_grade = '官方'").all(companyId) as { apply_url: string; notice_url: string }[]).flatMap((r) => [r.apply_url, r.notice_url]);
-  const sites = new Set(urls.filter(Boolean).map(siteKey).filter((k): k is string => !!k));
+  const siteIds = trustedSites(db, companyId);
+  const sites = new Set(siteIds.keys());
   const accounts = new Set((db.prepare("select account_id from company_account where company_id = ?").all(companyId) as { account_id: string }[]).map((r) => r.account_id));
   let aliases: string[] = [];
   try { aliases = JSON.parse(co.aliases || "[]"); } catch { /* none */ }
-  return { name: co.name, aliases, sites, accounts };
+  return { name: co.name, aliases, sites, accounts, siteIds };
 }
 
 /** One reading: a WeChat post with its account and posters, else the page as it ended up (the browser when HTTP is thin). */
@@ -219,7 +223,7 @@ export function recordAccount(db: Db, p: { companyId: string; accountId: string;
  */
 export function noticeSummary(db: Db, campaignId: string, applyUrl = ""): { checkedAt: string; lines: string[] } | null {
   const rows = db.prepare(`select k.outcome, k.gates, k.extract, k.checked_at, r.url, r.status from notice_check k join notice_read r on r.id = k.read_id
-    where k.subject_type = 'campaign' and k.subject_id = ? and k.checked_at >= datetime('now', '-30 days') order by k.checked_at desc`).all(campaignId) as { outcome: string; gates: string; extract: string; checked_at: string; url: string; status: string }[];
+    where k.subject_type = 'campaign' and k.subject_id = ? and k.invalidated_at is null and k.checked_at >= datetime('now', '-30 days') order by k.checked_at desc`).all(campaignId) as { outcome: string; gates: string; extract: string; checked_at: string; url: string; status: string }[];
   if (!rows.length) return null;
   // newest per piece of material: rows come newest first, so the first seen of each url is kept
   const latest: typeof rows = [];

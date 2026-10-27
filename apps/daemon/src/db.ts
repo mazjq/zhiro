@@ -485,6 +485,18 @@ export const MIGRATIONS: string[] = [
   create table company_account (company_id text not null references company(id) on delete cascade, account_id text not null, name text not null default '',
     basis text not null, at text not null, primary key (company_id, account_id)) without rowid;
   `,
+  // v49: 官网信任根 (service/trust.ts) — the sites known to be a company's own and how; what each announcement check leaned
+  // on, so a revoked site undoes what was concluded from it. Checks from before have no record of it and stand as they are.
+  `
+  create table company_site (id text primary key, company_id text not null references company(id) on delete cascade, site_key text not null, root_kind text not null,
+    basis_url text not null default '', basis_quote text not null default '', basis_fingerprint text not null default '', parent_id text, run_id text not null default '',
+    status text not null default 'active', verified_at text not null, expires_at text, revoked_at text, revoked_by text not null default '', revoke_reason text not null default '');
+  create index company_site_company on company_site(company_id, status);
+  create index company_site_parent on company_site(parent_id);
+  create table notice_check_dep (check_id text not null references notice_check(id) on delete cascade, kind text not null, ref_id text not null, primary key (check_id, kind, ref_id)) without rowid;
+  create index notice_check_dep_ref on notice_check_dep(kind, ref_id);
+  alter table notice_check add column invalidated_at text;
+  `,
 ];
 
 /**

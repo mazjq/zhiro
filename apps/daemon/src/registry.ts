@@ -98,6 +98,7 @@ import { listGaps, confirmGap } from "./service/opportunity-gaps.js";
 import { listLeads, resolveLeads } from "./service/leads.js";
 import { verifyNotice, noticeChecks, recordAccount, noticeSummary } from "./service/notice-verify.js";
 import { checkNoticeSoon } from "./workflows/notice.js";
+import { listSites, revokeSite } from "./service/trust.js";
 import { loadSources, startSmeResearch } from "./service/sme.js";
 import { listChannels } from "./channels.js";
 
@@ -423,6 +424,13 @@ const handlers: { [N in ToolName]: Handler<N> } = {
     return { items: noticeChecks(s.domain.db, cid, i.limit) };
   },
   "notice.account": (i, _a, s) => recordAccount(s.domain.db, i),
+  "notice.sites": (i, _a, s) => ({ items: listSites(s.domain.db, i.companyId) }),
+  "notice.revoke": (i, a, s) => {
+    const r = revokeSite(s.domain.db, i.siteId, actorLabel(a), i.reason);
+    for (const c of r.campaigns) checkNoticeSoon(s, c); // what leaned on it is checked again
+    if (r.facts) s.onDataChanged?.();
+    return r;
+  },
   "gap.list": (i, _a, s) => listGaps(s, i),
   "gap.confirm": (i, _a, s) => confirmGap(s, i),
   "company.similar": (i, _a, s) => ({ items: sameCompanies(s.domain.db, i.companyId).map((c) => {
