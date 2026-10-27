@@ -4,13 +4,13 @@ import { now, type Db } from "../db.js";
 import type { Services } from "../services.js";
 import type { Llm } from "../llm.js";
 import { DomainError, NotFound } from "./errors.js";
-import { httpContext, guardedFetch } from "../data/index.js";
+import { httpContext, guardedFetchTo } from "../data/index.js";
 import { articleText, fetchArticle, loadImages } from "./extract.js";
 import { readPage } from "./page-read.js";
 import { withPurpose } from "./usage.js";
 import { resolveFor, campaignSaying, loadContext } from "./deadlines.js";
-import { trustedSites, exchangeRoot } from "./trust.js";
-import { checkNotice, recordCheck, fingerprint, RULE_VERSION, type NoticeDoc, type Extract, type CompanyIdentity, type Outcome, type Gates, type Gate } from "./notice.js";
+import { trustedSites, exchangeRoot, linkFromRoots, anchors, type PageLinks } from "./trust.js";
+import { checkNotice, recordCheck, siteKey, fingerprint, RULE_VERSION, type NoticeDoc, type Extract, type CompanyIdentity, type Outcome, type Gates, type Gate } from "./notice.js";
 
 /**
  * 公告核实, the run: read a batch's announcement (its notice link, else its application link), have the model copy out
@@ -65,12 +65,12 @@ export async function readNotice(s: Services, url: string): Promise<{ doc: Notic
   }
   // HTTP first, following the hops ourselves so the page it ends on is known (a link on the company's site can lead elsewhere)
   try {
-    const res = await guardedFetch(url, { headers: { accept: "text/html", "user-agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130 Safari/537.36" }, signal: AbortSignal.timeout(20_000) });
+    const { res, url: landed } = await guardedFetchTo(url, { headers: { accept: "text/html", "user-agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130 Safari/537.36" }, signal: AbortSignal.timeout(20_000) });
     if (res.ok) {
       const html = await res.text(), a = articleText(html, url);
       if (a.text.replace(/\s+/g, "").length >= 1_200) {
-        const { pics, all } = await images(a.images.map((u) => { try { return new URL(u, res.url || url).href; } catch { return ""; } }).filter(Boolean));
-        return { doc: blank({ finalUrl: res.url || url, title: a.title, text: a.text, links: [...html.matchAll(/href=["'](https?:[^"']+)["']/gi)].map((m) => m[1]).slice(0, 200),
+        const { pics, all } = await images(a.images.map((u) => { try { return new URL(u, landed).href; } catch { return ""; } }).filter(Boolean));
+        return { doc: blank({ finalUrl: landed, title: a.title, text: a.text, links: [...html.matchAll(/href=["'](https?:[^"']+)["']/gi)].map((m) => m[1]).slice(0, 200),
           images: pics.map((p, n) => ({ n, hash: sha(p.data) })), complete: a.text.length < MAX_TEXT && all, status: "ok" }), pics };
       }
     } else if (res.status === 401) return { doc: blank({ status: "login", note: `HTTP ${res.status}` }), pics: [] };
@@ -152,6 +152,21 @@ export function otherSeeingModels(llm: Llm, first: any): any[] {
   } catch { return []; }
 }
 
+/**
+ * A known site's page with all its links: plain HTTP first (every link kept); a page drawn by script, or one that turns
+ * plain requests away, through the browser (whose reading keeps the first 60 links).
+ */
+export async function linksOf(s: Services, u: string): Promise<PageLinks | null> {
+  try {
+    const { res, url: landed } = await guardedFetchTo(u, { headers: { accept: "text/html", "user-agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130 Safari/537.36" }, signal: AbortSignal.timeout(20_000) });
+    if (res.ok) {
+      const html = await res.text(), links = anchors(html, landed);
+      if (links.length >= 5) return { url: landed, title: /<title[^>]*>([\s\S]*?)<\/title>/i.exec(html)?.[1]?.trim() ?? "", links };
+    }
+  } catch { /* the browser gets its turn */ }
+  try { const r = await readPage(s, { url: u, browser: true, maxChars: 20_000 }); return r.status === "ok" ? { url: r.finalUrl || u, title: r.title, links: r.links } : null; } catch { return null; }
+}
+
 export interface VerifyResult { url: string; outcome: Outcome; reasons: string[]; deadline: string; factId?: string; unchanged: boolean;
   /** the company's own site names its employer otherwise: if that is its full name, company.alias (a card for an agent) and check again */
   aliasHint?: { companyId: string; alias: string } }
@@ -167,12 +182,18 @@ export async function verifyNotice(s: Services, input: { campaignId?: string; po
   if (!urls.length) throw new DomainError("NO_MATERIAL", "这个批次没有公告或网申链接：用 url 指定要读的公告");
   // the company's sites on record first: a listed company's disclosed website, looked up once a month (trust.ts)
   await exchangeRoot(db, c.company_id).catch(() => null);
-  const co = companyIdentity(db, c.company_id), subject = { type: "campaign" as const, id: c.id };
+  let co = companyIdentity(db, c.company_id);
+  const subject = { type: "campaign" as const, id: c.id };
+  // a known site's own page, as read for one hop to its hiring site (trust.ts linkFromRoots)
+  const pageLinks = (u: string) => linksOf(s, u);
   const last = db.prepare(`select k.extract, r.fingerprint from notice_check k join notice_read r on r.id = k.read_id
     where k.subject_type = 'campaign' and k.subject_id = ? and r.url = ? and k.rule_version = ? and r.status in ('ok', 'partial') and k.outcome != 'unreadable' order by k.checked_at desc limit 1`);
   const results: VerifyResult[] = [];
   for (const url of urls) {
     const { doc, pics } = await readNotice(s, url);
+    // the page is on a site not yet known as the company's own: see whether one of its known sites links to it, once a month
+    const here = doc.via !== "wechat" ? siteKey(doc.finalUrl || doc.url) : null;
+    if (here && !co.sites.has(here) && (await linkFromRoots(pageLinks, db, c.company_id, here).catch(() => null))?.status === "added") co = companyIdentity(db, c.company_id);
     const reasons = (g?: Gates) => (g ? Object.values(g).filter((x) => x.result !== "pass").map((x) => x.why) : []);
     if (doc.status !== "ok" && doc.status !== "partial") {
       recordCheck({ db, vault: s.config.vault }, subject, doc, null, null, "notice.verify");
