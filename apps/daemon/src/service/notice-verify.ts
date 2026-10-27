@@ -9,8 +9,10 @@ import { articleText, fetchArticle, loadImages } from "./extract.js";
 import { readPage } from "./page-read.js";
 import { withPurpose } from "./usage.js";
 import { resolveFor, campaignSaying, loadContext } from "./deadlines.js";
-import { trustedSites, trustedNames, exchangeRoot, linkFromRoots, anchors, type PageLinks } from "./trust.js";
-import { checkNotice, recordCheck, siteKey, fingerprint, RULE_VERSION, type NoticeDoc, type Extract, type CompanyIdentity, type Outcome, type Gates, type Gate } from "./notice.js";
+import { trustedSites, trustedNames, exchangeRoot, linkFromRoots, anchors, hiringPagesOn, type PageLinks } from "./trust.js";
+import { checkNotice, recordCheck, siteKey, fingerprint, RULE_VERSION, SEASON, type NoticeDoc, type Extract, type CompanyIdentity, type Outcome, type Gates, type Gate } from "./notice.js";
+
+const unknown = (why: string): Gate => ({ result: "unknown", why });
 
 /**
  * 公告核实, the run: read a batch's announcement (its notice link, else its application link), have the model copy out
@@ -88,11 +90,12 @@ const PROMPT = `你是校招公告核实员。下面是一份招聘材料（网�
 {"isRecruitment":true/false,
  "issuer":"招聘主体（招人的公司 / 单位全称，原文怎么写就怎么写）",
  "issuerNames":[{"name":"材料里明确给招聘主体起的简称","quote":"写明这层关系的原句逐字，如「××有限公司（以下简称××）」"}]（没有就空数组）,
+ "batchQuote":"标题或正文里说明这是什么招聘的原文逐字，取最能看出招聘类型和批次的一句，如「2027届秋季校园招聘公告」「2027届暑期实习生招聘」「春季补录」；没写就空",
  "cohort":"届别原文，如 2027届；没写就空", "cohortQuote":"写届别的原文逐字（文字材料）", "cohortImage":届别只写在图上时的图序号，否则 null,
  "deadlineText":"网申或投递截止的原文逐字（整句；在图上就照图抄整句）；写的是招满即止 / 长期有效也照抄；没写就空", "deadlineDate":"YYYY-MM-DD，原文没年份就空", "deadlineImage":截止只写在图上时的图序号，否则 null,
  "applyEntry":"投递入口原文（网址或「官网 / 小程序」等说法）",
  "scope":"截止适用哪些岗位 / 地区 / 下属单位，照原文；没说就空；明确写全部就写全部",
- "doubts":"只写对已抄出内容的疑问：看不清 / 多个截止 / 年份缺失 / 不确定是不是截止 / 文字和图上的截止不一致；某项原文没写就让那一项留空，不要写进这里；没有疑问就空"}
+ "doubts":"只写对已抄出内容的疑问：看不清 / 多个截止 / 一份材料里有几种招聘（如实习和正式、不同批次）各有截止 / 年份缺失 / 不确定是不是截止 / 文字和图上的截止不一致；某项原文没写就让那一项留空，不要写进这里；没有疑问就空"}
 规则：只抄原文，不推测、不补全；网申开始、宣讲、笔试、面试的日期不是截止；文字和图都要看，图上的延期、例外也算。`;
 
 const POSTER_PROMPT = `下面是一份招聘材料的配图，按顺序编号 0、1、2…。只看图，找出网申或投递的截止。只输出一个 JSON 对象，不要解释：
@@ -123,6 +126,7 @@ export async function askNotice(llm: Llm, doc: NoticeDoc, pics: { data: string; 
   const j = json(await llm.models.completeSimple(model, { systemPrompt: PROMPT, messages: [{ role: "user", content: [{ type: "text", text: `${head}${body}` }, ...pictures] as any, timestamp: Date.now() }] }, { reasoning: "low" }));
   const ex: Extract = { isRecruitment: j.isRecruitment !== false, issuer: str(j.issuer), cohort: str(j.cohort), cohortQuote: str(j.cohortQuote), cohortImage: num(j.cohortImage),
     deadlineText: str(j.deadlineText), deadlineDate: str(j.deadlineDate), deadlineImage: num(j.deadlineImage), applyEntry: str(j.applyEntry), scope: str(j.scope), doubts: str(j.doubts),
+    batchQuote: str(j.batchQuote),
     issuerNames: Array.isArray(j.issuerNames) ? j.issuerNames.map((x: any) => ({ name: str(x?.name), quote: str(x?.quote) })).filter((x: any) => x.name && x.quote) : [],
     seen: { chars: text.length, images: shown.length, model: String((model as any).id ?? "") } };
   if (ex.deadlineImage != null && shown.length) {
@@ -167,7 +171,51 @@ export async function linksOf(s: Services, u: string): Promise<PageLinks | null>
   try { const r = await readPage(s, { url: u, browser: true, maxChars: 20_000 }); return r.status === "ok" ? { url: r.finalUrl || u, title: r.title, links: r.links } : null; } catch { return null; }
 }
 
+type Checked = { url: string; doc: NoticeDoc; ex: Extract | null; result: ReturnType<typeof checkNotice> | null; unchanged: boolean; found?: string; why?: string };
+
+// a link whose words look like an announcement; one naming an earlier cohort is not this season's
+const NOTICE_LINK = /校园招聘|校招|招聘公告|招聘简章|招聘启事|简章|管培生|实习生招聘|届.{0,10}(招聘|公告)/;
+const OLD_COHORT = /(?<!\d)(?:20)?(?:1\d|2[0-6])\s*届/;
+/** The links on a known site's pages, on that same site, whose words look like an announcement — this cohort's first. */
+export function noticeLinks(pages: PageLinks[], site: string, cohort = SEASON.cohort): string[] {
+  const out: { href: string; now: boolean }[] = [];
+  for (const p of pages) for (const l of p.links) {
+    const t = l.text.normalize("NFKC");
+    if (siteKey(l.href) !== site || !NOTICE_LINK.test(t) || OLD_COHORT.test(t) || out.some((o) => o.href === l.href)) continue;
+    out.push({ href: l.href, now: t.includes(cohort) || t.includes(`${cohort.slice(2)}届`) });
+  }
+  return [...out.filter((o) => o.now), ...out.filter((o) => !o.now)].map((o) => o.href);
+}
+
+/**
+ * Where else the company's own sites might carry this batch's announcement: their home pages and hiring pages, read
+ * for links that look like one (≤5). Plain sites only (a hiring-system tenant has no home page of its own). Once a
+ * week per batch; what each found is then checked like any other material, every check included.
+ */
+export async function findOnSites(s: Services, companyId: string, campaignId: string, skip: Set<string>): Promise<string[]> {
+  const db = s.domain.db, kind = `find:${campaignId}`;
+  const last = db.prepare("select at from trust_lookup where company_id = ? and kind = ?").get(companyId, kind) as { at: string } | undefined;
+  if (last && last.at > new Date(Date.now() - 7 * 86400_000).toISOString()) return [];
+  const note = (outcome: string, n: string) => db.prepare("insert or replace into trust_lookup(company_id, kind, at, outcome, note) values (?,?,?,?,?)").run(companyId, kind, now(), outcome, n);
+  note("running", ""); // ponytail: one daemon, so a row is enough to keep a second run off; a lease when lookups run elsewhere
+  const out: string[] = [];
+  for (const site of [...trustedSites(db, companyId).keys()].filter((k) => !k.includes(":")).slice(0, 3)) {
+    let home: PageLinks | null = null;
+    for (const u of [`https://${site}/`, `https://www.${site}/`, `http://${site}/`]) if ((home = await linksOf(s, u))) break;
+    if (!home) continue;
+    const pages = [home];
+    // one level down: the hiring pages, not the announcements themselves (those are read as material below)
+    const notices = new Set(home.links.filter((l) => NOTICE_LINK.test(l.text.normalize("NFKC"))).map((l) => l.href.split("#")[0]));
+    for (const u of hiringPagesOn(home, site).filter((u) => !notices.has(u))) { if (pages.length >= 4) break; const p = await linksOf(s, u); if (p) pages.push(p); }
+    for (const u of noticeLinks(pages, site)) if (!skip.has(u) && !out.includes(u) && out.length < 5) out.push(u);
+  }
+  note(out.length ? "found" : "none", out.join(" ").slice(0, 600));
+  return out;
+}
+
 export interface VerifyResult { url: string; outcome: Outcome; reasons: string[]; deadline: string; factId?: string; unchanged: boolean;
+  /** material not among the batch's own links: where it was found */
+  found?: string;
   /** the company's own site names its employer otherwise: if that is its full name, company.alias (a card for an agent) and check again */
   aliasHint?: { companyId: string; alias: string } }
 
@@ -176,7 +224,7 @@ export async function verifyNotice(s: Services, input: { campaignId?: string; po
   const db = s.domain.db;
   const campaignId = input.campaignId ?? (input.positionId ? (db.prepare("select campaign_id from position where id = ?").get(input.positionId) as { campaign_id: string } | undefined)?.campaign_id : undefined);
   if (!campaignId) throw new DomainError("MISSING_FIELD", input.positionId ? `没有岗位 ${input.positionId}` : "要给 campaignId 或 positionId");
-  const c = db.prepare("select id, company_id, batch, cohort, notice_url, apply_url from campaign where id = ?").get(campaignId) as { id: string; company_id: string; batch: string; cohort: string; notice_url: string; apply_url: string } | undefined;
+  const c = db.prepare("select id, company_id, kind, batch, cohort, notice_url, apply_url from campaign where id = ?").get(campaignId) as { id: string; company_id: string; kind: string; batch: string; cohort: string; notice_url: string; apply_url: string } | undefined;
   if (!c) throw new NotFound(`campaign ${campaignId}`);
   const urls = input.url ? [input.url] : [...new Set([c.notice_url, c.apply_url].filter((u) => /^https?:\/\//i.test(u ?? "")))].slice(0, 2);
   if (!urls.length) throw new DomainError("NO_MATERIAL", "这个批次没有公告或网申链接：用 url 指定要读的公告");
@@ -188,31 +236,36 @@ export async function verifyNotice(s: Services, input: { campaignId?: string; po
   const pageLinks = (u: string) => linksOf(s, u);
   const last = db.prepare(`select k.extract, r.fingerprint from notice_check k join notice_read r on r.id = k.read_id
     where k.subject_type = 'campaign' and k.subject_id = ? and r.url = ? and k.rule_version = ? and r.status in ('ok', 'partial') and k.outcome != 'unreadable' order by k.checked_at desc limit 1`);
-  const results: VerifyResult[] = [];
-  for (const url of urls) {
+  const batch = { kind: c.kind, batch: c.batch };
+  // read and check every piece of this round's material first; what is written is decided once all of it is in
+  const checked: Checked[] = [];
+  const checkOne = async (url: string, found?: string) => {
     const { doc, pics } = await readNotice(s, url);
     // the page is on a site not yet known as the company's own: see whether one of its known sites links to it, once a month
     const here = doc.via !== "wechat" ? siteKey(doc.finalUrl || doc.url) : null;
     if (here && !co.sites.has(here) && (await linkFromRoots(pageLinks, db, c.company_id, here).catch(() => null))?.status === "added") co = companyIdentity(db, c.company_id);
-    const reasons = (g?: Gates) => (g ? Object.values(g).filter((x) => x.result !== "pass").map((x) => x.why) : []);
-    if (doc.status !== "ok" && doc.status !== "partial") {
-      recordCheck({ db, vault: s.config.vault }, subject, doc, null, null, "notice.verify");
-      results.push({ url, outcome: "unreadable", reasons: [doc.note || `读不到（${doc.status}）`], deadline: "", unchanged: false });
-      continue;
-    }
+    if (doc.status !== "ok" && doc.status !== "partial") return checked.push({ url, doc, ex: null, result: null, unchanged: false, found, why: doc.note || `读不到（${doc.status}）` });
     const prev = last.get(c.id, url, RULE_VERSION) as { extract: string; fingerprint: string } | undefined;
     const unchanged = !!prev && prev.fingerprint === fingerprint(doc);
     if (!unchanged && !s.llm) throw new DomainError("NO_MODEL", "没有配置模型：公告要模型来读");
     const ex = unchanged ? (JSON.parse(prev!.extract) as Extract) : await withPurpose("notice.verify", c.company_id, () => askNotice(s.llm!, doc, pics, co.name, `${c.cohort} ${c.batch}`));
-    if (!ex) {
-      recordCheck({ db, vault: s.config.vault }, subject, { ...doc, note: "这份是海报，当前模型看不了图" }, null, null, "notice.verify");
-      results.push({ url, outcome: "unreadable", reasons: ["这份是海报，当前模型看不了图：换一个能看图的模型，或本人看图确认"], deadline: "", unchanged: false });
-      continue;
-    }
-    const result = checkNotice(doc, ex, co);
-    const r = recordCheck({ db, vault: s.config.vault }, subject, doc, ex, result, unchanged ? "notice.verify:unchanged" : "notice.verify");
-    const why = [...reasons(result.gates), ...(ex.doubts ? [`模型存疑：${ex.doubts}`] : [])];
-    results.push({ url, outcome: result.outcome, reasons: why, deadline: ex.deadlineText, factId: r.factId, unchanged });
+    if (!ex) return checked.push({ url, doc: { ...doc, note: "这份是海报，当前模型看不了图" }, ex: null, result: null, unchanged: false, found, why: "这份是海报，当前模型看不了图：换一个能看图的模型" });
+    return checked.push({ url, doc, ex, result: checkNotice(doc, ex, co, SEASON, batch), unchanged, found });
+  };
+  for (const url of urls) await checkOne(url);
+  // the batch's own links said nothing that stands: look on the company's own sites for its announcement (D1)
+  if (!input.url && !checked.some((x) => x.result?.outcome === "fact")) {
+    for (const url of await findOnSites(s, c.company_id, c.id, new Set(urls))) await checkOne(url, "在这家公司已确认的站点上找到");
+  }
+  // two pieces saying different deadlines, with nothing saying which one holds: neither is taken
+  const days = new Set(checked.filter((x) => x.result?.fact).map((x) => `${x.result!.fact!.policy}:${x.result!.fact!.date ?? ""}`));
+  if (days.size > 1) for (const x of checked) if (x.result?.fact) x.result = { ...x.result, outcome: "review", fact: undefined, gates: { ...x.result.gates, evidence: unknown(`几份材料写的截止不同：${checked.filter((y) => y.result?.fact).map((y) => y.ex!.deadlineText.slice(0, 30)).join(" / ")}`) } };
+  const results: VerifyResult[] = [];
+  const reasons = (g?: Gates) => (g ? Object.values(g).filter((x) => x.result !== "pass").map((x) => x.why) : []);
+  for (const x of checked) {
+    const r = recordCheck({ db, vault: s.config.vault }, subject, x.doc, x.ex, x.result, x.unchanged ? "notice.verify:unchanged" : x.found ? "notice.verify:found" : "notice.verify");
+    const why = x.result ? [...reasons(x.result.gates), ...(x.ex?.doubts ? [`模型存疑：${x.ex.doubts}`] : [])] : [x.why ?? ""];
+    results.push({ url: x.url, outcome: x.result?.outcome ?? "unreadable", reasons: why, deadline: x.ex?.deadlineText ?? "", factId: r.factId, unchanged: x.unchanged, ...(x.found ? { found: x.found } : {}) });
   }
   if (results.some((r) => r.factId)) s.onDataChanged?.();
   const say = input.positionId ? resolveFor(db, [input.positionId]).get(input.positionId)?.say : campaignSaying(loadContext(db, [c.company_id]), c.id).say;
