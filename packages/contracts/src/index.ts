@@ -964,7 +964,7 @@ export const tools = {
   }),
   "notice.sites": defineTool({
     name: "notice.sites",
-    description: "一家公司已确认的官网 / 招聘系统（公告核实只认这些算「这家公司发的」），每条带怎么确认的（how：builtin=Zhiro 内置读取器写死的站点；exchange=巨潮资讯披露的公司网址；linked=从已确认官网的招聘入口链过去的）、依据链接和原句、是否有效（active / expired / revoked）。names：同样来源确认的公司全称（公告上的招聘主体是它就算这家公司），各挂在一条官网记录下。",
+    description: "一家公司已确认的官网 / 招聘系统（公告核实只认这些算「这家公司发的」），每条带怎么确认的（how：builtin=Zhiro 内置读取器写死的站点；exchange=巨潮资讯披露的公司网址；gov=国资委「中央企业网站」名录上的官网；linked=从已确认官网的招聘入口链过去的）、依据链接和原句、是否有效（active / expired / revoked）。names：同样来源确认的公司全称（公告上的招聘主体是它就算这家公司），各挂在一条官网记录下。",
     input: Type.Object({ companyId: Id }),
     output: Type.Object({ items: Type.Array(Type.Object({ id: Type.String(), site: Type.String(), how: Type.String(), basisUrl: Type.String(), basisQuote: Type.String(), parentId: Type.Union([Type.String(), Type.Null()]), status: Type.String(), verifiedAt: Type.String(), expiresAt: Type.Union([Type.String(), Type.Null()]),
       revoked: Type.Union([Type.Object({ at: Type.String(), by: Type.String(), reason: Type.String() }), Type.Null()]) })),

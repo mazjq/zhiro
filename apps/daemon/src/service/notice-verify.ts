@@ -9,7 +9,7 @@ import { articleText, fetchArticle, loadImages } from "./extract.js";
 import { readPage } from "./page-read.js";
 import { withPurpose } from "./usage.js";
 import { resolveFor, campaignSaying, loadContext } from "./deadlines.js";
-import { trustedSites, trustedNames, exchangeRoot, linkFromRoots, anchors, hiringPagesOn, type PageLinks } from "./trust.js";
+import { trustedSites, trustedNames, exchangeRoot, govRoot, linkFromRoots, anchors, hiringPagesOn, type PageLinks } from "./trust.js";
 import { checkNotice, recordCheck, siteKey, fingerprint, RULE_VERSION, SEASON, type NoticeDoc, type Extract, type CompanyIdentity, type Outcome, type Gates, type Gate } from "./notice.js";
 
 const unknown = (why: string): Gate => ({ result: "unknown", why });
@@ -228,8 +228,10 @@ export async function verifyNotice(s: Services, input: { campaignId?: string; po
   if (!c) throw new NotFound(`campaign ${campaignId}`);
   const urls = input.url ? [input.url] : [...new Set([c.notice_url, c.apply_url].filter((u) => /^https?:\/\//i.test(u ?? "")))].slice(0, 2);
   if (!urls.length) throw new DomainError("NO_MATERIAL", "这个批次没有公告或网申链接：用 url 指定要读的公告");
-  // the company's sites on record first: a listed company's disclosed website, looked up once a month (trust.ts)
+  // the company's sites on record first: a listed company's disclosed website, a central enterprise's on the 国资委
+  // list, each looked up once a month (trust.ts)
   await exchangeRoot(db, c.company_id).catch(() => null);
+  await govRoot(db, c.company_id).catch(() => null);
   let co = companyIdentity(db, c.company_id);
   const subject = { type: "campaign" as const, id: c.id };
   // a known site's own page, as read for one hop to its hiring site (trust.ts linkFromRoots)
