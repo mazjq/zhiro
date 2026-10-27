@@ -31,6 +31,8 @@ export interface Extract {
   deadlineText: string; deadlineDate: string; deadlineImage: number | null; applyEntry: string; scope: string; doubts: string;
   /** the material's own words tying the employer's full name to a short one: 「甲有限公司（以下简称乙）」 */
   issuerNames?: { name: string; quote: string }[];
+  /** the words saying which recruitment this is: 「2027届秋季校园招聘公告」「暑期实习生招聘」 */
+  batchQuote?: string;
   /** filled by the run, not the model: how much of the material the model was shown, and by which model */
   seen?: { chars: number; images: number; model: string };
   poster?: PosterRead;
@@ -49,7 +51,9 @@ export const SEASON: Season = { cohort: "2027", since: "2026-03-01", until: "202
 export type GateResult = "pass" | "fail" | "unknown";
 /** `deps`: the records a passing gate leaned on — a check counts only while all of them stand */
 export interface Gate { result: GateResult; why: string; deps?: Dep[] }
-export interface Gates { publisher: Gate; issuer: Gate; evidence: Gate; season: Gate }
+export interface Gates { publisher: Gate; issuer: Gate; evidence: Gate; season: Gate; batch: Gate }
+/** The batch a material is checked for: its kind (校招 / 实习 …) and its label (「秋招提前批」「春招、实习」). */
+export interface Batch { kind: string; batch: string }
 export type Outcome = "fact" | "not_stated" | "review" | "unreadable" | "not_recruitment";
 // 2: doubts are only about what is written (an absent deadline is not a doubt); 「27届」 read as 2027
 // 3: posters read twice by two models; cohort sentence checked; what the model was shown counted; 「以下简称」
@@ -57,7 +61,8 @@ export type Outcome = "fact" | "not_stated" | "review" | "unreadable" | "not_rec
 // 5: 「简称」 only as 「甲（以下简称乙）」 written together; the title and the account are part of what 「unchanged」 means
 // 6: a company's own sites are only those on record with their evidence (trust.ts), not every batch labelled 官方
 // 7: a full name on record (巨潮, Zhiro's own readers) passes the issuer check
-export const RULE_VERSION = 7;
+// 8: the material must be the batch's kind of recruitment (实习 / 正式, which round), both ways
+export const RULE_VERSION = 8;
 
 const pass = (why: string): Gate => ({ result: "pass", why }), fail = (why: string): Gate => ({ result: "fail", why }), unknown = (why: string): Gate => ({ result: "unknown", why });
 
@@ -192,10 +197,57 @@ export function seasonGate(ex: Extract, season: Season, date?: string, doc?: Not
   return unknown("公告没写届别");
 }
 
-export function checkNotice(doc: NoticeDoc, ex: Extract, co: CompanyIdentity, season: Season = SEASON): { gates: Gates; outcome: Outcome; fact?: { policy: Policy; date?: string; evidence: string } } {
+// ---------- 批次: the material is the batch's kind of recruitment ----------
+
+export type Kind = "intern" | "early" | "spring" | "extra" | "social" | "special" | "main";
+// the kinds that are not the main graduate round; first match wins when one label is read as one kind
+const SPECIAL: [Kind, RegExp][] = [["intern", /实习/], ["early", /提前批|提前招聘/], ["extra", /补录|补招|补充招聘|二次招聘/], ["spring", /春季|春招/], ["social", /社会招聘|社招/], ["special", /专项|人才计划/]];
+const MAIN = /秋招|秋季|校招|校园招聘|统招|统一招聘|毕业生|应届|管培/;
+const KIND_WORD: Record<Kind, string> = { intern: "实习", early: "提前批", extra: "补录", spring: "春招", social: "社招", special: "专项", main: "正式校招" };
+const words = (k: Iterable<Kind>) => [...k].map((x) => KIND_WORD[x]).join("、");
+
+/** Every kind of recruitment some words name: 「2027届秋季校园招聘暨实习生招聘」 is the main round and internships. */
+export function kindsIn(s: string): Set<Kind> {
+  const t = (s ?? "").normalize("NFKC"), out = new Set<Kind>();
+  for (const [k, re] of SPECIAL) if (re.test(t)) out.add(k);
+  // 「2027届招聘启事」 is the graduate round; 「2027届实习生招聘」 is not
+  if (MAIN.test(t) || (!out.has("intern") && /届.{0,12}(招聘|启事|简章|公告)/.test(t))) out.add("main");
+  return out;
+}
+
+/** A batch's kinds: each of its labels is one kind (「秋招提前批」 is the early round, not the main one). */
+export function batchKinds(b: Batch): Set<Kind> {
+  const out = new Set<Kind>();
+  for (const label of (b.batch ?? "").split(/[、,，/／;；\s]+/).filter(Boolean)) {
+    const k = kindsIn(label);
+    const one = SPECIAL.map(([x]) => x).find((x) => k.has(x)) ?? (k.has("main") ? "main" : null);
+    if (one) out.add(one);
+  }
+  if (/实习/.test(b.kind)) out.add("intern");
+  else if (/社招/.test(b.kind)) out.add("social");
+  else if (!out.size) out.add("main"); // 校招 / 博士专项 with no label of its own
+  return out;
+}
+
+/**
+ * 批次: the material is this batch's recruitment, both ways — a round the material names that the batch is not
+ * (提前批, 春招, 补录, 专项, 社招) is another batch; so is a material with none of the batch's kinds. A material that
+ * does not say which it is cannot be told apart, and is left for review.
+ */
+export function batchGate(ex: Extract, doc: NoticeDoc | undefined, b: Batch): Gate {
+  const q = (ex.batchQuote ?? "").trim();
+  const m = kindsIn(`${doc?.title ?? ""}\n${q && onPage(doc, q) ? q : ""}`), want = batchKinds(b);
+  if (!m.size) return unknown("材料没写是哪类招聘（正式 / 实习、哪一批）");
+  const other = [...m].filter((k) => k !== "main" && k !== "intern" && !want.has(k));
+  if (other.length) return fail(`材料是${words(other)}，这个批次是${words(want)}`);
+  if (![...m].some((k) => want.has(k))) return fail(`材料是${words(m)}，这个批次是${words(want)}`);
+  return pass(`材料是${words(m)}，批次是${words(want)}`);
+}
+
+export function checkNotice(doc: NoticeDoc, ex: Extract, co: CompanyIdentity, season: Season = SEASON, batch: Batch = { kind: "校招", batch: "" }): { gates: Gates; outcome: Outcome; fact?: { policy: Policy; date?: string; evidence: string } } {
   const said = ex.deadlineText ? readDeadline(ex.deadlineText) : null;
   const date = said && !("unclear" in said) ? said.date : undefined;
-  const gates: Gates = { publisher: publisherGate(doc, co), issuer: issuerGate(ex, co, doc), evidence: ex.deadlineText ? evidenceGate(doc, ex) : unknown("公告没写截止"), season: seasonGate(ex, season, date, doc) };
+  const gates: Gates = { publisher: publisherGate(doc, co), issuer: issuerGate(ex, co, doc), evidence: ex.deadlineText ? evidenceGate(doc, ex) : unknown("公告没写截止"), season: seasonGate(ex, season, date, doc), batch: batchGate(ex, doc, batch) };
   if (doc.status !== "ok" && doc.status !== "partial") return { gates, outcome: "unreadable" };
   if (!ex.isRecruitment) return { gates, outcome: "not_recruitment" };
   const all = (Object.values(gates) as Gate[]).every((g) => g.result === "pass");
@@ -208,7 +260,7 @@ export function checkNotice(doc: NoticeDoc, ex: Extract, co: CompanyIdentity, se
   // no deadline in it: worth saying only of the whole of an official announcement for this company, this season, all of
   // which the model was shown — a cut-off text or a poster it did not see may be where the deadline is
   const shownAll = !!ex.seen && ex.seen.chars >= doc.text.length && ex.seen.images >= doc.images.length;
-  const sure = doc.status === "ok" && doc.complete && shownAll && gates.publisher.result === "pass" && gates.issuer.result === "pass" && gates.season.result !== "fail" && !ex.doubts;
+  const sure = doc.status === "ok" && doc.complete && shownAll && gates.publisher.result === "pass" && gates.issuer.result === "pass" && gates.batch.result === "pass" && gates.season.result !== "fail" && !ex.doubts;
   return { gates, outcome: sure ? "not_stated" : "review" };
 }
 

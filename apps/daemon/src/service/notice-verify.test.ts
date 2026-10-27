@@ -35,6 +35,8 @@ function setup() {
   return { s, db, campaignId, calls, answer };
 }
 const page = (deadline = "2099年10月31日") => `<html><head><title>示例重工 2027届校园招聘公告</title></head><body><article>${"示例重工股份有限公司 2027届校园招聘公告。招聘对象：2027届毕业生。".repeat(80)}网申截止时间：${deadline}。投递入口：官网。</article></body></html>`;
+// a site's home page: a few links of its own, and the ones given
+const home = (links: [string, string][]) => `<html><head><title>示例重工</title></head><body>${["关于我们", "新闻", "产品", "联系我们", "投资者"].map((w, n) => `<a href="${SITE}/p${n}">${w}</a>`).join("")}${links.map(([href, text]) => `<a href="${href}">${text}</a>`).join("")}</body></html>`;
 function serve(pages: Record<string, { status?: number; body?: string }>) {
   vi.stubGlobal("fetch", vi.fn(async (u: string) => { const p = pages[new URL(u).pathname] ?? { status: 404 }; return new Response(p.body ?? "", { status: p.status ?? 200, headers: { "content-type": "text/html" } }); }));
 }
@@ -127,10 +129,45 @@ describe("preparing an application checks its announcement; the post's page says
     await callTool("notice.verify", { campaignId }, HUMAN, s);
     const later: any = await callTool("position.get", { id: post }, HUMAN, s);
     expect(later.notice.lines[0]).toMatch(/^公告复查于 \d\d-\d\d：网申截止时间：2099年10月31日$/); // the application page still says it
-    serve({ "/notice/1": { status: 401 }, "/jobs/j1": { status: 401 } });
+    serve({ "/notice/1": { status: 401 }, "/jobs/j1": { status: 401 }, "/": { body: home([]) } });
     await callTool("notice.verify", { campaignId }, HUMAN, s);
     const none: any = await callTool("position.get", { id: post }, HUMAN, s);
     expect(none.notice.lines[0]).toMatch(/^这次没读到公告（\d\d-\d\d）；上次 \d\d-\d\d 的记录仍在$/);
     expect(none.notice.lines[1]).toMatch(/^网申入口这次没打开/);
+  });
+});
+
+describe("not taken from the batch's own links: look on the company's own sites (D1)", () => {
+  afterEach(() => vi.unstubAllGlobals());
+  it("an announcement linked from its site's home page is found and checked; once a week", async () => {
+    const { s, campaignId, calls } = setup();
+    serve({ "/notice/1": { status: 401 }, "/jobs/j1": { status: 401 },
+      "/": { body: home([[`${SITE}/notice/2`, "2027届校园招聘公告"], [`${SITE}/notice/old`, "2025届校园招聘公告"], ["https://elsewhere.example.org/n", "2027届校园招聘公告"]]) },
+      "/notice/2": { body: page() } });
+    const r: any = await callTool("notice.verify", { campaignId }, HUMAN, s);
+    const found = r.results.filter((x: any) => x.found);
+    expect(found.map((x: any) => x.url)).toEqual([`${SITE}/notice/2`]); // not an earlier cohort's, not another site's
+    expect(found[0]).toMatchObject({ outcome: "fact", factId: expect.any(String) });
+    expect(r.now).toBe("官网截止 2099 年 10 月 31 日");
+    const n = calls.length;
+    serve({ "/notice/1": { status: 401 }, "/jobs/j1": { status: 401 } });
+    const again: any = await callTool("notice.verify", { campaignId }, HUMAN, s);
+    expect(again.results.some((x: any) => x.found)).toBe(false); // looked this week already
+    expect(calls).toHaveLength(n);
+  });
+
+  it("two pieces saying different deadlines: neither is taken", async () => {
+    const { s, campaignId } = setup();
+    let n = 0;
+    serve({ "/notice/1": { body: page() }, "/jobs/j1": { body: page("2099年11月30日") } });
+    (s as any).llm.models.completeSimple = async (_m: any, req: any) => {
+      const late = req.messages[0].content[0].text.includes("11月30日");
+      n++;
+      return { content: [{ type: "text", text: JSON.stringify({ isRecruitment: true, issuer: "示例重工股份有限公司", cohort: "2027届", cohortQuote: "招聘对象：2027届毕业生", deadlineText: `网申截止时间：2099年${late ? "11月30日" : "10月31日"}`, deadlineImage: null, scope: "全部", doubts: "" }) }] };
+    };
+    const r: any = await callTool("notice.verify", { campaignId }, HUMAN, s);
+    expect(n).toBe(2);
+    expect(r.results.map((x: any) => x.outcome)).toEqual(["review", "review"]);
+    expect(r.results[0].reasons.join()).toContain("几份材料写的截止不同");
   });
 });
