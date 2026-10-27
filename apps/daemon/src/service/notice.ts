@@ -39,7 +39,9 @@ export interface Extract {
  * What is known of the company the material is checked for. `sites`: siteKey()s of its sites on record (trust.ts), with
  * the records that vouch for each in `siteIds`; `accounts`: WeChat accounts the person put on record as its own.
  */
-export interface CompanyIdentity { name: string; aliases: string[]; sites: Set<string>; accounts: Set<string>; siteIds?: Map<string, string[]> }
+export interface CompanyIdentity { name: string; aliases: string[]; sites: Set<string>; accounts: Set<string>; siteIds?: Map<string, string[]>;
+  /** full names known from the same outside records as its sites (trust.ts), with the records that vouch for each */
+  names?: Map<string, string[]> }
 export interface Season { cohort: string; since: string; until: string }
 // ponytail: one season, as the rest of Zhiro (A9 turns 「2027」 into the recruiting season)
 export const SEASON: Season = { cohort: "2027", since: "2026-03-01", until: "2027-08-31" };
@@ -54,7 +56,8 @@ export type Outcome = "fact" | "not_stated" | "review" | "unreadable" | "not_rec
 // 4: the title counts as the material's words; the batch's own cohort is no longer told to the model; 「中国」 in front
 // 5: 「简称」 only as 「甲（以下简称乙）」 written together; the title and the account are part of what 「unchanged」 means
 // 6: a company's own sites are only those on record with their evidence (trust.ts), not every batch labelled 官方
-export const RULE_VERSION = 6;
+// 7: a full name on record (巨潮, Zhiro's own readers) passes the issuer check
+export const RULE_VERSION = 7;
 
 const pass = (why: string): Gate => ({ result: "pass", why }), fail = (why: string): Gate => ({ result: "fail", why }), unknown = (why: string): Gate => ({ result: "unknown", why });
 
@@ -100,6 +103,8 @@ export function issuerGate(ex: Extract, co: CompanyIdentity, doc?: NoticeDoc): G
   if (!issuer) return unknown("公告没写招聘主体");
   const names = [co.name, ...co.aliases].map(nameKey).filter(Boolean);
   if (names.includes(issuer)) return pass(`招聘主体「${ex.issuer}」`);
+  // a full name on record from an outside record (巨潮's disclosure, Zhiro's own readers)
+  for (const [full, ids] of co.names ?? []) if (nameKey(full) === issuer) return { ...pass(`招聘主体「${ex.issuer}」是「${co.name}」的全称（已确认）`), deps: ids.map((id) => ({ kind: "name" as const, id })) };
   // the material itself says the full name is short for this one: 「甲有限公司（以下简称乙）」, word for word on the page
   const tie = (ex.issuerNames ?? []).find((x) => names.includes(nameKey(x.name)) && shortFor(x.quote, ex.issuer, x.name) && onPage(doc, x.quote));
   if (tie) return pass(`原文「${tie.quote.trim().slice(0, 60)}」：「${ex.issuer}」简称「${tie.name}」`);
