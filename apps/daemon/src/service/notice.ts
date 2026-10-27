@@ -33,6 +33,8 @@ export interface Extract {
   issuerNames?: { name: string; quote: string }[];
   /** the words saying which recruitment this is: 「2027届秋季校园招聘公告」「暑期实习生招聘」 */
   batchQuote?: string;
+  /** the announcement's own date of publication, word for word: 「发布时间：2026-09-01」 */
+  published?: string;
   /** filled by the run, not the model: how much of the material the model was shown, and by which model */
   seen?: { chars: number; images: number; model: string };
   poster?: PosterRead;
@@ -65,7 +67,9 @@ export type Outcome = "fact" | "not_stated" | "review" | "unreadable" | "not_rec
 // 7: a full name on record (巨潮, Zhiro's own readers) passes the issuer check
 // 8: the material must be the batch's kind of recruitment (实习 / 正式, which round), both ways; a central enterprise's
 //    hiring platform carrying the announcement in the company's exact name counts as its publisher
-export const RULE_VERSION = 8;
+// 9: a deadline written without its year takes the one year that puts it within six months after the announcement's
+//    own date of publication; the year is no longer a doubt for the model to raise
+export const RULE_VERSION = 9;
 
 const pass = (why: string): Gate => ({ result: "pass", why }), fail = (why: string): Gate => ({ result: "fail", why }), unknown = (why: string): Gate => ({ result: "unknown", why });
 
@@ -169,6 +173,30 @@ export function readDeadline(quote: string): { policy: Policy; date?: string } |
   return { unclear: "一句话里有好几个日期" };
 }
 
+/** The day the announcement says it was published: one dated day, in a sentence on the page that is not a repost's or an update's. */
+export function publishedOn(doc: NoticeDoc, ex: Extract): string | null {
+  const q = (ex.published ?? "").trim();
+  if (!q || !onPage(doc, q) || /转载|转发|更新|修改|修订|来源/.test(q)) return null;
+  const { dates, named } = datesIn(q);
+  return dates.length === 1 && named === 1 ? dates[0] : null;
+}
+
+/**
+ * A deadline written without its year (「网上报名 9月2日—10月7日」), read with the announcement's own date of
+ * publication: the year that puts it from that day to six months after — when exactly one year does (December's
+ * announcement, January's deadline). Anything else stays without a year.
+ */
+export function deadlineOf(doc: NoticeDoc, ex: Extract): { said: ReturnType<typeof readDeadline>; year?: string } {
+  const q = ex.deadlineText ?? "";
+  const said = readDeadline(q);
+  if (!("unclear" in said) || said.unclear !== "原文没写年份" || ex.deadlineImage != null) return { said };
+  const pub = publishedOn(doc, ex);
+  if (!pub) return { said };
+  const until = new Date(Date.parse(pub) + 183 * 86400_000).toISOString().slice(0, 10);
+  const fits = [Number(pub.slice(0, 4)), Number(pub.slice(0, 4)) + 1].map((y) => readDeadline(q.replace(/(\d{1,2})\s*月/, `${y}年$1月`))).filter((r) => !("unclear" in r) && r.policy === "date" && r.date! >= pub && r.date! <= until);
+  return fits.length === 1 ? { said: fits[0], year: `年份按这篇的发布日期 ${pub} 推定` } : { said };
+}
+
 // words that make a deadline narrower than the whole batch, or not final
 const NARROWER = /部分|除外|以外|另行|暂定|视情况|以.{0,8}为准|仅限|分别/;
 const sameScope = (a: string, b: string) => norm(a) === norm(b);
@@ -179,7 +207,7 @@ const sameScope = (a: string, b: string) => norm(a) === norm(b);
  */
 export function evidenceGate(doc: NoticeDoc, ex: Extract): Gate {
   const q = ex.deadlineText ?? "";
-  const said = readDeadline(q);
+  const { said, year } = deadlineOf(doc, ex);
   if (ex.deadlineImage != null) {
     if (!Number.isInteger(ex.deadlineImage) || !doc.images.some((im) => im.n === ex.deadlineImage)) return fail(`说截止在图 ${ex.deadlineImage}，这份材料没有这张图`);
     if ("unclear" in said) return unknown(`海报上的截止：${said.unclear}`);
@@ -197,7 +225,7 @@ export function evidenceGate(doc: NoticeDoc, ex: Extract): Gate {
   if (!onPage(doc, q)) return fail("截止原句在页面上找不到");
   if ("unclear" in said) return unknown(`截止原句：${said.unclear}`);
   if (said.policy === "date" && ex.deadlineDate && ex.deadlineDate !== said.date) return fail(`原句是 ${said.date}，抽出来的是 ${ex.deadlineDate}`);
-  return pass(`原句「${q.trim().slice(0, 60)}」`);
+  return pass(`原句「${q.trim().slice(0, 60)}」${year ? `（${year}）` : ""}`);
 }
 
 /** 本季: the cohort the announcement names, its words on the page (or on a poster), is this season's; else a day inside it. */
@@ -260,7 +288,7 @@ export function batchGate(ex: Extract, doc: NoticeDoc | undefined, b: Batch): Ga
 }
 
 export function checkNotice(doc: NoticeDoc, ex: Extract, co: CompanyIdentity, season: Season = SEASON, batch: Batch = { kind: "校招", batch: "" }): { gates: Gates; outcome: Outcome; fact?: { policy: Policy; date?: string; evidence: string } } {
-  const said = ex.deadlineText ? readDeadline(ex.deadlineText) : null;
+  const { said, year } = ex.deadlineText ? deadlineOf(doc, ex) : { said: null, year: undefined };
   const date = said && !("unclear" in said) ? said.date : undefined;
   const gates: Gates = { publisher: publisherGate(doc, co, ex), issuer: issuerGate(ex, co, doc), evidence: ex.deadlineText ? evidenceGate(doc, ex) : unknown("公告没写截止"), season: seasonGate(ex, season, date, doc), batch: batchGate(ex, doc, batch) };
   if (doc.status !== "ok" && doc.status !== "partial") return { gates, outcome: "unreadable" };
@@ -269,7 +297,7 @@ export function checkNotice(doc: NoticeDoc, ex: Extract, co: CompanyIdentity, se
   // the whole batch: nothing said, or exactly 「全部 / 所有岗位」 — 「全部岗位，部分除外」 is not the whole
   const whole = (!(ex.scope ?? "").trim() || /^(全部|所有|全体)(岗位|职位)?$/.test(norm(ex.scope))) && !NARROWER.test(ex.deadlineText ?? "");
   if (ex.deadlineText) {
-    if (all && whole && !ex.doubts && said && !("unclear" in said)) return { gates, outcome: "fact", fact: { ...said, evidence: ex.deadlineImage != null ? `海报图 ${ex.deadlineImage}：${ex.deadlineText.trim()}` : ex.deadlineText.trim() } };
+    if (all && whole && !ex.doubts && said && !("unclear" in said)) return { gates, outcome: "fact", fact: { ...said, evidence: ex.deadlineImage != null ? `海报图 ${ex.deadlineImage}：${ex.deadlineText.trim()}` : `${ex.deadlineText.trim()}${year ? `（${year}：${ex.published!.trim()}）` : ""}` } };
     return { gates, outcome: "review" };
   }
   // no deadline in it: worth saying only of the whole of an official announcement for this company, this season, all of

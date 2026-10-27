@@ -205,3 +205,20 @@ describe("a central enterprise's own hiring platform carrying a unit's announcem
     expect(on("示例集团有限公司第一研究所", "2027届校园招聘公告。网申截止时间：2099年10月31日。").gates.publisher.result).toBe("unknown");
   });
 });
+
+describe("a deadline without its year, read with the announcement's own date of publication", () => {
+  const text = (pub: string, line: string) => `发布时间：${pub}。示例重工股份有限公司 2027届校园招聘公告。招聘对象：2027届毕业生。${line}。`;
+  const yearless = (pub: string, line: string, published = `发布时间：${pub}`) => check({ text: text(pub, line) }, { deadlineText: line, deadlineDate: "", published });
+  it("the one year within six months after it", () => {
+    const r = yearless("2026-09-01", "网上报名 9月2日—10月7日");
+    expect(r.outcome).toBe("fact");
+    expect(r.fact).toMatchObject({ date: "2026-10-07", evidence: "网上报名 9月2日—10月7日（年份按这篇的发布日期 2026-09-01 推定：发布时间：2026-09-01）" });
+    expect(yearless("2026-12-10", "网申截止 1月5日").fact?.date).toBe("2027-01-05"); // into the next year
+  });
+  it("no date of its own, one not on the page, a repost's, or no year that fits: still without a year", () => {
+    expect(yearless("2026-09-01", "网上报名 9月2日—10月7日", "").outcome).toBe("review");
+    expect(yearless("2026-09-01", "网上报名 9月2日—10月7日", "发布时间：2026-08-01").outcome).toBe("review"); // not what the page says
+    expect(yearless("2026-09-01", "网上报名 9月2日—10月7日", "转载时间：2026-09-01").outcome).toBe("review");
+    expect(yearless("2026-09-01", "网申截止 8月20日").outcome).toBe("review"); // before it was published
+  });
+});
