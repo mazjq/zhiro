@@ -87,7 +87,7 @@ const nameKey = (s: string) => companyKey(s).replace(/[（）()【】\[\]·・\-
 export function publisherGate(doc: NoticeDoc, co: CompanyIdentity): Gate {
   if (doc.via === "wechat") {
     if (doc.account?.id && co.accounts.has(doc.account.id)) return { ...pass(`公众号「${doc.account.name}」已登记为这家公司的`), deps: [{ kind: "account", id: doc.account.id }] };
-    return unknown(`公众号「${doc.account?.name || "未知"}」还没登记为这家公司的（官网链到它、或本人确认后才算）`);
+    return unknown(`公众号「${doc.account?.name || "未知"}」是不是这家公司的官方号还没核实`);
   }
   const k = siteKey(doc.finalUrl || doc.url);
   if (!k) return unknown("这个网站很多公司共用，看不出是谁的页面");
