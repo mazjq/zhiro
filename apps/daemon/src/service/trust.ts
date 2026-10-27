@@ -1,6 +1,6 @@
 import { ulid } from "ulid";
 import { now, type Db } from "../db.js";
-import { companyKey, guardedFetch } from "../data/index.js";
+import { companyKey, guardedFetch, guardedFetchTo } from "../data/index.js";
 import { siteKey as siteKeyOf } from "./notice.js";
 
 /**
@@ -169,4 +169,80 @@ export async function exchangeRoot(db: Db, companyId: string, force = false): Pr
     if ("id" in r) added++;
   }
   return done(added ? "added" : "kept", `${p.orgName}（${hit.code}）：${p.websites.join("、")}`);
+}
+
+// ---------- one hop from a known site to its hiring site ----------
+
+const RECRUIT = /招聘|加入我们|加入.{0,4}(团队|我们)|人才|校园|校招|join\s*us|careers?\b|jobs?\b/i;
+export interface PageLinks { url: string; title: string; links: { text: string; href: string }[] }
+
+/**
+ * Which links on a known site's pages lead straight to `target` from a hiring entry: the link's own text says so, or
+ * the page is the site's hiring page. Only links whose address is on the target itself count — a link that goes
+ * through the known site's own redirect, or a shortener, does not (an open redirect would lend the site's word to anyone).
+ * Pure over pages already read; the caller reads the pages and follows the found link to check where it ends.
+ */
+export function hiringLinksTo(pages: PageLinks[], target: string): { page: string; text: string; href: string }[] {
+  const out: { page: string; text: string; href: string }[] = [];
+  for (const p of pages) {
+    const hiringPage = RECRUIT.test(p.title);
+    for (const l of p.links) {
+      if (siteKeyOf(l.href) !== target) continue;
+      if (!RECRUIT.test(l.text) && !hiringPage) continue;
+      if (!out.some((o) => o.href === l.href)) out.push({ page: p.url, text: l.text.trim().slice(0, 40), href: l.href });
+    }
+  }
+  return out;
+}
+
+/** Every link on a page, with its words (a home page can carry hundreds; the hiring one is often near the end). */
+export function anchors(html: string, base: string): { text: string; href: string }[] {
+  const out: { text: string; href: string }[] = [];
+  for (const m of html.matchAll(/<a\s[^>]*?href\s*=\s*["']([^"'#][^"']*)["'][^>]*>([\s\S]*?)<\/a>/gi)) {
+    let href = "";
+    try { href = new URL(m[1].replace(/&amp;/g, "&"), base).href; } catch { continue; }
+    if (!/^https?:/i.test(href)) continue;
+    const text = m[2].replace(/<[^>]+>/g, " ").replace(/&nbsp;/g, " ").replace(/\s+/g, " ").trim() || (/title\s*=\s*["']([^"']+)["']/i.exec(m[0])?.[1] ?? "");
+    out.push({ text, href });
+  }
+  return out;
+}
+
+/** The known site's own pages that are its hiring entries (to look one level further in). */
+export function hiringPagesOn(page: PageLinks, root: string): string[] {
+  return [...new Set(page.links.filter((l) => siteKeyOf(l.href) === root && RECRUIT.test(l.text)).map((l) => l.href.split("#")[0]))].slice(0, 3);
+}
+
+/**
+ * Put `target` on record as the company's hiring site when one of its sites from an outside record (built-in or
+ * exchange — never one found this way) links to it from a hiring entry, on its home page or one hiring page down, and
+ * the link opens on the target itself. One hop only: a site found this way vouches for nothing further. Looked up
+ * once a month per target.
+ */
+export async function linkFromRoots(read: (url: string) => Promise<PageLinks | null>, db: Db, companyId: string, target: string, force = false): Promise<{ status: "added" | "none" | "skipped"; note: string }> {
+  const kind = `linked:${target}`;
+  const last = db.prepare("select at from trust_lookup where company_id = ? and kind = ?").get(companyId, kind) as { at: string } | undefined;
+  if (!force && last && last.at > new Date(Date.now() - 30 * 86400_000).toISOString()) return { status: "skipped", note: "这个月查过" };
+  const done = (status: "added" | "none", note: string) => { db.prepare("insert or replace into trust_lookup(company_id, kind, at, outcome, note) values (?,?,?,?,?)").run(companyId, kind, now(), status, note); return { status, note }; };
+  const roots = db.prepare("select id, site_key from company_site where company_id = ? and root_kind in ('builtin', 'exchange') and status = 'active' and (expires_at is null or expires_at > ?)").all(companyId, now()) as { id: string; site_key: string }[];
+  if (!roots.length) return done("none", "这家公司还没有已确认的官网");
+  for (const root of roots.slice(0, 3)) {
+    if (root.site_key.includes(":")) continue; // a hiring-system tenant has no home page of its own to look on
+    let home: PageLinks | null = null;
+    for (const u of [`https://www.${root.site_key}/`, `https://${root.site_key}/`, `http://www.${root.site_key}/`, `http://${root.site_key}/`]) if ((home = await read(u))) break;
+    if (!home) continue;
+    const pages = [home];
+    // a home page in another language: its own Chinese version is read too (www.mindray.com opens in English)
+    const zh = home.links.find((l) => siteKeyOf(l.href) === root.site_key && /中文|简体|China\b/i.test(l.text) && l.href.split("#")[0] !== home.url);
+    if (zh) { const p = await read(zh.href); if (p) pages.push(p); }
+    for (const page of [...pages]) for (const u of hiringPagesOn(page, root.site_key)) { if (pages.length >= 6 || pages.some((x) => x.url === u)) continue; const p = await read(u); if (p) pages.push(p); }
+    for (const l of hiringLinksTo(pages, target)) {
+      // the link must open on the target itself, not lead on to somewhere else
+      const end = await guardedFetchTo(l.href, { headers: { "user-agent": "Mozilla/5.0" }, signal: AbortSignal.timeout(20_000) }).then((r) => { void r.res.body?.cancel(); return r.res.ok ? r.url : ""; }).catch(() => "");
+      if (!end || siteKeyOf(end) !== target) continue;
+      const r = addSite(db, { companyId, siteKey: target, rootKind: "linked", basisUrl: l.page, basisQuote: `${root.site_key} 的「${l.text || "招聘页"}」链到 ${l.href}`, fingerprint: `linked:${root.id}:${target}:${l.page}:${l.href}`, parentId: root.id, days: 90 });
+      if ("id" in r) return done("added", `${root.site_key} →「${l.text}」→ ${target}`);
+    }
+  }
+  return done("none", "已确认的官网上没找到指向它的招聘入口");
 }

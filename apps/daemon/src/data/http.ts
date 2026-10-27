@@ -63,12 +63,17 @@ export async function assertPublic(url: string): Promise<void> {
 
 /** fetch for addresses that came from outside: every hop of a redirect is checked as the first one is. */
 export async function guardedFetch(url: string, init: RequestInit = {}, hops = 8): Promise<Response> {
-  if (init.redirect === "manual") { await assertPublic(url); return fetch(url, init); } // the caller follows the hops itself
+  return (await guardedFetchTo(url, init, hops)).res;
+}
+
+/** guardedFetch, and the address it landed on after the redirects (a response's own `url` may be blank). */
+export async function guardedFetchTo(url: string, init: RequestInit = {}, hops = 8): Promise<{ res: Response; url: string }> {
+  if (init.redirect === "manual") { await assertPublic(url); return { res: await fetch(url, init), url }; } // the caller follows the hops itself
   for (let i = 0; ; i++) {
     await assertPublic(url);
     const res = await fetch(url, { ...init, redirect: "manual" });
     const to = res.status >= 300 && res.status < 400 ? res.headers.get("location") : null;
-    if (!to) return res;
+    if (!to) return { res, url };
     await res.body?.cancel().catch(() => {});
     if (i >= hops) throw new Error(`SITE_DOWN: 跳转太多次 ${url}`);
     // what fetch's own follow does: 303, and 301 / 302 after a POST, go on as a GET without the body
