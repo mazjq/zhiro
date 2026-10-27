@@ -5,6 +5,7 @@ import { ulid } from "ulid";
 import { now, type Db } from "../db.js";
 import { companyKey } from "../data/index.js";
 import { recordFact, type Policy } from "./deadlines.js";
+import { depsStand, type Dep } from "./trust.js";
 
 /**
  * 公告核实: what a recruiting announcement (a site's article, a WeChat post or its posters) says of a batch's or a
@@ -34,21 +35,26 @@ export interface Extract {
   seen?: { chars: number; images: number; model: string };
   poster?: PosterRead;
 }
-/** What is known of the company the material is checked for. `sites`: siteKey()s of its official subscriptions. */
-export interface CompanyIdentity { name: string; aliases: string[]; sites: Set<string>; accounts: Set<string> }
+/**
+ * What is known of the company the material is checked for. `sites`: siteKey()s of its sites on record (trust.ts), with
+ * the records that vouch for each in `siteIds`; `accounts`: WeChat accounts the person put on record as its own.
+ */
+export interface CompanyIdentity { name: string; aliases: string[]; sites: Set<string>; accounts: Set<string>; siteIds?: Map<string, string[]> }
 export interface Season { cohort: string; since: string; until: string }
 // ponytail: one season, as the rest of Zhiro (A9 turns 「2027」 into the recruiting season)
 export const SEASON: Season = { cohort: "2027", since: "2026-03-01", until: "2027-08-31" };
 
 export type GateResult = "pass" | "fail" | "unknown";
-export interface Gate { result: GateResult; why: string }
+/** `deps`: the records a passing gate leaned on — a check counts only while all of them stand */
+export interface Gate { result: GateResult; why: string; deps?: Dep[] }
 export interface Gates { publisher: Gate; issuer: Gate; evidence: Gate; season: Gate }
 export type Outcome = "fact" | "not_stated" | "review" | "unreadable" | "not_recruitment";
 // 2: doubts are only about what is written (an absent deadline is not a doubt); 「27届」 read as 2027
 // 3: posters read twice by two models; cohort sentence checked; what the model was shown counted; 「以下简称」
 // 4: the title counts as the material's words; the batch's own cohort is no longer told to the model; 「中国」 in front
 // 5: 「简称」 only as 「甲（以下简称乙）」 written together; the title and the account are part of what 「unchanged」 means
-export const RULE_VERSION = 5;
+// 6: a company's own sites are only those on record with their evidence (trust.ts), not every batch labelled 官方
+export const RULE_VERSION = 6;
 
 const pass = (why: string): Gate => ({ result: "pass", why }), fail = (why: string): Gate => ({ result: "fail", why }), unknown = (why: string): Gate => ({ result: "unknown", why });
 
@@ -77,13 +83,13 @@ const nameKey = (s: string) => companyKey(s).replace(/[（）()【】\[\]·・\-
 /** 发布者: the company's own site or hiring-system tenant, or a WeChat account on record as its own. */
 export function publisherGate(doc: NoticeDoc, co: CompanyIdentity): Gate {
   if (doc.via === "wechat") {
-    if (doc.account?.id && co.accounts.has(doc.account.id)) return pass(`公众号「${doc.account.name}」已登记为这家公司的`);
+    if (doc.account?.id && co.accounts.has(doc.account.id)) return { ...pass(`公众号「${doc.account.name}」已登记为这家公司的`), deps: [{ kind: "account", id: doc.account.id }] };
     return unknown(`公众号「${doc.account?.name || "未知"}」还没登记为这家公司的（官网链到它、或本人确认后才算）`);
   }
   const k = siteKey(doc.finalUrl || doc.url);
   if (!k) return unknown("这个网站很多公司共用，看不出是谁的页面");
-  if (co.sites.has(k)) return pass(`这家公司的官方网站 / 招聘系统（${k}）`);
-  return unknown(`${k} 不在这家公司已知的官方网站里`);
+  if (co.sites.has(k)) return { ...pass(`这家公司已确认的官网 / 招聘系统（${k}）`), deps: (co.siteIds?.get(k) ?? []).map((id) => ({ kind: "site" as const, id })) };
+  return unknown(`${k} 不在这家公司已确认的官网里`);
 }
 
 /** 主体: the employer the announcement names is this company — by full name or a recorded alias, never by likeness. */
@@ -219,9 +225,15 @@ export function recordCheck(s: { db: Db; vault: string }, subject: { type: "camp
   try {
     db.prepare("insert into notice_read(id, url, final_url, via, status, note, title, account_id, account_name, text_path, fingerprint, images, complete, read_at) values (?,?,?,?,?,?,?,?,?,?,?,?,?,?)")
       .run(readId, doc.url, doc.finalUrl, doc.via, doc.status, doc.note ?? "", doc.title, doc.account?.id ?? "", doc.account?.name ?? "", textPath, fingerprint(doc), JSON.stringify(doc.images), doc.complete ? 1 : 0, at);
+    // what the check leaned on; a deadline is written only if all of it still stands now, inside this transaction
+    const deps = result ? (Object.values(result.gates) as Gate[]).flatMap((g) => (g.result === "pass" ? g.deps ?? [] : [])) : [];
+    const stands = depsStand(db, deps);
+    if (result && !stands) result = { ...result, outcome: "review", fact: undefined, gates: { ...result.gates, publisher: unknown(`${result.gates.publisher.why}（依据已撤回或过期）`) } };
     const outcome: Outcome = result?.outcome ?? "unreadable";
     db.prepare("insert into notice_check(id, subject_type, subject_id, read_id, rule_version, extract, gates, outcome, by, checked_at) values (?,?,?,?,?,?,?,?,?,?)")
       .run(checkId, subject.type, subject.id, readId, RULE_VERSION, JSON.stringify(ex ?? {}), JSON.stringify(result?.gates ?? {}), outcome, by, at);
+    const dep = db.prepare("insert or ignore into notice_check_dep(check_id, kind, ref_id) values (?,?,?)");
+    for (const d of deps) dep.run(checkId, d.kind, d.id);
     if (outcome === "fact" && result?.fact) {
       const f = result.fact;
       factId = recordFact(db, { ...(subject.type === "campaign" ? { campaignId: subject.id } : { positionId: subject.id }), policy: f.policy, date: f.date, grade: "官方", sourceKind: "notice", url: doc.finalUrl || doc.url, evidence: f.evidence, by: by || "notice.verify", checkId }).id;
