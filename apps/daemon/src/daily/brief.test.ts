@@ -98,6 +98,20 @@ describe("the daily brief", () => {
     expect(asked(now)).toBe(false); // a confirmation came in
   });
 
+  it("subscriptions still tried but not read for a week come up as one line, by reason; one that read since does not", async () => {
+    const { s } = await world();
+    const db = s.domain.db, now = Date.now();
+    const run = db.prepare("insert into scan_run(id, source, config_id, started_at, finished_at, complete, error) values (?,?,?,?,?,0,?)");
+    const at = (d: number) => new Date(now - d * DAY).toISOString();
+    for (const id of ["dead", "dead2"]) for (const d of [10, 6, 1]) run.run(ulid(), "zhilian", id, at(d), at(d), "ZERO_POSTS: 智联：没找到有岗位的校招机构号 x");
+    for (const d of [9, 2]) run.run(ulid(), "dayee", "changed", at(d), at(d), "SCHEMA_CHANGED: 大易 listPosition：parameter error: recruitType");
+    for (const d of [9, 1]) run.run(ulid(), "moka", "back", at(d), at(d), d === 9 ? "SITE_DOWN: x" : "");
+    run.run(ulid(), "beisen", "new", at(2), at(2), "BLOCKED: HTTP 403 x"); // failing for two days only
+    run.run(ulid(), "job51", "gone", at(20), at(20), "SITE_DOWN: x"); // no longer tried: removed
+    const line = makeBrief(db, now).hanging.find((x) => x.key === "hang:sources");
+    expect(line?.text).toBe("3 个订阅一周多没读成（官网读到了，但一个岗位都没有 2；官网改版，读取方式要更新 1）：这些公司的岗位可能不全，在「配置 → 订阅」里看");
+  });
+
   it("takes only a real hour and minute", () => {
     expect(normalizeAt("8:05")).toBe("08:05");
     expect(normalizeAt("23:59")).toBe("23:59");
