@@ -1,5 +1,19 @@
 import { describe, it, expect } from "vitest";
-import { articleText, noticeToListings, type NoticeExtraction } from "./extract.js";
+import { encode as encodeJpeg, decode as decodeJpeg } from "jpeg-js";
+import { articleText, noticeToListings, slices, MAX_PIXELS, type NoticeExtraction } from "./extract.js";
+
+describe("a long poster goes to the model in slices", () => {
+  const jpeg = (width: number, height: number) => Buffer.from(encodeJpeg({ data: new Uint8Array(width * height * 4).fill(200), width, height }, 80).data);
+  it("cut top to bottom within the budget, overlapping, covering it all; one that fits is sent as it is", () => {
+    const parts = slices(jpeg(1080, 6000), "image/jpeg")!;
+    const dims = parts.map((p) => decodeJpeg(p));
+    expect(dims.length).toBe(3);
+    expect(dims.every((d) => d.width === 1080 && d.width * d.height <= MAX_PIXELS)).toBe(true);
+    expect(dims.reduce((s, d) => s + d.height, 0)).toBeGreaterThan(6000); // the overlaps
+    expect(slices(jpeg(1080, 1500), "image/jpeg")).toBeNull();
+    expect(slices(Buffer.from("x"), "image/webp")).toBeNull();
+  });
+});
 
 describe("extract", () => {
   it("pulls mp.weixin article text and title", () => {
