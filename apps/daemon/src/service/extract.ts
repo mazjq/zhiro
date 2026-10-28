@@ -3,8 +3,6 @@ import type { Llm } from "../llm.js";
 import { type Listing, guardedFetch } from "../data/index.js";
 import type { SourceContext } from "../data/index.js";
 import { decodeQr, isHttpUrl } from "./qr.js";
-import { PNG } from "pngjs";
-import { decode as decodeJpeg, encode as encodeJpeg } from "jpeg-js";
 
 /** Article text extraction: mp.weixin (#js_content) first, then a generic tag-stripper. No readability dep (ponytail). */
 export interface Article { title: string; text: string; images: string[] }
@@ -38,37 +36,8 @@ export async function loadImages(urls: string[], ctx: SourceContext, max = 8, ma
       const buf = Buffer.from(await res.arrayBuffer());
       if (buf.length > maxBytes) { if (stats) stats.failed++; continue; }
       if (buf.length < 2_000) continue; // an icon or a divider: nothing to read, nothing missed
-      const qr = decodeQr(buf, mime);
-      const parts = slices(buf, mime);
-      if (!parts) out.push({ data: buf.toString("base64"), mimeType: mime, qr });
-      else parts.forEach((p, n) => out.push({ data: p.toString("base64"), mimeType: "image/jpeg", qr: n ? [] : qr }));
+      out.push({ data: buf.toString("base64"), mimeType: mime, qr: decodeQr(buf, mime) });
     } catch { if (stats) stats.failed++; }
-  }
-  return out;
-}
-
-// ponytail: one pixel budget, under the strictest model seen (Codex refused a 1080-wide long poster: 44250 patches > 30000)
-export const MAX_PIXELS = 2_500_000;
-const OVERLAP = 80; // a line of text cut by one slice is whole in the next
-/**
- * A long poster cut top to bottom into slices each within the budget, as JPEG — cut rather than shrunk, so the small
- * print stays readable. Null when it fits, or cannot be decoded here (webp, gif), or is wide as well as big.
- * ponytail: a big wide image is sent whole; shrink it when a model refuses one
- */
-export function slices(buf: Buffer, mime: string): Buffer[] | null {
-  let width: number, height: number, data: Uint8Array;
-  try {
-    if (/png/.test(mime)) ({ width, height, data } = PNG.sync.read(buf));
-    else if (/jpe?g/.test(mime)) ({ width, height, data } = decodeJpeg(buf, { useTArray: true, maxMemoryUsageInMB: 512 }));
-    else return null;
-  } catch { return null; }
-  const rows = Math.floor(MAX_PIXELS / width) - OVERLAP;
-  if (width * height <= MAX_PIXELS || rows < 400) return null;
-  const out: Buffer[] = [];
-  for (let y = 0; y < height; y += rows) {
-    const h = Math.min(height - y, rows + OVERLAP);
-    out.push(Buffer.from(encodeJpeg({ data: data.subarray(y * width * 4, (y + h) * width * 4), width, height: h }, 90).data));
-    if (y + h >= height) break;
   }
   return out;
 }
