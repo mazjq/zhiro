@@ -60,11 +60,14 @@ export async function readNotice(s: Services, url: string): Promise<{ doc: Notic
       // the post's own account only: a __biz anywhere else on the page may be a recommended post's
       const id = /var biz = "([^"]+)"/.exec(a.html)?.[1] ?? "";
       const name = /var nickname = htmlDecode\("([^"]*)"\)/.exec(a.html)?.[1] ?? /id="js_name">\s*([^<]+)/.exec(a.html)?.[1]?.trim() ?? "";
+      // the post's account as WeChat shows it to readers: 2 is an organisation WeChat verified (个人号 are 0), and its own description
+      const verified = /var verify_status = "(\d+)"/.exec(a.html)?.[1] === "2";
+      const signature = (/var profile_signature = "([^"]*)"/.exec(a.html)?.[1] ?? "").trim();
       // a picture post (图片消息) keeps its pictures in picture_page_info_list, on another image host
       const list = a.html.indexOf("picture_page_info_list");
       const posted = list < 0 ? [] : [...new Set([...a.html.slice(list, list + 80_000).matchAll(/cdn_url:\s*'(https?:\/\/[^']+qpic\.cn\/[^']+)'/g)].map((m) => m[1].replace(/&amp;/g, "&")))];
       const { pics, all } = await images([...a.images, ...posted.filter((u) => !a.images.includes(u))]);
-      const doc = blank({ via: "wechat", title: a.title, text: a.text, account: id ? { id, name } : undefined, images: pics.map((p, n) => ({ n, hash: sha(p.data) })),
+      const doc = blank({ via: "wechat", title: a.title, text: a.text, account: id ? { id, name, verified, signature } : undefined, images: pics.map((p, n) => ({ n, hash: sha(p.data) })),
         complete: a.text.length < MAX_TEXT && all, status: a.text.trim() || pics.length ? "ok" : "empty" });
       return { doc, pics };
     } catch (e: any) {
