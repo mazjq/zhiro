@@ -7,7 +7,7 @@ import { WorkflowEngine } from "../service/workflow.js";
 import { lockVault } from "../lock.js";
 import { sources } from "./readers/index.js";
 import { addSource, saveSources } from "./subscriptions.js";
-import { sourceScan, scheduleSources } from "./sync.js";
+import { sourceScan, scheduleSources, retryAfter } from "./sync.js";
 import { ingest } from "./ingest.js";
 import type { DataContext, Listing, Source, SourceConfig } from "./types.js";
 
@@ -21,7 +21,7 @@ function open(dir: string) {
   const db = openDb(join(dir, "t.db"));
   const workflows = new WorkflowEngine(db);
   const list: SourceConfig[] = [];
-  const ctx: DataContext = { db, vault: dir, sources: list, workflows };
+  const ctx: DataContext = { db, vault: dir, sources: list, workflows, platformGapMs: 0 };
   workflows.register(sourceScan(ctx));
   return { db, workflows, ctx };
 }
@@ -65,6 +65,27 @@ describe("a subscription keeps being pulled", () => {
     answer = () => [L("1", "控制算法工程师")];
     expect(await workflows.tick(at)).toBe(1);
     expect(db.prepare("select count(*) n from position").get()).toEqual({ n: 1 });
+  });
+
+  it("what a retry cannot fix soon (blocked, changed site) waits a day, then two, four, up to a week; down or empty keeps trying", async () => {
+    const day = 24 * 3600_000;
+    expect([1, 2, 3, 4, 5].map((n) => retryAfter("BLOCKED: HTTP 403 x", n, day) / day)).toEqual([1, 2, 4, 7, 7]);
+    expect(retryAfter("SCHEMA_CHANGED: 大易 listPosition：parameter error", 1, day)).toBe(day); // no hourly retries
+    expect([1, 3, 4].map((n) => retryAfter("SITE_DOWN: 官网打不开", n, day) / 3600_000)).toEqual([1, 1, 24]);
+    expect(retryAfter("ZERO_POSTS: 官网读到了，但一个岗位都没有", 9, day)).toBe(day); // its season can open any day
+
+    const { db, workflows, ctx } = setup();
+    answer = () => { throw new Error("BLOCKED: HTTP 403 https://jobs.flaky.example/acme"); };
+    addSource(ctx, { url: "https://jobs.flaky.example/acme", name: "示例重工" });
+    scheduleSources(ctx);
+    const at = new Date().toISOString();
+    await workflows.tick(at);
+    await workflows.tick(at);
+    await workflows.tick(later(at, 2 * 3600_000));
+    expect(runs(db)).toEqual({ n: 1, failed: 1 }); // not read again within the day
+    expect(Date.parse(wf(db).next!) - Date.now()).toBeGreaterThan(23 * 3600_000);
+    // what the read cost is on record with it
+    expect(db.prepare("select fetch_ms is not null t, requests from scan_run").get()).toEqual({ t: 1, requests: 0 });
   });
 
   it("removed and added back, it is scheduled again; a schedule that had given up under the old rule is revived", async () => {

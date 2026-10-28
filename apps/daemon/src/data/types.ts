@@ -130,4 +130,6 @@ export interface DataContext {
   /** a pull of this subscription has started (`running`), or is over (「更新情况」 shows it under way, then its result) */
   onPull?(configId: string, running: boolean): void;
   onSourcesChanged?(): void;
+  /** how far apart scheduled reads of one platform start (sync.ts; tests set 0) */
+  platformGapMs?: number;
 }

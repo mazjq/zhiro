@@ -14,7 +14,7 @@
  */
 import { DatabaseSync } from "node:sqlite";
 import { createHash } from "node:crypto";
-import { closeSync, copyFileSync, existsSync, fsyncSync, lstatSync, openSync, readdirSync, readFileSync, readSync, renameSync, rmSync, statSync, statfsSync, writeSync } from "node:fs";
+import { closeSync, copyFileSync, existsSync, fsyncSync, lstatSync, mkdirSync, openSync, readdirSync, readFileSync, readSync, renameSync, rmSync, statSync, statfsSync, writeSync } from "node:fs";
 import { join, relative } from "node:path";
 import { MIGRATIONS, COUNTS_MAY_CHANGE, SCHEMA_VERSION, SchemaMismatch, migrate, schemaOf, type Db } from "./db.js";
 import { dbPath } from "./config.js";
@@ -199,6 +199,7 @@ export function upgradeVault(vault: string, _lock: { release(): unknown }, opts:
     throw new UpgradeFailed(`升级到 v${target} 失败：${String(e?.message ?? e).slice(0, 300)}。数据没动，原库照旧`);
   }
   if (existsSync(live + "-wal") && statSync(live + "-wal").size > 0) { for (const s of ["", "-wal", "-shm"]) rmSync(candidate + s, { force: true }); throw new UpgradeFailed("原库还有没并进去的写入（别的进程在写？），这次不升级，数据没动"); }
+  mkdirSync(join(vault, "backups"), { recursive: true }); // a data folder copied without it (2026-10-28) failed here, the copy left behind
   const manifest: BackupManifest = { kind: "pre-upgrade", fromSchema: have, toSchema: target, fromApp, toApp: VERSION, sha256: sha256(live), bytes: statSync(live).size, counts: before.counts, at: new Date().toISOString() };
   writeDurable(manifestOf(backup), JSON.stringify(manifest, null, 2));
   writeDurable(journalPath(vault), JSON.stringify({ id, candidate, backup, at: new Date().toISOString() } satisfies Journal));
