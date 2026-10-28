@@ -133,7 +133,13 @@ export async function askNotice(llm: Llm, doc: NoticeDoc, pics: { data: string; 
   const text = doc.text.slice(0, MAX_TEXT);
   const body = `\n正文：\n${text}${shown.length ? `\n\n附 ${shown.length} 张配图，按顺序编号 0…${shown.length - 1}。` : ""}`;
   const pictures = shown.map((p) => ({ type: "image", data: p.data, mimeType: p.mimeType }));
-  const j = json(await llm.models.completeSimple(model, { systemPrompt: PROMPT, messages: [{ role: "user", content: [{ type: "text", text: `${head}${body}` }, ...pictures] as any, timestamp: Date.now() }] }, { reasoning: "low" }));
+  // a reply with nothing in it (the model stopped on an error) is asked once more, then this piece is left unread
+  let j: any;
+  for (let i = 0; !j; i++) {
+    const r: any = await llm.models.completeSimple(model, { systemPrompt: PROMPT, messages: [{ role: "user", content: [{ type: "text", text: `${head}${body}` }, ...pictures] as any, timestamp: Date.now() }] }, { reasoning: "low" });
+    if (contentText(r.content).trim()) j = json(r);
+    else if (i) throw new DomainError("MODEL_EMPTY", `模型这次没给出结果${r.errorMessage ? `：${String(r.errorMessage).slice(0, 120)}` : ""}`);
+  }
   const ex: Extract = { isRecruitment: j.isRecruitment !== false, issuer: str(j.issuer), cohort: str(j.cohort), cohortQuote: str(j.cohortQuote), cohortImage: num(j.cohortImage),
     deadlineText: str(j.deadlineText), deadlineDate: str(j.deadlineDate), deadlineImage: num(j.deadlineImage), applyEntry: str(j.applyEntry), scope: str(j.scope), doubts: str(j.doubts),
     batchQuote: str(j.batchQuote), published: str(j.published),
@@ -269,7 +275,13 @@ export async function verifyNotice(s: Services, input: { campaignId?: string; po
     const prev = last.get(c.id, url, RULE_VERSION) as { extract: string; fingerprint: string } | undefined;
     const unchanged = !!prev && prev.fingerprint === fingerprint(doc);
     if (!unchanged && !s.llm) throw new DomainError("NO_MODEL", "没有配置模型：公告要模型来读");
-    const ex = unchanged ? (JSON.parse(prev!.extract) as Extract) : await withPurpose("notice.verify", c.company_id, () => askNotice(s.llm!, doc, pics, co.name, `${c.cohort} ${c.batch}`));
+    let ex: Extract | null;
+    try {
+      ex = unchanged ? (JSON.parse(prev!.extract) as Extract) : await withPurpose("notice.verify", c.company_id, () => askNotice(s.llm!, doc, pics, co.name, `${c.cohort} ${c.batch}`));
+    } catch (e: any) {
+      if (e?.code !== "MODEL_EMPTY") throw e;
+      return checked.push({ url, doc: { ...doc, note: e.message }, ex: null, result: null, unchanged: false, found, why: e.message });
+    }
     if (!ex) return checked.push({ url, doc: { ...doc, note: "这份是海报，当前模型看不了图" }, ex: null, result: null, unchanged: false, found, why: "这份是海报，当前模型看不了图：换一个能看图的模型" });
     return checked.push({ url, doc, ex, result: checkNotice(doc, ex, co, SEASON, batch), unchanged, found });
   };
