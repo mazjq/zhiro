@@ -7,7 +7,26 @@ import { Domain } from "./domain.js";
 import { createServices, testConfig } from "../services.js";
 import { callTool, type Actor } from "../registry.js";
 import { ingest, type Listing } from "../data/index.js";
-import { otherSeeingModels } from "./notice-verify.js";
+import { otherSeeingModels, readNotice } from "./notice-verify.js";
+
+describe("the pictures of a post: each once, as many as one request holds", () => {
+  afterEach(() => vi.unstubAllGlobals());
+  const IMG = "http://93.184.216.34";
+  const post = (n: number) => `<html><body><h1 id="activity-name">2027届校园招聘</h1><div id="js_content">${"示例重工 2027届校园招聘。".repeat(5)}${[...Array(n)].map((_, i) => `<img data-src="${IMG}/p${i}.png">`).join("")}</div></body></html>`;
+  const serveWith = (n: number, same: (i: number) => number) => vi.stubGlobal("fetch", vi.fn(async (u: string) => {
+    const p = new URL(u).pathname;
+    if (p.startsWith("/s/")) return new Response(post(n), { headers: { "content-type": "text/html" } });
+    return new Response(Buffer.alloc(3000, same(Number(/p(\d+)/.exec(p)![1]))), { headers: { "content-type": "image/png" } });
+  }));
+  it("the same picture under two addresses is sent once; one past the limit leaves the reading incomplete", async () => {
+    serveWith(3, (i) => (i === 2 ? 0 : i));
+    const a = await readNotice({} as any, "https://mp.weixin.qq.com/s/a");
+    expect([a.pics.length, a.doc.complete]).toEqual([2, true]);
+    serveWith(14, (i) => i);
+    const b = await readNotice({} as any, "https://mp.weixin.qq.com/s/b");
+    expect([b.pics.length, b.doc.complete]).toEqual([12, false]);
+  });
+});
 import { addSite } from "./trust.js";
 import { noticeVerify } from "../workflows/notice.js";
 

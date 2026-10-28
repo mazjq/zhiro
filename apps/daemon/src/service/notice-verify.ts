@@ -21,7 +21,9 @@ const unknown = (why: string): Gate => ({ result: "unknown", why });
  */
 
 const sha = (s: string | Buffer) => createHash("sha256").update(s).digest("hex").slice(0, 16);
-const MAX_IMAGES = 20, MAX_TEXT = 40_000;
+// pictures in one request: the model shrinks each itself and counts what is left (Codex: 30000 patches a request,
+// a large picture about 2000), so about 15 fit; more are not read and the reading is not complete
+const MAX_IMAGES = 12, MAX_TEXT = 40_000;
 
 /**
  * What is on record about a company: its name and aliases, its sites on record with their evidence (trust.ts — not the
@@ -51,8 +53,10 @@ export async function readNotice(s: Services, url: string): Promise<{ doc: Notic
   // the images of a page, with whether all could be had: a poster that did not load may be where the deadline is
   const images = async (urls: string[]) => {
     const stats = { failed: 0 };
-    const pics = await loadImages(urls, ctx, MAX_IMAGES, 4_000_000, stats);
-    return { pics, all: stats.failed === 0 && urls.length <= MAX_IMAGES };
+    // the same picture under two addresses (a picture post lists its pictures twice) is sent once
+    const seen = new Set<string>();
+    const pics = (await loadImages(urls, ctx, MAX_IMAGES * 2, 4_000_000, stats)).filter((p) => { const h = sha(p.data); return !seen.has(h) && !!seen.add(h); });
+    return { pics: pics.slice(0, MAX_IMAGES), all: stats.failed === 0 && urls.length <= MAX_IMAGES * 2 && pics.length <= MAX_IMAGES };
   };
   if (/^https?:\/\/mp\.weixin\.qq\.com\//i.test(url)) {
     try {
