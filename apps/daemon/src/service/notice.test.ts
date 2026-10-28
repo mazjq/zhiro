@@ -44,6 +44,34 @@ describe("批次: the material is the batch's kind of recruitment, both ways", (
   });
 });
 
+describe("公众号: an account WeChat verified as an organisation's, named for this company", () => {
+  const wx = (account: NonNullable<NoticeDoc["account"]>, co: CompanyIdentity = CO) => checkNotice(doc({ via: "wechat", url: "https://mp.weixin.qq.com/s/x", finalUrl: "https://mp.weixin.qq.com/s/x", account }), ex(), co, SEASON).gates.publisher;
+  it("its name is the company's, with what the account is for after it", () => {
+    expect(wx({ id: "Mz1", name: "示例重工招聘", verified: true }).result).toBe("pass");
+    expect(wx({ id: "Mz1", name: "示例重工HR", verified: true }).result).toBe("pass");
+    expect(wx({ id: "Mz1", name: "示例重工招聘", verified: false }).result).toBe("unknown"); // a personal account can take any name
+    expect(wx({ id: "Mz1", name: "示例招聘", verified: true }).result).toBe("unknown"); // a part of the name is not it
+  });
+  it("or its own description says it is this company's official account, by the full name", () => {
+    const unit: CompanyIdentity = { name: "示例集团有限公司第七〇七研究所", aliases: [], sites: new Set(), accounts: new Set() };
+    expect(wx({ id: "Mz2", name: "示例七O七所", verified: true, signature: "示例集团有限公司第七〇七研究所官方订阅号，发布相关新闻资讯。" }, unit).result).toBe("pass");
+    expect(wx({ id: "Mz2", name: "示例七O七所", verified: true, signature: "示例集团有限公司第七〇七研究所新闻资讯" }, unit).result).toBe("unknown"); // not said to be official
+    expect(wx({ id: "Mz2", name: "示例七O七所", verified: true, signature: "示例集团第七〇七研究所官方订阅号" }, unit).result).toBe("unknown"); // not the full name
+    // the name and 官方 apart: someone else's official platform carrying its news
+    expect(wx({ id: "Mz2", name: "某大学就业", verified: true, signature: "某大学官方就业平台，发布示例集团有限公司第七〇七研究所等单位招聘信息" }, unit).result).toBe("unknown");
+    expect(wx({ id: "Mz2", name: "某号", verified: true, signature: "非示例集团有限公司第七〇七研究所官方账号" }, unit).result).toBe("unknown");
+  });
+  it("one word for what the account is for, no more: 「示例人才招聘」 is not 示例's", () => {
+    const co: CompanyIdentity = { name: "示例有限公司", aliases: [], sites: new Set(), accounts: new Set() };
+    expect(wx({ id: "Mz4", name: "示例人才招聘", verified: true }, co).result).toBe("unknown");
+    expect(wx({ id: "Mz4", name: "示例招聘", verified: true }, co).result).toBe("pass");
+  });
+  it("a group's account is not its unit's", () => {
+    const unit: CompanyIdentity = { name: "示例电信湖北公司", aliases: [], sites: new Set(), accounts: new Set() };
+    expect(wx({ id: "Mz3", name: "示例电信校招速递", verified: true, signature: "示例电信官方校园招聘信息" }, unit).result).toBe("unknown");
+  });
+});
+
 describe("公告核实: only a deadline that passes all four checks becomes a fact", () => {
   it("the company's own announcement, sentence on the page, this season → a fact", () => {
     const r = check();
