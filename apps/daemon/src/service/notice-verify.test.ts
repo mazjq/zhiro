@@ -90,6 +90,16 @@ describe("notice.verify: read, ask once, check, file", () => {
     expect(r.results[0].reasons.join("")).not.toContain("company.alias");
   });
 
+  it("an empty reply is asked again, then that piece is left unread: the batch's run does not fail", async () => {
+    const { s, campaignId } = setup();
+    serve({ "/notice/1": { body: page() } });
+    let n = 0;
+    (s as any).llm.models.completeSimple = async () => { n++; return { content: [], stopReason: "error", errorMessage: "overloaded" }; };
+    const r: any = await callTool("notice.verify", { campaignId, url: `${SITE}/notice/1` }, HUMAN, s);
+    expect(n).toBe(2);
+    expect(r.results[0]).toMatchObject({ outcome: "unreadable", reasons: ["模型这次没给出结果：overloaded"] });
+  });
+
   it("only the person puts an account on record", async () => {
     const { s, db } = setup();
     const companyId = (db.prepare("select id from company").get() as any).id;
