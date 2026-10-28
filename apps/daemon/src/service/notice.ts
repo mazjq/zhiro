@@ -19,8 +19,8 @@ export type ReadStatus = "ok" | "partial" | "failed" | "login" | "blocked" | "em
 /** One reading of one piece of material. `complete`: nothing cut off, every image fetched. */
 export interface NoticeDoc {
   url: string; finalUrl: string; via: "http" | "browser" | "wechat"; status: ReadStatus; note?: string; title: string;
-  /** a WeChat post: the account's id (__biz) and name */
-  account?: { id: string; name: string };
+  /** a WeChat post: the account's id (__biz) and name; whether WeChat verified it as an organisation's, and its own description */
+  account?: { id: string; name: string; verified?: boolean; signature?: string };
   text: string; links?: string[]; images: { n: number; hash: string }[]; complete: boolean;
 }
 /** A second, independent reading of the posters by another model: what it says the deadline is. */
@@ -69,7 +69,10 @@ export type Outcome = "fact" | "not_stated" | "review" | "unreadable" | "not_rec
 //    hiring platform carrying the announcement in the company's exact name counts as its publisher
 // 9: a deadline written without its year takes the one year that puts it within six months after the announcement's
 //    own date of publication; the year is no longer a doubt for the model to raise
-export const RULE_VERSION = 9;
+// 10: a WeChat account WeChat verified as an organisation's is the company's when its name is the company's name (or a
+//     full name on record) with at most one word for what it is for after it, or its own description calls it that
+//     name's official account, word for word
+export const RULE_VERSION = 10;
 
 const pass = (why: string): Gate => ({ result: "pass", why }), fail = (why: string): Gate => ({ result: "fail", why }), unknown = (why: string): Gate => ({ result: "unknown", why });
 
@@ -95,6 +98,15 @@ export function siteKey(url: string): string | null {
 // 「中国航天502所」 and 「航天502所」 are one name written two ways
 const nameKey = (s: string) => companyKey(s).replace(/[（）()【】\[\]·・\-—]/g, "").replace(/(股份有限公司|有限责任公司|有限公司|公司)$/, "").replace(/^中国(?=.{3,})/, ""); // never down to two characters (中国电信 is not 电信)
 
+// an account's name is its owner's with at most one word for what it is for after it: 「海康威视招聘」「龙源环保HR」
+const ROLE = /(校园招聘|校招速递|校招|招聘|HR|之声|微平台|订阅号|服务号)$/i;
+// the name as written, without spaces and the legal form only (「中国」 and brackets stay): an account's name never
+// carries the legal form, so 「虹软科技招聘」 is 虹软科技股份有限公司's
+const plainKey = (s: string) => (s ?? "").normalize("NFKC").replace(/\s+/g, "").replace(/(股份有限公司|有限责任公司|有限公司|股份公司)$/, "").toLowerCase();
+const accountCore = (name: string) => { const k = plainKey((name ?? "").normalize("NFKC").replace(/\s+/g, "").replace(ROLE, "")); return k.length >= 2 ? k : ""; };
+// its own description calling it that name's official account, the words adjoining: 「甲研究所官方订阅号」「甲唯一官方…」
+const callsOfficial = (sig: string, name: string) => { const i = sig.indexOf(name); return name.length >= 6 && i >= 0 && sig[i - 1] !== "非" && /^(的|唯一)?官方/.test(sig.slice(i + name.length)); };
+
 /**
  * 发布者: the company's own site or hiring-system tenant, or a WeChat account on record as its own — or a central
  * enterprise's own hiring platform carrying this announcement in this company's name, exactly (its name, or a full name
@@ -103,8 +115,20 @@ const nameKey = (s: string) => companyKey(s).replace(/[（）()【】\[\]·・\-
  */
 export function publisherGate(doc: NoticeDoc, co: CompanyIdentity, ex?: Extract): Gate {
   if (doc.via === "wechat") {
-    if (doc.account?.id && co.accounts.has(doc.account.id)) return { ...pass(`公众号「${doc.account.name}」已登记为这家公司的`), deps: [{ kind: "account", id: doc.account.id }] };
-    return unknown(`公众号「${doc.account?.name || "未知"}」是不是这家公司的官方号还没核实`);
+    const a = doc.account;
+    if (a?.id && co.accounts.has(a.id)) return { ...pass(`公众号「${a.name}」已登记为这家公司的`), deps: [{ kind: "account", id: a.id }] };
+    if (!a?.verified) return unknown(`公众号「${a?.name || "未知"}」没有机构认证（微信认证），看不出是谁的号`);
+    // WeChat verified the account as an organisation's: its name, or its own description saying whose official account
+    // it is, must be this company's name or a full name on record — never a likeness (「中国电信校招速递」 is not 湖北公司)
+    const core = accountCore(a.name), full = [...(co.names ?? [])];
+    if (core && (core === plainKey(co.name) || plainKey(a.name) === plainKey(co.name))) return pass(`已微信认证的公众号「${a.name}」，号名就是「${co.name}」`);
+    const byName = full.find(([n]) => plainKey(n) === core);
+    if (core && byName) return { ...pass(`已微信认证的公众号「${a.name}」，号名就是「${byName[0]}」`), deps: byName[1].map((id) => ({ kind: "name" as const, id })) };
+    const sig = norm(a.signature ?? "");
+    if (callsOfficial(sig, norm(co.name))) return pass(`已微信认证的公众号「${a.name}」，简介写明是「${co.name}」的官方号`);
+    const bySig = full.find(([n]) => callsOfficial(sig, norm(n)));
+    if (bySig) return { ...pass(`已微信认证的公众号「${a.name}」，简介写明是「${bySig[0]}」的官方号`), deps: bySig[1].map((id) => ({ kind: "name" as const, id })) };
+    return unknown(`公众号「${a.name}」已微信认证，但号名和简介都对不上「${co.name}」`);
   }
   const k = siteKey(doc.finalUrl || doc.url);
   if (!k) return unknown("这个网站很多公司共用，看不出是谁的页面");
