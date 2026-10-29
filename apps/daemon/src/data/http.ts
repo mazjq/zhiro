@@ -13,7 +13,7 @@ export function httpContext(log: (m: string) => void = () => {}, signal?: AbortS
     try {
       // a reason code first (sync.ts reasonOf); the regex there stays only for errors thrown below fetch (DNS, reset…)
       const res = await guardedFetch(url, { ...opts, headers: { "user-agent": ua, ...(opts.headers ?? {}) }, signal: ctl.signal }).catch((e) => { if (/^(BLOCKED|SITE_DOWN): /.test(e?.message ?? "")) throw e; throw new Error(`${ctl.signal.aborted ? "TIMEOUT" : "SITE_DOWN"}: ${e?.cause?.code ?? e?.message ?? e} ${url}`); });
-      if (!res.ok) throw new Error(`${res.status === 401 ? "LOGIN_REQUIRED" : res.status === 403 || res.status === 429 ? "BLOCKED" : "SITE_DOWN"}: HTTP ${res.status} ${url}`);
+      if (!res.ok) throw new Error(`${res.status === 401 ? "LOGIN_REQUIRED" : res.status === 403 || res.status === 429 || res.status === 412 ? "BLOCKED" : res.status === 404 || res.status === 410 ? "SITE_GONE" : "SITE_DOWN"}: HTTP ${res.status} ${url}`);
       if (opts.expectJson !== false && /fetchJson/.test(opts.__kind ?? "") && !/json/.test(res.headers.get("content-type") ?? "")) throw new Error(`SCHEMA_CHANGED: 没返回 JSON ${url}`);
       return res;
     } finally {
