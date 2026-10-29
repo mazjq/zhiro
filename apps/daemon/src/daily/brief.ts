@@ -101,13 +101,17 @@ export function makeBrief(db: Db, now = Date.now()): Brief {
   // subscriptions that have not read for a week while still being tried: the posts of those companies may be missing
   // (2026-10-14…28: 106 failed every day and nobody knew). One line, by reason; it comes back when the count changes.
   const week = iso(now - 7 * DAY);
+  // A site that had posts and now answers with none is between seasons, not broken: it is left out.
+  const lastError = db.prepare("select error from scan_run where config_id = ? order by started_at desc limit 1");
+  const hadPosts = db.prepare("select 1 from scan_run where config_id = ? and error = '' and found > 0 limit 1");
   const stuck = (db.prepare(`select config_id, max(started_at) last, min(started_at) first, max(case when error = '' then started_at end) ok from scan_run
       where started_at >= ? group by config_id having ok is null or ok < ?`).all(iso(now - 30 * DAY), week) as { config_id: string; last: string; first: string }[])
-    .filter((r) => r.first < week && r.last >= iso(now - 8 * DAY));
+    .filter((r) => r.first < week && r.last >= iso(now - 8 * DAY))
+    .map((r) => ({ ...r, reason: reasonOf((lastError.get(r.config_id) as { error: string }).error) }))
+    .filter((r) => !(r.reason === "ZERO_POSTS" && hadPosts.get(r.config_id)));
   if (stuck.length) {
-    const lastError = db.prepare("select error from scan_run where config_id = ? order by started_at desc limit 1");
     const by = new Map<string, number>();
-    for (const r of stuck) { const why = SYNC_REASONS[reasonOf((lastError.get(r.config_id) as { error: string }).error)] ?? "读取失败"; by.set(why, (by.get(why) ?? 0) + 1); }
+    for (const r of stuck) { const why = SYNC_REASONS[r.reason] ?? "读取失败"; by.set(why, (by.get(why) ?? 0) + 1); }
     const parts = [...by].sort((a, b) => b[1] - a[1]).map(([k, n]) => `${k} ${n}`);
     hanging.push({ key: "hang:sources", state: `stuck:${stuck.length}:${parts.join("|")}`, text: `${stuck.length} 个订阅一周多没读成（${parts.join("；")}）：这些公司的岗位可能不全，在「配置 → 订阅」里看`, link: { page: "settings" } });
   }

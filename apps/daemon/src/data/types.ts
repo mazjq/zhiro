@@ -56,6 +56,11 @@ export interface SourceContext {
   maxPages?: number;
   signal?: AbortSignal;
   log(msg: string): void;
+  /**
+   * The reader found out something about the subscription that later reads should use (智联's campus id, a 飞书 link
+   * widened past an ended project). Kept on the subscription when the read succeeds (sync.ts).
+   */
+  learn?(patch: Partial<SourceConfig>): void;
 }
 
 /** One configured instance of a source (a row under `sources:` in jobos.yaml). */
@@ -108,6 +113,8 @@ export interface Source {
   /** One site = one subscription: two URLs with the same key are the same career site (a job page vs the list page). */
   siteKey?(url: string): string;
   fetch?(config: SourceConfig, ctx: SourceContext): Promise<Listing[]>;
+  /** what the library already knows that saves a request or gets past a blocked page (智联: a job's company number → its campus id) */
+  hint?(config: SourceConfig, db: Db): Partial<SourceConfig> | null;
   /** a reader of tables hands the table over as it is: what a preview shows, and what `fetch` reads by the subscription's column mapping */
   table?(config: SourceConfig, ctx: SourceContext): Promise<Table>;
 }

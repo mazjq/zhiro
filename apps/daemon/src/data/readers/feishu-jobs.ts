@@ -78,27 +78,42 @@ export const feishuJobs: Source = {
     const token: string = csrf?.data?.token ?? "";
     if (!token) throw new Error("SCHEMA_CHANGED: 飞书招聘：没拿到 csrf token");
     const headers = { ...UA_HEADERS, "website-path": t.path, "x-csrf-token": token, cookie: `atsx-csrf-token=${encodeURIComponent(token)}` };
-    const out: Listing[] = [];
-    const seen = new Set<string>();
-    const limit = 100;
-    for (let page = 0; page < (cfg.maxPages ?? 10); page++) {
-      const body = {
-        keyword: cfg.keywords?.[0] ?? "", limit, offset: page * limit, job_category_id_list: [], tag_id_list: [], location_code_list: [],
-        subject_id_list: t.project ? [t.project] : [], recruitment_id_list: [], portal_type: 3, job_function_id_list: [], storefront_id_list: [], portal_entrance: 1,
-      };
-      const res: any = await ctx.fetchJson(`${base}/search/job/posts`, { method: "POST", headers, body: JSON.stringify(body) });
-      if (res?.code !== 0) throw new Error(`SCHEMA_CHANGED: 飞书招聘：${res?.message ?? "接口返回异常"}`);
-      const posts: FeishuPost[] = res.data?.job_post_list ?? [];
-      for (const p of posts) {
-        if (seen.has(p.id)) continue;
-        seen.add(p.id);
-        const l = postToListing(p, t, cfg);
-        if (l.kind === "社招" && cfg.kind !== "社招") continue; // a mixed portal: 校招 sync keeps campus and intern posts only
-        out.push(l);
+    const posts = async (project: string | undefined): Promise<Listing[]> => {
+      const out: Listing[] = [];
+      const seen = new Set<string>();
+      const limit = 100;
+      for (let page = 0; page < (cfg.maxPages ?? 10); page++) {
+        const body = {
+          keyword: cfg.keywords?.[0] ?? "", limit, offset: page * limit, job_category_id_list: [], tag_id_list: [], location_code_list: [],
+          subject_id_list: project ? [project] : [], recruitment_id_list: [], portal_type: 3, job_function_id_list: [], storefront_id_list: [], portal_entrance: 1,
+        };
+        const res: any = await ctx.fetchJson(`${base}/search/job/posts`, { method: "POST", headers, body: JSON.stringify(body) });
+        if (res?.code !== 0) throw new Error(`SCHEMA_CHANGED: 飞书招聘：${res?.message ?? "接口返回异常"}`);
+        const batch: FeishuPost[] = res.data?.job_post_list ?? [];
+        for (const p of batch) {
+          if (seen.has(p.id)) continue;
+          seen.add(p.id);
+          const l = postToListing(p, t, cfg);
+          if (l.kind === "社招" && cfg.kind !== "社招") continue; // a mixed portal: 校招 sync keeps campus and intern posts only
+          out.push(l);
+        }
+        ctx.log(`feishu-jobs ${t.tenant}/${t.path}: page ${page + 1} +${batch.length} (${out.length}/${res.data?.count ?? "?"})`);
+        if (batch.length < limit || out.length >= (res.data?.count ?? 0)) break;
+        await ctx.sleep(400);
       }
-      ctx.log(`feishu-jobs ${t.tenant}/${t.path}: page ${page + 1} +${posts.length} (${out.length}/${res.data?.count ?? "?"})`);
-      if (posts.length < limit || out.length >= (res.data?.count ?? 0)) break;
-      await ctx.sleep(400);
+      return out;
+    };
+    const out = await posts(t.project);
+    // a link narrowed to one 招聘项目 goes quiet when that project ends, while the same portal opens the next one: read
+    // the portal (still this tenant and this path, campus and intern posts only) and keep the wider link
+    if (!out.length && t.project) {
+      const wide = await posts(undefined);
+      if (wide.length) {
+        const u = new URL(cfg.url!); u.searchParams.delete("project");
+        ctx.log(`feishu-jobs ${t.tenant}: 项目 ${t.project} 没有岗位，改读整个门户（${wide.length}）`);
+        ctx.learn?.({ url: u.href, widenedFrom: cfg.url });
+      }
+      return wide;
     }
     return out;
   },

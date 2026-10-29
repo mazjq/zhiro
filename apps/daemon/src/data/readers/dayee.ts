@@ -18,7 +18,10 @@ export function dayeeSuite(url: string): { su: string; recruitType: string; post
   if (!m) return null;
   let q: URLSearchParams;
   try { q = new URL(url).searchParams; } catch { q = new URLSearchParams(); }
-  return { su: m[1], recruitType: /interns?\.html/.test(url) ? "12" : q.get("recruitType") ?? "1", postId: q.get("postId") ?? undefined };
+  // the API takes a number; a link may carry the word (…detail?postId=…&recruitType=campus answered 「parameter error」 for weeks)
+  const given = q.get("recruitType") ?? "";
+  const recruitType = /interns?\.html/.test(url) || /^intern/i.test(given) ? "12" : /^\d+$/.test(given) ? given : "1";
+  return { su: m[1], recruitType, postId: q.get("postId") ?? undefined };
 }
 
 const named = (x: unknown) => (x && !genericCompany(String(x)) ? String(x) : "");
@@ -74,7 +77,7 @@ export const dayee: Source = {
       const r: any = await ctx.fetchJson(`https://wecruit.hotjob.cn/wecruit/positionInfo/${op}/${t.su}?iSaJAx=isAjax&request_locale=zh_CN&t=${Date.now()}`, {
         method: "POST", headers: { "content-type": "application/x-www-form-urlencoded" }, body: new URLSearchParams(Object.entries(form).map(([k, v]) => [k, String(v)])).toString(),
       });
-      if (String(r?.state) !== "200") throw new Error(`SCHEMA_CHANGED: 大易 ${op}：${r?.Exception?.message ?? JSON.stringify(r).slice(0, 120)}`);
+      if (String(r?.state) !== "200") throw new Error(`${/官网不存在/.test(JSON.stringify(r)) ? "SITE_GONE" : "SCHEMA_CHANGED"}: 大易 ${op}：${r?.Exception?.message ?? JSON.stringify(r).slice(0, 120)}`);
       await ctx.sleep(250);
       return r.data;
     };
