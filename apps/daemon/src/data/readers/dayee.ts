@@ -1,4 +1,4 @@
-import { pullOnce, type Listing, type Source, type SourceConfig } from "../types.js";
+import { incomplete, pullOnce, type Listing, type Source, type SourceConfig } from "../types.js";
 import { genericCompany } from "../catalog.js";
 
 /**
@@ -91,6 +91,7 @@ export const dayee: Source = {
       for (let size = 1; size < 50 && size < total; size *= 2) add(await call("listPosition", { ...base, pageSize: size, currentPage: 2 }));
       for (let page = 2; (page - 1) * 50 < total && page <= (cfg.maxPages ?? 40); page++) add(await call("listPosition", { ...base, pageSize: 50, currentPage: page }));
       ctx.log(`dayee ${t.su}: ${rows.size}/${total} rows`);
+      const short = rows.size < total ? `大易 ${rows.size}/${total}` : "";
       const out: Listing[] = [];
       for (const p of rows.values()) {
         if (!rowToListing(p, null, t.su, cfg)) continue; // closed / earlier project: no detail request
@@ -98,7 +99,7 @@ export const dayee: Source = {
         const l = rowToListing(p, details.get(p.postId), t.su, cfg);
         if (l) out.push(l);
       }
-      return out;
+      return short ? incomplete(out, short) : out;
     });
   },
 };
