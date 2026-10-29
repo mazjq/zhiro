@@ -83,7 +83,7 @@ function keepSnapshot(vault: string, sourceId: string, configId: string, listing
  *  3. record a scan_run row (so "0 new" and "failed" stay distinguishable from "closed")
  * One transaction, all or nothing. Campaign identity: catalog.campaignKey; the rest of the identity rules: catalog.ts.
  */
-export function ingest(store: { db: Db }, vault: string, sourceId: string, configId: string, listings: Listing[], opts: { complete?: boolean; error?: string; closeUnseen?: boolean; observedAt?: string; noSnapshot?: boolean; alsoSeen?: string[] } = {}): IngestResult & { listed: Listed } {
+export function ingest(store: { db: Db }, vault: string, sourceId: string, configId: string, listings: Listing[], opts: { complete?: boolean; error?: string; closeUnseen?: boolean; observedAt?: string; noSnapshot?: boolean; alsoSeen?: string[] } & ReadCost = {}): IngestResult & { listed: Listed } {
   const db = store.db;
   const runId = ulid();
   const started = now();
@@ -211,13 +211,16 @@ export function ingest(store: { db: Db }, vault: string, sourceId: string, confi
         db.prepare(`delete from position_seen where config_id = ? and seen_at < ? and position_id in (select id from position where campaign_id in (${q}))`).run(configId, started, ...part);
       });
     }
-    db.prepare("insert into scan_run(id, source, config_id, started_at, finished_at, complete, found, new_positions, error, snapshot_path) values (?,?,?,?,?,?,?,?,?,?)")
-      .run(runId, sourceId, configId, started, now(), opts.complete === false ? 0 : 1, listings.length, positionsNew, opts.error ?? "", snapshotPath);
+    db.prepare("insert into scan_run(id, source, config_id, started_at, finished_at, complete, found, new_positions, error, snapshot_path, fetch_ms, requests) values (?,?,?,?,?,?,?,?,?,?,?,?)")
+      .run(runId, sourceId, configId, started, now(), opts.complete === false ? 0 : 1, listings.length, positionsNew, opts.error ?? "", snapshotPath, opts.fetchMs ?? null, opts.requests ?? null);
   });
   return { runId, received: listings.length, campaigns: campaigns.size, positionsNew, positionsSeen, positionsClosed, updated, snapshotPath, listed: { campaignIds: [...campaigns], positionIds: [...listedRows.values()] } };
 }
 
-export function recordFailedRun(store: { db: Db }, sourceId: string, configId: string, error: string): void {
-  store.db.prepare("insert into scan_run(id, source, config_id, started_at, finished_at, complete, found, new_positions, error, snapshot_path) values (?,?,?,?,?,?,?,?,?,?)")
-    .run(ulid(), sourceId, configId, now(), now(), 0, 0, 0, error, "");
+/** What a read cost: the reader's own time (the filing after it is not counted) and the requests it made. */
+export interface ReadCost { fetchMs?: number; requests?: number }
+
+export function recordFailedRun(store: { db: Db }, sourceId: string, configId: string, error: string, cost: ReadCost = {}): void {
+  store.db.prepare("insert into scan_run(id, source, config_id, started_at, finished_at, complete, found, new_positions, error, snapshot_path, fetch_ms, requests) values (?,?,?,?,?,?,?,?,?,?,?,?)")
+    .run(ulid(), sourceId, configId, now(), now(), 0, 0, 0, error, "", cost.fetchMs ?? null, cost.requests ?? null);
 }

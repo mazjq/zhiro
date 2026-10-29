@@ -3,9 +3,10 @@ import { BlockList, isIP } from "node:net";
 import type { SourceContext } from "./types.js";
 
 /** Minimal http context; providers vendored from career-ops expect fetchJson/fetchText/sleep. */
-export function httpContext(log: (m: string) => void = () => {}, signal?: AbortSignal): SourceContext {
+export function httpContext(log: (m: string) => void = () => {}, signal?: AbortSignal, stats?: { requests: number }): SourceContext {
   const ua = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0 Safari/537.36";
   const withTimeout = async (url: string, opts: any = {}) => {
+    if (stats) stats.requests++;
     const ctl = new AbortController();
     const t = setTimeout(() => ctl.abort(), opts.timeoutMs ?? 20_000);
     signal?.addEventListener("abort", () => ctl.abort(), { once: true });

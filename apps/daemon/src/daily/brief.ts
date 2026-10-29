@@ -4,7 +4,8 @@
  *   新出现的    posts first seen since the last brief that match the profile (很对口 / 部分对口), not held yet;
  *   重新找过的  what the daily lookup of thin companies found since the last brief;
  *   悬着的      drafts left for 5 days or past their deadline, sent applications quiet for 14 days, and ones an agent
- *              recorded as sent with no mail or word of the person since (R19).
+ *              recorded as sent with no mail or word of the person since (R19); subscriptions that have not read for
+ *              a week.
  * Built from rules only (no model). What was in an earlier brief and has not changed is left out (brief_item keeps
  * each item's content hash); the 必须做 part is always shown. A run is kept whole (brief_run) — brief.today reads it,
  * generating nothing — and goes out as one 「知道就行」 notice.
@@ -14,6 +15,7 @@ import { ulid } from "ulid";
 import { tx, type Db } from "../db.js";
 import { deadlineBoard } from "../service/pool.js";
 import { enqueue } from "../notify/center.js";
+import { SYNC_REASONS, reasonOf } from "../data/index.js";
 
 /** `state` is what the item is about (not its wording, which may count days): an item comes back only when it changes. */
 export interface BriefItem { key: string; text: string; why?: string; link?: { page: string; id?: string; company?: string }; url?: string; state?: string }
@@ -95,6 +97,20 @@ export function makeBrief(db: Db, now = Date.now()): Brief {
   // one line per application: an unproven one is not also 「很久没动静」
   const unproven = new Set(hanging.filter((x) => x.key.startsWith("hang:unproven:")).map((x) => x.key.slice("hang:unproven:".length)));
   for (let i = hanging.length - 1; i >= 0; i--) if (hanging[i].key.startsWith("hang:quiet:") && unproven.has(hanging[i].key.slice("hang:quiet:".length))) hanging.splice(i, 1);
+
+  // subscriptions that have not read for a week while still being tried: the posts of those companies may be missing
+  // (2026-10-14…28: 106 failed every day and nobody knew). One line, by reason; it comes back when the count changes.
+  const week = iso(now - 7 * DAY);
+  const stuck = (db.prepare(`select config_id, max(started_at) last, min(started_at) first, max(case when error = '' then started_at end) ok from scan_run
+      where started_at >= ? group by config_id having ok is null or ok < ?`).all(iso(now - 30 * DAY), week) as { config_id: string; last: string; first: string }[])
+    .filter((r) => r.first < week && r.last >= iso(now - 8 * DAY));
+  if (stuck.length) {
+    const lastError = db.prepare("select error from scan_run where config_id = ? order by started_at desc limit 1");
+    const by = new Map<string, number>();
+    for (const r of stuck) { const why = SYNC_REASONS[reasonOf((lastError.get(r.config_id) as { error: string }).error)] ?? "读取失败"; by.set(why, (by.get(why) ?? 0) + 1); }
+    const parts = [...by].sort((a, b) => b[1] - a[1]).map(([k, n]) => `${k} ${n}`);
+    hanging.push({ key: "hang:sources", state: `stuck:${stuck.length}:${parts.join("|")}`, text: `${stuck.length} 个订阅一周多没读成（${parts.join("；")}）：这些公司的岗位可能不全，在「配置 → 订阅」里看`, link: { page: "settings" } });
+  }
 
   // past deadlines first (decide or close), then the longest left
   hanging.sort((x, y) => Number(y.key.startsWith("hang:past")) - Number(x.key.startsWith("hang:past")));

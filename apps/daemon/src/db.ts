@@ -510,6 +510,11 @@ export const MIGRATIONS: string[] = [
   create index company_identity_company on company_identity(company_id, status);
   create index company_identity_site on company_identity(site_id);
   `,
+  // v52: what a read cost — how long the reader took and how many requests it made (null: from before this was kept)
+  `
+  alter table scan_run add column fetch_ms integer;
+  alter table scan_run add column requests integer;
+  `,
 ];
 
 /**

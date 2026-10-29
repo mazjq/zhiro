@@ -44,14 +44,17 @@ export async function runSource(ctx: DataContext, configId: string, opts: { quie
   ctx.onPull?.(cfg.id, true);
   // a reader that pages through a big table says how far it is as "<read>/<all>" (feishu-base: 3000/13754)
   const log = (m: string) => { console.log(`[scan] ${m}`); const n = /: (\d+)\/(\d+)$/.exec(m); if (n) { progress.done = Number(n[1]); progress.total = Number(n[2]); } };
+  const stats = { requests: 0 }, t0 = Date.now();
+  const cost = () => ({ fetchMs: Date.now() - t0, requests: stats.requests });
   try {
-    const listings = await src.fetch(cfg, httpContext(log));
+    const listings = await src.fetch(cfg, httpContext(log, undefined, stats));
+    const read = cost();
     // a career site that answers with nothing is not "no change": it moved, changed or went quiet. Say so, and leave the
     // posts already known as they are (ADR-041). A keyword search that finds nothing is a normal answer.
     if (!listings.length && !cfg.discover && !cfg.keywords?.length) throw new Error(src.table ? "EMPTY_TABLE: 表格读到了，但没有一行能成岗位（没有公司、已过截止、或届次对不上的行都不算）" : "ZERO_POSTS: 官网读到了，但一个岗位都没有");
     Object.assign(progress, { stage: "filing", done: 0, total: listings.length });
     await new Promise((ok) => setImmediate(ok)); // a page asking right now sees 「比对入库」 before the one short transaction
-    const { listed, ...result } = ingest(ctx, ctx.vault, src.id, cfg.id, listings, { closeUnseen: true });
+    const { listed, ...result } = ingest(ctx, ctx.vault, src.id, cfg.id, listings, { closeUnseen: true, ...read });
     // a batch fires it once at the end instead of after every site; a read that found the same posts as yesterday
     // changed nothing worth re-matching the pool for (most of the ~3,000 daily reads: 2026-10-13, 357 of 2,984 brought a new post)
     if (!opts.quiet && (result.positionsNew || result.positionsClosed)) ctx.onDataChanged?.();
@@ -60,7 +63,7 @@ export async function runSource(ctx: DataContext, configId: string, opts: { quie
     return { ok: true, result, listed };
   } catch (e: any) {
     const error = String(e?.message ?? e);
-    recordFailedRun(ctx, src.id, cfg.id, error);
+    recordFailedRun(ctx, src.id, cfg.id, error, cost());
     return { ok: false, error };
   } finally {
     if (running.get(cfg.id) === progress) running.delete(cfg.id); // a second pull of it started meanwhile keeps its own
@@ -89,8 +92,22 @@ export function listSources(ctx: DataContext) {
  * A failure is recorded in scan_run and is never the end of it: the next try comes in an hour for the first three in a
  * row, then at the subscription's own pace — for as long as the subscription exists. (The engine gives a failing step
  * five tries and then stops for good; 253 of 1,416 subscriptions had gone quiet that way by 2026-10-12.)
+ *
+ * What trying again cannot fix soon — a block, a login, a site whose format changed — gets no quick retries and waits
+ * twice as long each time, up to a week: hammering a block makes it worse, and a changed site needs new code, not
+ * another read (2026-10-14…28: 106 subscriptions failed every day for two weeks). A site that answers with no posts
+ * keeps its pace: its new season can open any day. ponytail: a reader fixed in a new version still waits out its
+ * week; 「立即更新」 reads it at once.
  */
-const RETRY_SOON_MS = 60 * 60_000, SOON_TRIES = 3;
+const RETRY_SOON_MS = 60 * 60_000, SOON_TRIES = 3, WEEK_MS = 7 * 24 * 3600_000;
+const STUCK = new Set(["BLOCKED", "LOGIN_REQUIRED", "SCHEMA_CHANGED", "DECRYPT_FAILED"]);
+export function retryAfter(error: string, failures: number, pace: number): number {
+  if (STUCK.has(reasonOf(error))) return Math.max(pace, Math.min(WEEK_MS, pace * 2 ** (failures - 1)));
+  return failures <= SOON_TRIES ? Math.min(RETRY_SOON_MS, pace) : pace;
+}
+/** Scheduled reads of one platform start at least this far apart (one reader's own paging is its own business). */
+const PLATFORM_GAP_MS = 1_000;
+const lastStart = new Map<string, number>();
 export function sourceScan(ctx: DataContext): WorkflowDef {
   return {
     kind: "source_scan",
@@ -99,13 +116,16 @@ export function sourceScan(ctx: DataContext): WorkflowDef {
       pull: async ({ subjectId, checkpoint }) => {
         const cfg = ctx.sources.find((c) => c.id === subjectId);
         if (!cfg || cfg.enabled === false) return { type: "done" };
+        const gap = ctx.platformGapMs ?? PLATFORM_GAP_MS, wait = (lastStart.get(cfg.source) ?? 0) + gap - Date.now();
+        if (wait > 0) await new Promise((ok) => setTimeout(ok, wait));
+        lastStart.set(cfg.source, Date.now());
         const r = await runSource(ctx, subjectId);
         const hours = cfg.everyHours ?? 24;
         if (hours <= 0) return { type: "done" };
         const pace = hours * 3600_000;
         if (!r.ok) {
           const failures = (checkpoint?.failures ?? 0) + 1;
-          return { type: "sleep", until: new Date(Date.now() + (failures <= SOON_TRIES ? Math.min(RETRY_SOON_MS, pace) : pace)).toISOString(), checkpoint: { ...checkpoint, failures, lastError: r.error } };
+          return { type: "sleep", until: new Date(Date.now() + retryAfter(r.error, failures, pace)).toISOString(), checkpoint: { ...checkpoint, failures, lastError: r.error } };
         }
         return { type: "sleep", until: new Date(Date.now() + pace).toISOString(), checkpoint: { lastRunId: r.result.runId } };
       },

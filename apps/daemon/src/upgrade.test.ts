@@ -1,7 +1,7 @@
 /** ADR-050: an upgrade never changes the original database; a cut-short one comes back to one state; rollback is checked. */
 import { describe, it, expect } from "vitest";
 import { DatabaseSync } from "node:sqlite";
-import { copyFileSync, existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, renameSync, writeFileSync } from "node:fs";
+import { copyFileSync, existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, renameSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { MIGRATIONS, SCHEMA_VERSION, SchemaMismatch, openDb, schemaOf, migrate } from "./db.js";
@@ -86,6 +86,14 @@ describe("upgrade from every sample in test/fixtures", () => {
       expect(readdirSync(dir).filter((x) => x.includes(".upgrade-"))).toEqual([]);
     });
   }
+});
+
+it("a data folder without backups/ (copied by hand) upgrades too", () => {
+  const f = `vault-v${SCHEMA_VERSION - 1}.zip`;
+  const dir = unpack(join(FIXTURES, f));
+  rmSync(join(dir, "backups"), { recursive: true, force: true });
+  expect(upgradeVault(dir, LOCK)).toMatchObject({ to: SCHEMA_VERSION });
+  expect(readdirSync(dir).filter((x) => x.includes(".upgrade-"))).toEqual([]);
 });
 
 describe("a failed upgrade leaves the original as it was", () => {
