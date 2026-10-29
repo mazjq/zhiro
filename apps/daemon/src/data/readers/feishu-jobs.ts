@@ -1,4 +1,4 @@
-import type { Listing, Source, SourceConfig, SourceContext } from "../types.js";
+import { incomplete, type Listing, type Source, type SourceConfig, type SourceContext } from "../types.js";
 
 /**
  * 飞书招聘 career portals on <tenant>.jobs.feishu.cn (the ATS behind 蔚来 / 拓竹 / 智元 / Momenta …; 208 campaigns in the
@@ -82,7 +82,8 @@ export const feishuJobs: Source = {
       const out: Listing[] = [];
       const seen = new Set<string>();
       const limit = 100;
-      for (let page = 0; page < (cfg.maxPages ?? 10); page++) {
+      let total = 0, ended = false;
+      for (let page = 0; page < (cfg.maxPages ?? 50); page++) {
         const body = {
           keyword: cfg.keywords?.[0] ?? "", limit, offset: page * limit, job_category_id_list: [], tag_id_list: [], location_code_list: [],
           subject_id_list: project ? [project] : [], recruitment_id_list: [], portal_type: 3, job_function_id_list: [], storefront_id_list: [], portal_entrance: 1,
@@ -90,6 +91,7 @@ export const feishuJobs: Source = {
         const res: any = await ctx.fetchJson(`${base}/search/job/posts`, { method: "POST", headers, body: JSON.stringify(body) });
         if (res?.code !== 0) throw new Error(`SCHEMA_CHANGED: 飞书招聘：${res?.message ?? "接口返回异常"}`);
         const batch: FeishuPost[] = res.data?.job_post_list ?? [];
+        total = Number(res.data?.count ?? 0);
         for (const p of batch) {
           if (seen.has(p.id)) continue;
           seen.add(p.id);
@@ -98,10 +100,10 @@ export const feishuJobs: Source = {
           out.push(l);
         }
         ctx.log(`feishu-jobs ${t.tenant}/${t.path}: page ${page + 1} +${batch.length} (${out.length}/${res.data?.count ?? "?"})`);
-        if (batch.length < limit || out.length >= (res.data?.count ?? 0)) break;
+        if (batch.length < limit || seen.size >= total) { ended = true; break; }
         await ctx.sleep(400);
       }
-      return out;
+      return ended ? out : incomplete(out, `飞书招聘 ${seen.size}/${total}`);
     };
     const out = await posts(t.project);
     // a link narrowed to one 招聘项目 goes quiet when that project ends, while the same portal opens the next one: read

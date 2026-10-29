@@ -1,5 +1,5 @@
 import mokahr from "./career-ops/mokahr.mjs";
-import type { Listing, Source, SourceConfig, SourceContext } from "../types.js";
+import { incomplete, type Listing, type Source, type SourceConfig, type SourceContext } from "../types.js";
 
 /**
  * Moka (mokahr.com) campus/social tenant sites — wraps the career-ops provider as-is (MIT; the three files in
@@ -7,6 +7,7 @@ import type { Listing, Source, SourceConfig, SourceContext } from "../types.js";
  * Verified 2026-09-15 on two real campus tenants (voyah 88 jobs, gufen 16 jobs), zero-token, no login.
  */
 type VendorJob = { title: string; url: string; company: string; location: string; description?: string; postedAt?: number };
+const MAX_PAGES = 100, PAGE = 50; // a safety stop, not a size; PAGE is the provider's own page size
 const provider = async (): Promise<{ fetch(entry: any, ctx: any): Promise<VendorJob[]> }> => mokahr;
 
 // A tenant may serve the same site from its own domain (大疆: apply.careers.dji.com/campus-recruitment/dji/143359); the
@@ -61,10 +62,12 @@ export const moka: Source = {
     if (!tenant) throw new Error(`BAD_URL: Moka：认不出租户 ${cfg.url}`);
     const p = await provider();
     const jobs: VendorJob[] = await p.fetch(
-      { name: cfg.name ?? "", careers_url: tenant.canonical, keywords: cfg.keywords?.length ? cfg.keywords : [""], max_pages: cfg.maxPages ?? 10 },
+      { name: cfg.name ?? "", careers_url: tenant.canonical, keywords: cfg.keywords?.length ? cfg.keywords : [""], max_pages: cfg.maxPages ?? MAX_PAGES },
       { fetchJson: ctx.fetchJson, fetchText: ctx.fetchText, sleep: ctx.sleep, maxPages: ctx.maxPages, transport: "http" },
     );
     ctx.log(`moka ${cfg.name ?? cfg.url}: ${jobs.length} jobs`);
-    return jobs.map((j) => toListing(j, cfg));
+    const out = jobs.map((j) => toListing(j, cfg));
+    // the vendored provider stops at its page cap without saying so: a list exactly that long may go on (徐工矿机: 585, ten pages read 500)
+    return jobs.length >= (cfg.maxPages ?? MAX_PAGES) * PAGE ? incomplete(out, `Moka 读满 ${jobs.length} 条，可能还有`) : out;
   },
 };

@@ -9,7 +9,7 @@ import { sources } from "./readers/index.js";
 import { addSource, saveSources } from "./subscriptions.js";
 import { sourceScan, scheduleSources, retryAfter, reasonOf } from "./sync.js";
 import { ingest } from "./ingest.js";
-import type { DataContext, Listing, Source, SourceConfig } from "./types.js";
+import { incomplete, type DataContext, type Listing, type Source, type SourceConfig } from "./types.js";
 
 /** 「第二天自动刷新」: a subscription that exists keeps being pulled — through failures, a removal and return, a restart. */
 let answer: () => Listing[] = () => [];
@@ -86,6 +86,18 @@ describe("a subscription keeps being pulled", () => {
     expect(Date.parse(wf(db).next!) - Date.now()).toBeGreaterThan(23 * 3600_000);
     // what the read cost is on record with it
     expect(db.prepare("select fetch_ms is not null t, requests from scan_run").get()).toEqual({ t: 1, requests: 0 });
+  });
+
+  it("a read that stopped before the end of the list files what it read and closes nothing", async () => {
+    const { db, workflows, ctx } = setup();
+    answer = () => [L("1", "控制算法工程师"), L("2", "仿真工程师")];
+    addSource(ctx, { url: "https://jobs.flaky.example/acme", name: "示例重工" });
+    scheduleSources(ctx);
+    await workflows.tick();
+    answer = () => incomplete([L("1", "控制算法工程师"), L("3", "电机控制工程师")], "示例站 2/3");
+    await workflows.tick(later(wf(db).next));
+    expect(db.prepare("select title, status from position order by title").all()).toEqual([{ title: "仿真工程师", status: "open" }, { title: "控制算法工程师", status: "open" }, { title: "电机控制工程师", status: "open" }]);
+    expect(db.prepare("select complete from scan_run order by started_at desc limit 1").get()).toEqual({ complete: 0 });
   });
 
   it("gone is not down: a missing site or page needs a new address, a site that is down needs time", () => {

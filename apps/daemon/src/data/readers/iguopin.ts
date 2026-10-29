@@ -1,4 +1,4 @@
-import { pullOnce, type Listing, type Source, type SourceConfig, type SourceContext } from "../types.js";
+import { incomplete, pullOnce, type Listing, type Source, type SourceConfig, type SourceContext } from "../types.js";
 
 /**
  * 国聘 (iguopin.com: the state-owned groups' campus portal — 航天科技, 国家电投, 中国能建, 中国电建 … as
@@ -86,6 +86,7 @@ export function postToListing(j: any, cfg: SourceConfig): Listing | null {
  */
 async function discover(cfg: SourceConfig, ctx: SourceContext): Promise<Listing[]> {
   const out = new Map<string, Listing>();
+  let capped = "";
   for (const keyword of (cfg.keywords ?? []).slice(0, 8)) {
     for (let page = 1; page <= (cfg.maxPages ?? 10); page++) {
       const d = await api(ctx, "/api/jobs/v1/list", { page, page_size: 200, nature: [CAMPUS], keyword, source: "s_job_list" });
@@ -93,10 +94,11 @@ async function discover(cfg: SourceConfig, ctx: SourceContext): Promise<Listing[
       for (const j of list) { const l = postToListing(j, { ...cfg, name: "" }); if (l && !out.has(l.externalId)) out.set(l.externalId, l); }
       ctx.log(`iguopin 发现「${keyword}」: page ${page} +${list.length} (${out.size})`);
       if (list.length < 200) break;
+      if (page === (cfg.maxPages ?? 10)) capped = `国聘「${keyword}」读到第 ${page} 页还没完`;
       await ctx.sleep(400);
     }
   }
-  return [...out.values()];
+  return capped ? incomplete([...out.values()], capped) : [...out.values()];
 }
 
 export const iguopin: Source = {
@@ -112,6 +114,7 @@ export const iguopin: Source = {
     return pullOnce(`iguopin:${JSON.stringify(q)}`, async () => {
     const out: Listing[] = [];
     const seen = new Set<string>();
+    let capped = "";
     // a tenant still pointing at last year's project lists nothing: then the company tree is the fallback
     for (const mode of q.projectIds.length ? ["project", "company"] : ["company"]) {
       for (let page = 1; page <= (cfg.maxPages ?? 20); page++) {
@@ -122,11 +125,12 @@ export const iguopin: Source = {
         for (const j of list) { const l = postToListing(j, cfg); if (l && !seen.has(l.externalId)) { seen.add(l.externalId); out.push(l); } }
         ctx.log(`iguopin ${mode}: page ${page} +${list.length} (${out.length})`);
         if (list.length < 200) break;
+        if (page === (cfg.maxPages ?? 20)) capped = `国聘读到第 ${page} 页还没完`;
         await ctx.sleep(400);
       }
       if (out.length) break;
     }
-    return out;
+    return capped ? incomplete(out, capped) : out;
     });
   },
 };

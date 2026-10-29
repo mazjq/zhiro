@@ -1,4 +1,4 @@
-import { pullOnce, type Listing, type Source, type SourceConfig, type SourceContext } from "../types.js";
+import { incomplete, pullOnce, type Listing, type Source, type SourceConfig, type SourceContext } from "../types.js";
 
 /**
  * 智联校园 (xiaoyuan.zhaopin.com and the groups' branded <brand>.zhaopin.com sites; 中国船舶集团 alone lists 1,262
@@ -143,18 +143,20 @@ export const zhilian: Source = {
     return pullOnce(`zhilian:${root}:${cfg.keywords?.[0] ?? ""}`, async () => {
     const out: Listing[] = [];
     const seen = new Set<string>();
-    for (let page = 1; page <= (cfg.maxPages ?? 20); page++) {
+    let ended = false, total = 0;
+    for (let page = 1; page <= (cfg.maxPages ?? 50); page++) {
       const r: any = await ctx.fetchJson(API, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ orgNumbers: ids, jobSource: 2, pageIndex: page, pageSize: 200, keyword: cfg.keywords?.[0] ?? "" }) });
       if (r?.code !== 200) throw new Error(`SCHEMA_CHANGED: 智联：${r?.message ?? "接口返回异常"}`);
       for (const it of (r.data?.jobList ?? []) as ZhilianItem[]) {
         const l = itemToListing(it, root, cfg);
         if (l && !seen.has(l.externalId)) { seen.add(l.externalId); out.push(l); }
       }
-      ctx.log(`zhilian ${root}: page ${page} (${out.length}/${r.data?.pageInfo?.totalNum ?? "?"})`);
-      if (page >= (r.data?.pageInfo?.totalPage ?? 1)) break;
+      total = Number(r.data?.pageInfo?.totalNum ?? 0);
+      ctx.log(`zhilian ${root}: page ${page} (${out.length}/${total || "?"})`);
+      if (page >= (r.data?.pageInfo?.totalPage ?? 1)) { ended = true; break; }
       await ctx.sleep(400);
     }
-    return out;
+    return ended ? out : incomplete(out, `智联 ${out.length}/${total}`);
     });
   },
 };

@@ -4,6 +4,17 @@ import { apiRowToListing, parseCmsList, parseCmsDetail, beisenTenant } from "./b
 const cfg = { id: "b", source: "beisen", url: "https://hzncc.zhiye.com/campus/jobs", name: "华中数控", cohort: "2027届" };
 
 describe("beisen", () => {
+  it("a list longer than the pages read is marked unfinished; one read to its own total is not", async () => {
+    const { beisen } = await import("./beisen.js");
+    const { incompleteWhy } = await import("../types.js");
+    const row = (i: number) => ({ Id: `j${i}`, JobAdName: `岗位${i}`, LocNames: ["南京"], OrgName: "示例院" });
+    const ctxOf = (count: number) => ({ sleep: async () => {}, log: () => {}, fetchText: async () => "",
+      fetchJson: async (_u: string, o: any) => { const p = JSON.parse(o.body).PageIndex; return { Code: 200, Count: count, Data: Array.from({ length: Math.max(0, Math.min(50, count - p * 50)) }, (_, k) => row(p * 50 + k)) }; } });
+    const capped = await beisen.fetch!({ ...cfg, maxPages: 2 }, ctxOf(120) as any);
+    expect([capped.length, incompleteWhy(capped)]).toEqual([100, "北森 100/120"]);
+    const whole = await beisen.fetch!(cfg, ctxOf(120) as any);
+    expect([whole.length, incompleteWhy(whole)]).toEqual([120, undefined]);
+  });
   it("detects tenants", () => {
     expect(beisenTenant("https://cssc717.zhiye.com/")).toBe("cssc717");
     expect(beisenTenant("https://jingce.zhiye.com/campus")).toBe("jingce");
