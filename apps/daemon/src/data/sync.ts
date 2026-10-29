@@ -3,25 +3,27 @@ import { sources, sourceFor, siteKeyOf } from "./readers/index.js";
 import { FIELDS, guessColumns, tableToListings, type Columns, type Table } from "./sheet.js";
 import { httpContext } from "./http.js";
 import { ingest, recordFailedRun, type IngestResult, type Listed } from "./ingest.js";
-import type { DataContext } from "./types.js";
+import type { DataContext, SourceConfig } from "./types.js";
+import { saveSources } from "./subscriptions.js";
 
 /** Why a career site could not be read, as one of a few words a person or an agent can act on (ADR-041). */
 export const SYNC_REASONS: Record<string, string> = {
   NO_OFFICIAL_LINK: "还没有这家公司的官网招聘链接", UNSUPPORTED_PLATFORM: "官网用的招聘系统还读不了", TIMEOUT: "官网超时没响应", LOGIN_REQUIRED: "官网要登录才能看",
   BLOCKED: "被官网拦了（验证码或访问限制）", SCHEMA_CHANGED: "官网改版，读取方式要更新", DECRYPT_FAILED: "官网返回的数据解不开", ZERO_POSTS: "官网读到了，但一个岗位都没有",
-  SITE_DOWN: "官网打不开", FAILED: "读取失败",
+  SITE_DOWN: "官网打不开", SITE_GONE: "招聘站已撤或换了地址", LINK_STALE: "链接指向的岗位已下线，要换成公司的招聘主页", FAILED: "读取失败",
   NOT_PUBLIC: "表格没有公开，读不到", BAD_URL: "链接不是这类招聘站的地址", NO_COMPANY_COLUMN: "没认出哪一列是公司", EMPTY_TABLE: "表格读到了，但没有一行能成岗位", FILE_NOT_FOUND: "找不到这个文件",
 };
 export function reasonOf(error: string): string {
   const code = /^([A-Z_]{4,}):/.exec(error)?.[1];
-  if (code && code in SYNC_REASONS) return code;
+  if (code && code in SYNC_REASONS && !(code === "SITE_DOWN" && /\b(404|410)\b/.test(error))) return code;
   if (/timeout|timed out|ETIMEDOUT|aborted|超时/i.test(error)) return "TIMEOUT";
   if (/\b401\b|login|登录/i.test(error)) return "LOGIN_REQUIRED";
   if (/\b(403|429)\b|captcha|验证码|forbidden/i.test(error)) return "BLOCKED";
   if (/decrypt|解密/i.test(error)) return "DECRYPT_FAILED";
+  // gone (the platform says the site does not exist, or the page is not there) is not down: one waits, the other needs a new address
+  if (/未找到对应的官网|官网不存在|\b(404|410)\b/.test(error)) return "SITE_GONE";
   if (/ENOTFOUND|ECONNREFUSED|ECONNRESET|fetch failed|\b5\d\d\b/i.test(error)) return "SITE_DOWN";
   if (/没找到有岗位|没有岗位/.test(error)) return "ZERO_POSTS";
-  if (/未找到对应的官网|\b404\b/.test(error)) return "SITE_DOWN";
   if (/JSON|Unexpected token|返回异常|not iterable|undefined|parameter error|没找到企业编号|没有换到/i.test(error)) return "SCHEMA_CHANGED";
   return "FAILED";
 }
@@ -46,9 +48,16 @@ export async function runSource(ctx: DataContext, configId: string, opts: { quie
   const log = (m: string) => { console.log(`[scan] ${m}`); const n = /: (\d+)\/(\d+)$/.exec(m); if (n) { progress.done = Number(n[1]); progress.total = Number(n[2]); } };
   const stats = { requests: 0 }, t0 = Date.now();
   const cost = () => ({ fetchMs: Date.now() - t0, requests: stats.requests });
+  // what the library knows, then what the reader finds out: kept on the subscription only when the read works
+  const learned: Partial<SourceConfig> = { ...(src.hint?.(cfg, ctx.db) ?? {}) };
   try {
-    const listings = await src.fetch(cfg, httpContext(log, undefined, stats));
+    const listings = await src.fetch({ ...cfg, ...learned }, { ...httpContext(log, undefined, stats), learn: (p) => Object.assign(learned, p) });
     const read = cost();
+    if (Object.entries(learned).some(([k, v]) => cfg[k] !== v)) {
+      log(`${cfg.id}: 记下 ${JSON.stringify(learned)}`);
+      Object.assign(cfg, learned);
+      saveSources(ctx, [...ctx.sources]);
+    }
     // a career site that answers with nothing is not "no change": it moved, changed or went quiet. Say so, and leave the
     // posts already known as they are (ADR-041). A keyword search that finds nothing is a normal answer.
     if (!listings.length && !cfg.discover && !cfg.keywords?.length) throw new Error(src.table ? "EMPTY_TABLE: 表格读到了，但没有一行能成岗位（没有公司、已过截止、或届次对不上的行都不算）" : "ZERO_POSTS: 官网读到了，但一个岗位都没有");
@@ -100,7 +109,7 @@ export function listSources(ctx: DataContext) {
  * week; 「立即更新」 reads it at once.
  */
 const RETRY_SOON_MS = 60 * 60_000, SOON_TRIES = 3, WEEK_MS = 7 * 24 * 3600_000;
-const STUCK = new Set(["BLOCKED", "LOGIN_REQUIRED", "SCHEMA_CHANGED", "DECRYPT_FAILED"]);
+const STUCK = new Set(["BLOCKED", "LOGIN_REQUIRED", "SCHEMA_CHANGED", "DECRYPT_FAILED", "SITE_GONE", "LINK_STALE"]);
 export function retryAfter(error: string, failures: number, pace: number): number {
   if (STUCK.has(reasonOf(error))) return Math.max(pace, Math.min(WEEK_MS, pace * 2 ** (failures - 1)));
   return failures <= SOON_TRIES ? Math.min(RETRY_SOON_MS, pace) : pace;
