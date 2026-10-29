@@ -1,4 +1,7 @@
-import type { Listing, Source, SourceConfig, SourceContext } from "../types.js";
+import { incomplete, type Listing, type Source, type SourceConfig, type SourceContext } from "../types.js";
+
+/** a safety stop, not a size: a list ends at its own total (中国核电 lists 1,126 posts, 23 pages of 50) */
+const MAX_PAGES = 100;
 
 /**
  * 北森 (Beisen) career portals on <tenant>.zhiye.com. Two generations exist side by side (verified 2026-09-15):
@@ -68,11 +71,12 @@ export function parseCmsDetail(html: string): string {
   return clean(slice).slice(0, 4000);
 }
 
-async function tryApi(tenant: string, cfg: SourceConfig, ctx: SourceContext): Promise<ApiRow[] | null> {
+async function tryApi(tenant: string, cfg: SourceConfig, ctx: SourceContext): Promise<{ rows: ApiRow[]; total: number } | null> {
   const categories = (cfg.categories as string[] | undefined) ?? ["2"];
   const rows: ApiRow[] = [];
   const pageSize = 50;
-  for (let page = 0; page < (cfg.maxPages ?? 10); page++) {
+  let total = 0;
+  for (let page = 0; page < (cfg.maxPages ?? MAX_PAGES); page++) {
     let res: any;
     try {
       res = await ctx.fetchJson(`https://${tenant}.zhiye.com/api/Jobad/GetJobAdPageList`, {
@@ -81,14 +85,15 @@ async function tryApi(tenant: string, cfg: SourceConfig, ctx: SourceContext): Pr
         redirect: "manual",
       });
     } catch {
-      return page === 0 ? null : rows; // first page not JSON → not this generation
+      return page === 0 ? null : { rows, total: Infinity }; // first page not JSON → not this generation; a later one failing leaves the list unfinished
     }
-    if (!res || res.Code !== 200 || !Array.isArray(res.Data)) return page === 0 ? null : rows;
+    if (!res || res.Code !== 200 || !Array.isArray(res.Data)) return page === 0 ? null : { rows, total: Infinity };
     rows.push(...res.Data);
+    total = Number(res.Count ?? 0);
     if (rows.length >= (res.Count ?? 0) || res.Data.length < pageSize) break;
     await ctx.sleep(400);
   }
-  return rows;
+  return { rows, total };
 }
 
 async function cmsFallback(tenant: string, cfg: SourceConfig, ctx: SourceContext): Promise<Listing[]> {
@@ -96,10 +101,11 @@ async function cmsFallback(tenant: string, cfg: SourceConfig, ctx: SourceContext
   const listPath = (cfg.listPath as string | undefined) ?? "/campus";
   const seen = new Map<string, ReturnType<typeof parseCmsList>[number]>();
   // MvcPager is 0-based: /campus == ?PageIndex=0. Stop on an empty page or when a page repeats.
-  for (let page = 0; page < (cfg.maxPages ?? 10); page++) {
+  let ended = false;
+  for (let page = 0; page < (cfg.maxPages ?? MAX_PAGES); page++) {
     const html = await ctx.fetchText(page === 0 ? `${base}${listPath}` : `${base}${listPath}?PageIndex=${page}`);
     const rows = parseCmsList(html);
-    if (rows.length === 0 || rows.every((r) => seen.has(r.id))) break;
+    if (rows.length === 0 || rows.every((r) => seen.has(r.id))) { ended = true; break; }
     for (const r of rows) seen.set(r.id, r);
     await ctx.sleep(400);
   }
@@ -119,7 +125,7 @@ async function cmsFallback(tenant: string, cfg: SourceConfig, ctx: SourceContext
       publisher: `beisen:${tenant}`, grade: "官方", isOriginal: true, confidence: 0.85, raw: r,
     });
   }
-  return out;
+  return ended ? out : incomplete(out, `北森列表页读到第 ${cfg.maxPages ?? MAX_PAGES} 页还没完`);
 }
 
 export const beisen: Source = {
@@ -132,10 +138,11 @@ export const beisen: Source = {
   async fetch(cfg, ctx) {
     const tenant = beisenTenant(cfg.url ?? "");
     if (!tenant) throw new Error(`BAD_URL: 北森：认不出租户 ${cfg.url}`);
-    const rows = await tryApi(tenant, cfg, ctx);
-    if (rows) {
-      ctx.log(`beisen ${tenant}: api ${rows.length} rows`);
-      return rows.map((r) => apiRowToListing(r, tenant, cfg));
+    const api = await tryApi(tenant, cfg, ctx);
+    if (api) {
+      ctx.log(`beisen ${tenant}: api ${api.rows.length}/${api.total} rows`);
+      const out = api.rows.map((r) => apiRowToListing(r, tenant, cfg));
+      return api.rows.length < api.total ? incomplete(out, `北森 ${api.rows.length}/${api.total === Infinity ? "?" : api.total}`) : out;
     }
     const listings = await cmsFallback(tenant, cfg, ctx);
     ctx.log(`beisen ${tenant}: cms ${listings.length} rows`);

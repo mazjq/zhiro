@@ -3,7 +3,7 @@ import { sources, sourceFor, siteKeyOf } from "./readers/index.js";
 import { FIELDS, guessColumns, tableToListings, type Columns, type Table } from "./sheet.js";
 import { httpContext } from "./http.js";
 import { ingest, recordFailedRun, type IngestResult, type Listed } from "./ingest.js";
-import type { DataContext, SourceConfig } from "./types.js";
+import { incompleteWhy, type DataContext, type SourceConfig } from "./types.js";
 import { saveSources } from "./subscriptions.js";
 
 /** Why a career site could not be read, as one of a few words a person or an agent can act on (ADR-041). */
@@ -63,7 +63,9 @@ export async function runSource(ctx: DataContext, configId: string, opts: { quie
     if (!listings.length && !cfg.discover && !cfg.keywords?.length) throw new Error(src.table ? "EMPTY_TABLE: 表格读到了，但没有一行能成岗位（没有公司、已过截止、或届次对不上的行都不算）" : "ZERO_POSTS: 官网读到了，但一个岗位都没有");
     Object.assign(progress, { stage: "filing", done: 0, total: listings.length });
     await new Promise((ok) => setImmediate(ok)); // a page asking right now sees 「比对入库」 before the one short transaction
-    const { listed, ...result } = ingest(ctx, ctx.vault, src.id, cfg.id, listings, { closeUnseen: true, ...read });
+    const partial = incompleteWhy(listings);
+    if (partial) log(`${cfg.id}: 没读完（${partial}），这次不关岗位`);
+    const { listed, ...result } = ingest(ctx, ctx.vault, src.id, cfg.id, listings, { closeUnseen: true, complete: !partial, ...read });
     // a batch fires it once at the end instead of after every site; a read that found the same posts as yesterday
     // changed nothing worth re-matching the pool for (most of the ~3,000 daily reads: 2026-10-13, 357 of 2,984 brought a new post)
     if (!opts.quiet && (result.positionsNew || result.positionsClosed)) ctx.onDataChanged?.();

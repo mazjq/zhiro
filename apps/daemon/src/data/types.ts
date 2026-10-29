@@ -83,6 +83,17 @@ export interface SourceConfig {
 }
 
 /**
+ * A read that stopped before the end of the list (a page cap, the site's own total not reached). Its posts are filed,
+ * but nothing it did not see is closed: 2026-10-29, 中国核电 listed 1,126 posts, ten pages read 500 and the rest were
+ * closed day after day. Kept on the array itself, so a pull shared through `pullOnce` carries it too.
+ */
+export function incomplete<T extends Listing[]>(listings: T, why: string): T {
+  Object.defineProperty(listings, "incomplete", { value: why, enumerable: false });
+  return listings;
+}
+export const incompleteWhy = (listings: Listing[]): string | undefined => (listings as Listing[] & { incomplete?: string }).incomplete;
+
+/**
  * A group portal is subscribed once per unit that links it (中船: five institutes → one root, 1,262 posts each time).
  * Same key within six hours = the same answer, no second crawl. Listings carry no per-subscription data.
  */
