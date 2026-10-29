@@ -7,7 +7,7 @@ import { WorkflowEngine } from "../service/workflow.js";
 import { lockVault } from "../lock.js";
 import { sources } from "./readers/index.js";
 import { addSource, saveSources } from "./subscriptions.js";
-import { sourceScan, scheduleSources, retryAfter } from "./sync.js";
+import { sourceScan, scheduleSources, retryAfter, reasonOf } from "./sync.js";
 import { ingest } from "./ingest.js";
 import type { DataContext, Listing, Source, SourceConfig } from "./types.js";
 
@@ -86,6 +86,29 @@ describe("a subscription keeps being pulled", () => {
     expect(Date.parse(wf(db).next!) - Date.now()).toBeGreaterThan(23 * 3600_000);
     // what the read cost is on record with it
     expect(db.prepare("select fetch_ms is not null t, requests from scan_run").get()).toEqual({ t: 1, requests: 0 });
+  });
+
+  it("gone is not down: a missing site or page needs a new address, a site that is down needs time", () => {
+    expect(["SITE_DOWN: HTTP 404 https://x", "API error: 未找到对应的官网", "SITE_GONE: 大易 listPosition：官网不存在", "SITE_DOWN: HTTP 502 x", "SITE_DOWN: ENOTFOUND x"].map(reasonOf))
+      .toEqual(["SITE_GONE", "SITE_GONE", "SITE_GONE", "SITE_DOWN", "SITE_DOWN"]);
+  });
+
+  it("what a reader finds out (and what the library knew) is kept on the subscription only when the read works", async () => {
+    const { dir, db, workflows, ctx } = setup();
+    let fail = true;
+    flaky.hint = (cfg) => (cfg.rootId ? null : { rootId: "from-library" });
+    flaky.fetch = async (cfg, c) => { c.learn?.({ widenedFrom: cfg.url }); if (fail) throw new Error("SITE_DOWN: x"); return [L("1", `控制算法工程师 ${cfg.rootId}`)]; };
+    try {
+      addSource(ctx, { url: "https://jobs.flaky.example/acme", name: "示例重工" });
+      scheduleSources(ctx);
+      await workflows.tick();
+      expect(ctx.sources[0].rootId).toBeUndefined();
+      fail = false;
+      await workflows.tick(later(wf(db).next));
+      expect(ctx.sources[0]).toMatchObject({ rootId: "from-library", widenedFrom: "https://jobs.flaky.example/acme" });
+      expect(readFileSync(join(dir, "config", "jobos.yaml"), "utf8")).toContain("from-library");
+      expect(db.prepare("select title from position").all()).toEqual([{ title: "控制算法工程师 from-library" }]);
+    } finally { delete flaky.hint; flaky.fetch = async () => answer(); }
   });
 
   it("removed and added back, it is scheduled again; a schedule that had given up under the old rule is revived", async () => {

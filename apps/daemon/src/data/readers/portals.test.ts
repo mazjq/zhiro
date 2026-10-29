@@ -18,6 +18,47 @@ describe("智联校园 reader, offline parts", () => {
   });
 });
 
+describe("智联: a job link that is blocked or gone", () => {
+  const JOB = "https://xiaoyuan.zhaopin.com/job/CCL1226837610J40891746705";
+  const ctxOf = (jobPage: string, total: number, learned: any[] = []) => ({
+    sleep: async () => {}, log: () => {}, learn: (p: any) => learned.push(p),
+    fetchText: async () => jobPage,
+    fetchJson: async (_u: string, o: any) => ({ code: 200, data: { pageInfo: { totalNum: total, totalPage: 1 }, jobList: JSON.parse(o.body).pageSize === 1 ? [] : [{ job: { jobNumber: "CCL1226837610J1", title: "控制工程师" }, company: { campusOrgName: "七〇五所" } }] } }),
+  });
+  it("tells the bot check, a post that is gone and a unit with nothing open apart", async () => {
+    const { zhilian } = await import("./zhilian.js");
+    const run = (page: string, total: number) => zhilian.fetch!({ id: "z", source: "zhilian", url: JOB }, ctxOf(page, total) as any).then(() => "ok", (e) => String(e.message).split(":")[0]);
+    expect(await run(`<script>EO_Bot_Ssid=1</script>`, 5)).toBe("BLOCKED");
+    expect(await run(`<html>${"x".repeat(6000)}</html>`, 5)).toBe("LINK_STALE");
+    expect(await run(`<html>"companyRootId":105924 ${"x".repeat(6000)}</html>`, 0)).toBe("ZERO_POSTS");
+  });
+  it("keeps the campus id it found, and knows it from the library without the job page", async () => {
+    const { zhilian } = await import("./zhilian.js");
+    const learned: any[] = [];
+    const posts = await zhilian.fetch!({ id: "z", source: "zhilian", url: JOB + "?x=1" }, ctxOf(`<html>"companyRootId":105925 ${"x".repeat(6000)}</html>`, 3, learned) as any);
+    expect(posts.map((p) => p.company)).toEqual(["七〇五所"]);
+    expect(learned).toEqual([{ rootId: "105925" }]);
+    const db = { prepare: (sql: string) => ({ get: (like: string) => (/source_listing/.test(sql) && like === "CCL1226837610J%" ? { publisher: "zhilian:105924" } : undefined) }) };
+    expect(zhilian.hint!({ id: "z", source: "zhilian", url: JOB }, db as any)).toEqual({ rootId: "105924" });
+    expect(zhilian.hint!({ id: "z", source: "zhilian", url: JOB, rootId: "1" }, db as any)).toBeNull();
+    expect(zhilian.hint!({ id: "z", source: "zhilian", url: "https://cssc.zhaopin.com/" }, db as any)).toBeNull();
+  });
+});
+
+describe("飞书招聘: a link narrowed to a project that ended", () => {
+  it("reads the whole portal when the project has nothing, and keeps the wider link", async () => {
+    const { feishuJobs } = await import("./feishu-jobs.js");
+    const learned: any[] = [];
+    const post = { id: "p1", title: "机器人算法实习生", recruit_type: { name: "实习" } };
+    const ctx = { sleep: async () => {}, log: () => {}, fetchText: async () => "", learn: (p: any) => learned.push(p),
+      fetchJson: async (u: string, o: any) => (/csrf/.test(u) ? { data: { token: "t" } } : { code: 0, data: { count: 1, job_post_list: JSON.parse(o.body).subject_id_list.length ? [] : [post] } }) };
+    const url = "https://x2-robot.jobs.feishu.cn/912130/position/list?keywords=&project=7650350869535869227&type=";
+    const out = await feishuJobs.fetch!({ id: "f", source: "feishu-jobs", url, name: "自变量机器人" }, ctx as any);
+    expect(out.map((l) => l.title)).toEqual(["机器人算法实习生"]);
+    expect(learned).toEqual([{ url: "https://x2-robot.jobs.feishu.cn/912130/position/list?keywords=&type=", widenedFrom: url }]);
+  });
+});
+
 describe("国聘 reader, offline parts", () => {
   it("tells tenant, company and job links apart", () => {
     expect(iguopinUrl("https://spic2027.iguopin.com/job")).toEqual({ tenant: "spic2027", path: "/job", kind: "tenant" });
@@ -65,6 +106,11 @@ describe("大易 and 51job, offline parts", () => {
     expect(l).toMatchObject({ company: "中电科普天", locations: ["南京市"], validThrough: "2099-10-31", majorReq: "控制科学与工程", description: "岗位职责\n负责控制\n\n任职要求\n硕士及以上" });
     expect(rowToListing({ ...row, projectName: "2026年校园招聘" }, null, "SU1", { id: "c", source: "dayee" }, "2026-09-30")).toBeNull();
     expect(rowToListing({ ...row, endDate: "2026-09-01" }, null, "SU1", { id: "c", source: "dayee" }, "2026-09-30")).toBeNull();
+  });
+  it("大易: the word a link carries for the recruit type becomes the number the API takes", async () => {
+    const { dayeeSuite } = await import("./dayee.js");
+    const su = "https://wecruit.hotjob.cn/SU6135d6092f9d245c993d009e/mc/detail?postId=6ab0&recruitType=";
+    expect(["campus", "intern", "12", "2", ""].map((w) => dayeeSuite(su + w)!.recruitType)).toEqual(["1", "12", "12", "2", "1"]);
   });
   it("51job: its JS-literal answers become JSON without eval, and the unit path names the company", async () => {
     const { literalToJson, jobToListing, job51Url, siteLinks } = await import("./job51.js");

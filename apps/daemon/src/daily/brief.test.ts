@@ -108,6 +108,9 @@ describe("the daily brief", () => {
     for (const d of [9, 1]) run.run(ulid(), "moka", "back", at(d), at(d), d === 9 ? "SITE_DOWN: x" : "");
     run.run(ulid(), "beisen", "new", at(2), at(2), "BLOCKED: HTTP 403 x"); // failing for two days only
     run.run(ulid(), "job51", "gone", at(20), at(20), "SITE_DOWN: x"); // no longer tried: removed
+    // had posts, has none now: between seasons, not broken
+    db.prepare("insert into scan_run(id, source, config_id, started_at, finished_at, complete, found, error) values (?,?,?,?,?,1,8,'')").run(ulid(), "beisen", "season", at(12), at(12));
+    for (const d of [9, 1]) run.run(ulid(), "beisen", "season", at(d), at(d), "ZERO_POSTS: 官网读到了，但一个岗位都没有");
     const line = makeBrief(db, now).hanging.find((x) => x.key === "hang:sources");
     expect(line?.text).toBe("3 个订阅一周多没读成（官网读到了，但一个岗位都没有 2；官网改版，读取方式要更新 1）：这些公司的岗位可能不全，在「配置 → 订阅」里看");
   });

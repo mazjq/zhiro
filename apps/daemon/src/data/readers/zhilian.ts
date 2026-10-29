@@ -50,8 +50,13 @@ export async function rootIdsOf(url: string, ctx: SourceContext): Promise<string
   const key = z?.job && /^(xiaoyuan|m|www|webapp)\./.test(z.host) ? z.job : new URL(url).origin + (url.includes("webapp.zhaopin.com") ? new URL(url).pathname.split("/").slice(0, 4).join("/") : "");
   if (roots.has(key)) return roots.get(key)!;
   let ids: string[] = [];
-  if (z?.job) ids = [/"companyRootId":(\d+)/.exec(await page(ctx, `https://xiaoyuan.zhaopin.com/job/${z.job}`))?.[1] ?? ""].filter(Boolean);
-  else {
+  if (z?.job) {
+    const html = await page(ctx, `https://xiaoyuan.zhaopin.com/job/${z.job}`);
+    // three different things, three different remedies: the bot check never let us in, the post is gone, or the unit has nothing open
+    if (/EO_Bot_Ssid/.test(html) && html.length < 5000) throw new Error(`BLOCKED: 智联：岗位页一直是机器人校验页 ${url}`);
+    ids = [/"companyRootId":(\d+)/.exec(html)?.[1] ?? ""].filter(Boolean);
+    if (!ids.length) throw new Error(`LINK_STALE: 智联：这个岗位页里已经没有公司的校招机构号（岗位多半下线了） ${url}`);
+  } else {
     const u = new URL(url), base = u.origin + (u.host.startsWith("webapp.") ? u.pathname.split("/").slice(0, 4).join("/") : "") + "/";
     const pages = [url], seen = new Set(pages), js: string[] = [];
     let all = "";
@@ -71,6 +76,7 @@ export async function rootIdsOf(url: string, ctx: SourceContext): Promise<string
       for (const m of all.matchAll(/nativeHref:"(\w+)"/g)) { const p = base + (m[1] === "index" ? "" : `${m[1]}/index.html`); if (!seen.has(p)) { seen.add(p); pages.push(p); } }
     }
     ids = idsIn(all);
+    if (!ids.length) throw new Error(`SCHEMA_CHANGED: 智联：站点里没找到校招机构号 ${url}`);
   }
   const live: string[] = [];
   for (const id of ids) if ((await count(ctx, id)) > 0) live.push(id);
@@ -118,8 +124,21 @@ export const zhilian: Source = {
   detect: (url) => !!zhilianUrl(url),
   // ponytail: the root id needs a request, so two job links of one group are two subscriptions (same campaigns, a scan wasted)
   siteKey: (url) => { const z = zhilianUrl(url)!; return z.job && /^(xiaoyuan|m|www|webapp)\./.test(z.host) ? `job/${z.job}` : z.host; },
+  /**
+   * A job link names its company in the job number (CCL1226837610J40891991705 → CCL1226837610): if posts of that company
+   * were read before, the library knows its campus id without the job page, which the bot check often blocks and which
+   * goes when the post does (2026-10-29: 七〇五所's link read 「没找到有岗位」 for weeks while 102 of its posts were open).
+   */
+  hint(cfg, db) {
+    if (cfg.rootId) return null;
+    const company = /^(C[CZ]L?\d+)J/.exec(zhilianUrl(cfg.url ?? "")?.job ?? "")?.[1];
+    if (!company) return null;
+    const r = db.prepare("select publisher from source_listing where provider = 'zhilian' and external_id like ? and publisher like 'zhilian:%' order by fetched_at desc limit 1").get(`${company}J%`) as { publisher: string } | undefined;
+    return r ? { rootId: r.publisher.slice("zhilian:".length) } : null;
+  },
   async fetch(cfg, ctx) {
-    const ids = cfg.rootId ? [String(cfg.rootId)] : await rootIdsOf(cfg.url ?? "", ctx);
+    const ids = cfg.rootId ? String(cfg.rootId).split(",") : await rootIdsOf(cfg.url ?? "", ctx);
+    if (!cfg.rootId) ctx.learn?.({ rootId: ids.join(",") }); // the next read needs no page that can be blocked or gone
     const root = ids.join(",");
     return pullOnce(`zhilian:${root}:${cfg.keywords?.[0] ?? ""}`, async () => {
     const out: Listing[] = [];
