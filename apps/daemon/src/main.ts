@@ -21,7 +21,7 @@ import { join, resolve, sep } from "node:path";
 import { spawn } from "node:child_process";
 import { createServices } from "./services.js";
 import { deadlineReminder, scheduleAllDeadlines } from "./workflows/deadline.js";
-import { sourceScan, scheduleSources } from "./data/index.js";
+import { sourceScan, scheduleSources, wakeAfterUpgrade, dataCodeFingerprint } from "./data/index.js";
 import { researchRun } from "./agent/research.js";
 import { companyFind } from "./agent/find-company.js";
 import { sourceRelocate } from "./agent/relocate.js";
@@ -131,6 +131,8 @@ if (!maintenance) {
   setTimeout(tidy, 5_000).unref(); // after the server is listening: browsing never waits for housekeeping
   setInterval(tidy, 24 * 3600_000).unref();
   console.log(`[zhiro] pull sources scheduled: ${scheduleSources(dataOf(services))}`);
+  const woke = wakeAfterUpgrade(dataOf(services), dataCodeFingerprint());
+  if (woke) console.log(`[zhiro] reading code changed: ${woke} failing subscriptions read again now`);
   workflows.startPolling();
 }
 

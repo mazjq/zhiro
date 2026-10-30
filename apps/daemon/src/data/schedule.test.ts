@@ -7,7 +7,8 @@ import { WorkflowEngine } from "../service/workflow.js";
 import { lockVault } from "../lock.js";
 import { sources } from "./readers/index.js";
 import { addSource, saveSources } from "./subscriptions.js";
-import { sourceScan, scheduleSources, retryAfter, reasonOf } from "./sync.js";
+import { sourceScan, scheduleSources, retryAfter, reasonOf, wakeAfterUpgrade } from "./sync.js";
+import { dataCodeFingerprint } from "./fingerprint.js";
 import { ingest } from "./ingest.js";
 import { incomplete, type DataContext, type Listing, type Source, type SourceConfig } from "./types.js";
 
@@ -86,6 +87,29 @@ describe("a subscription keeps being pulled", () => {
     expect(Date.parse(wf(db).next!) - Date.now()).toBeGreaterThan(23 * 3600_000);
     // what the read cost is on record with it
     expect(db.prepare("select fetch_ms is not null t, requests from scan_run").get()).toEqual({ t: 1, requests: 0 });
+  });
+
+  it("a fix to the reading code reads the failing subscriptions again at the next start, not after their backoff", async () => {
+    const { db, workflows, ctx } = setup();
+    answer = () => { throw new Error("SCHEMA_CHANGED: 大易 listPosition：parameter error"); };
+    addSource(ctx, { url: "https://jobs.flaky.example/acme", name: "示例重工" });
+    addSource(ctx, { url: "https://jobs.flaky.example/fine", name: "示例电气" });
+    scheduleSources(ctx);
+    let n = 0;
+    answer = () => { if (n++ === 0) throw new Error("SCHEMA_CHANGED: 大易 listPosition：parameter error"); return [L("1", "控制算法工程师")]; };
+    await workflows.tick();
+    expect(runs(db)).toEqual({ n: 2, failed: 1 });
+    // which of the two is due within the hour, the one that failed first
+    const failed = (db.prepare("select config_id from scan_run where error != ''").get() as any).config_id;
+    const soon = () => (db.prepare("select subject_id from workflow where kind = 'source_scan' and next_run_at < ?").all(new Date(Date.now() + 3600_000).toISOString()) as any[]).map((r) => r.subject_id);
+    expect(soon()).toEqual([]); // both a day away
+
+    expect(wakeAfterUpgrade(ctx, "v1")).toBe(1); // the failing one, now; the one that read fine keeps its day
+    expect(soon()).toEqual([failed]);
+    await workflows.tick();
+    expect(runs(db)).toEqual({ n: 3, failed: 1 });
+    expect(wakeAfterUpgrade(ctx, "v1")).toBe(0); // same code: nothing
+    expect(dataCodeFingerprint()).toMatch(/^[0-9a-f]{40}$/);
   });
 
   it("a read that stopped before the end of the list files what it read and closes nothing", async () => {
