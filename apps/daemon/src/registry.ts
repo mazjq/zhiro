@@ -23,6 +23,7 @@ export function sameTenant(a: string, b: string): boolean {
 }
 import { startResearch, startEmployerReport, getResearch, listResearch } from "./agent/research.js";
 import { startFindCompany } from "./agent/find-company.js";
+import { startRelocate } from "./agent/relocate.js";
 import { startTopicResearch, listTopics, getTopic } from "./agent/research-topic.js";
 import { callData, dataFile, type DataTool } from "./service/research-data.js";
 import { listPool, scanHistory, searchCompanies, poolFacets, poolWatched, poolDirty } from "./service/pool.js";
@@ -145,7 +146,9 @@ export function dataOf(s: Services): DataContext {
   return { db: s.domain.db, vault: s.config.vault, sources: s.config.sources as SourceConfig[], workflows: s.workflows, onDataChanged: () => s.onDataChanged?.(), onSourcesChanged: () => s.onSourcesChanged?.(),
     onPostsEdited: () => s.onBackgroundChanged?.("posts"),
     // only 「更新情况」 listens: it looks again and follows the pull while it runs (a page refresh for each of ~3,000 daily pulls would not do)
-    onPull: (configId, running) => emit("scan", { configId, running }) };
+    onPull: (configId, running) => emit("scan", { configId, running }),
+    // a one-shot run or a test registers no source_relocate: there is nobody to send then
+    onMoved: (configId, error) => { try { startRelocate(s, configId, error); } catch (e: any) { if (!/unknown workflow/.test(e?.message)) console.warn(`[relocate] ${configId}: ${e?.message ?? e}`); } } };
 }
 
 export type { Services } from "./services.js";

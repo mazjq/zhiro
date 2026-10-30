@@ -26,7 +26,7 @@ import { DATA_TOOLS } from "../service/research-data.js";
  * `prompt` may be made once the run exists (a brief that names its own run, or files what it starts from in the run's
  * directory). `dataTools`: the worker is also given the research data tools (ADR-056), see dataServer below.
  */
-export interface RunSpec { runner?: "claude" | "codex"; mode: "research.company" | "research.topic" | "company.find" | "intel.sme"; subjectType: "company" | "region" | "topic"; subjectId: string; subjectLabel: string; prompt: string | ((run: { runId: string; dir: string; external: boolean }) => string); schema: object; maxTurns?: number; maxBudgetUsd?: number; dataTools?: boolean }
+export interface RunSpec { runner?: "claude" | "codex"; mode: "research.company" | "research.topic" | "company.find" | "intel.sme" | "source.relocate"; subjectType: "company" | "region" | "topic" | "source"; subjectId: string; subjectLabel: string; prompt: string | ((run: { runId: string; dir: string; external: boolean }) => string); schema: object; maxTurns?: number; maxBudgetUsd?: number; dataTools?: boolean }
 
 /**
  * How the worker starts the data-tool server (mcp/research-data.ts): the node that runs this daemon, the way this

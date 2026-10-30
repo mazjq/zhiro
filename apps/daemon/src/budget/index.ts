@@ -104,7 +104,7 @@ export const backgroundKind = (): string | null => scope.getStore() ?? null;
  * The background work Zhiro schedules by itself and that spends the person's allowance: held by the gate. Sorting mail
  * is not here (it is how nothing gets missed, and small), nor research the person started (they asked for it now).
  */
-export const HELD = new Set(["lead_resolve", "capture_recheck", "notice_verify"]);
+export const HELD = new Set(["lead_resolve", "capture_recheck", "notice_verify", "source_relocate"]);
 
 /** A provider's refusal for the allowance (a 429, "usage limit reached"), told apart from other failures. */
 export const isLimitError = (e: unknown): boolean => /usage limit|rate.?limit|\b429\b|quota|too many requests|usage_limit|limit reached/i.test(String((e as any)?.message ?? e));
