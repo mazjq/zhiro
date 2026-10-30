@@ -1,7 +1,7 @@
 import type { WorkflowDef } from "../service/workflow.js";
 import type { Services } from "../services.js";
 import { enqueue } from "../notify/center.js";
-import { resolveFor, sayDate, type Resolution } from "../service/deadlines.js";
+import { resolveFor, sayDate, beijingDay, type Resolution } from "../service/deadlines.js";
 
 /**
  * deadline_reminder (ADR-041): one workflow per post the person holds — watched, or with an application still being
@@ -15,6 +15,12 @@ const HELD = `p.status != 'closed' and not exists (select 1 from application a w
   and (p.watch_priority > 0 or exists (select 1 from application a where a.position_id = p.id and a.state = 'draft'))`;
 const asap = (r: Resolution) => !r.date && r.status === "verified" && (r.policy === "until_filled" || r.policy === "rolling" || r.policy === "no_fixed_date");
 const DAY = 86400_000;
+/**
+ * Calendar days to the deadline, in Beijing: 1 all of the day before, 0 all of the day. Not hours rounded up — that said
+ * 「剩 2 天」 on the morning before, 「剩 1 天」 only from the deadline day's midnight, and 「今天」 after the deadline had
+ * passed (2026-10-28, two drafts at 中国石化 lapsed so), waking every minute in between.
+ */
+const daysLeft = (date: string) => Math.round((Date.parse(date) - Date.parse(beijingDay())) / DAY);
 
 export function deadlineReminder(s: Services): WorkflowDef {
   const db = s.domain.db;
@@ -38,7 +44,7 @@ export function deadlineReminder(s: Services): WorkflowDef {
         const p = db.prepare(`select p.title, co.name company from position p join campaign c on c.id = p.campaign_id join company co on co.id = c.company_id where p.id = ? and ${HELD}`).get(id) as { title: string; company: string } | undefined;
         const r = resolveFor(db, [id]).get(id);
         if (!p || !r || r.expired) return { type: "done" };
-        current = { id, date: r.date ?? null, left: r.date ? Math.ceil((Date.parse(r.date + "T23:59:59+08:00") - Date.now()) / DAY) : Infinity };
+        current = { id, date: r.date ?? null, left: r.date ? daysLeft(r.date) : Infinity };
         const name = `「${p.title}」`;
         if (!r.date) {
           if (!asap(r)) return { type: "done" }; // nothing to remind of; 待核实 on the 今日 page carries it
@@ -56,7 +62,7 @@ export function deadlineReminder(s: Services): WorkflowDef {
           db.prepare("delete from reminder_sent where key = ?").run(`known|${id}|${r.date}`);
           mark(`known|${id}|${r.date}`);
         }
-        const left = Math.ceil((Date.parse(r.date + "T23:59:59+08:00") - Date.now()) / DAY);
+        const left = daysLeft(r.date);
         if (left < 0) return { type: "done" };
         // the nearest milestone reached; the ones passed on the way are settled with it (first seen at 5 days: one T-7, not T-14 then T-7)
         const due = [...days].reverse().find((d) => left <= d);
