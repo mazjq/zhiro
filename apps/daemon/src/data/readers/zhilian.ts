@@ -61,7 +61,11 @@ export async function rootIdsOf(url: string, ctx: SourceContext): Promise<string
     const pages = [url], seen = new Set(pages), js: string[] = [];
     let all = "";
     for (let i = 0; i < pages.length && i < 8; i++) {
-      const html = await page(ctx, pages[i]).catch(() => "");
+      const html = await page(ctx, pages[i]).catch((e: Error) => {
+        // a group site Zhilian no longer serves answers 403, as a name that never existed does (checked 2026-10-30): gone, not blocked
+        if (i === 0 && /HTTP 40[34]\b/.test(e.message)) throw new Error(`SITE_GONE: 智联：这个集团校招站已经下线 ${url}`);
+        return "";
+      });
       all += html;
       for (const m of html.matchAll(/(?:src|href)="([^"]+\.js)"/g)) { const s = new URL(m[1], pages[i]).href; if (/\/assets\/|\/static\//.test(s) && !seen.has(s)) { seen.add(s); js.push(s); } }
       for (let j = 0; j < js.length && j < 40; j++) {
@@ -132,8 +136,12 @@ export const zhilian: Source = {
   hint(cfg, db) {
     if (cfg.rootId) return null;
     const company = /^(C[CZ]L?\d+)J/.exec(zhilianUrl(cfg.url ?? "")?.job ?? "")?.[1];
-    if (!company) return null;
-    const r = db.prepare("select publisher from source_listing where provider = 'zhilian' and external_id like ? and publisher like 'zhilian:%' order by fetched_at desc limit 1").get(`${company}J%`) as { publisher: string } | undefined;
+    // a group site: the ids its own earlier reads came under. They belong to the organisation, not to one season's site
+    // (河北建投's 2027 site went 2026-10-29; 106565/106566 stay, and its next season's posts come under them).
+    // ponytail: a remembered id set does not see an id the site adds later; re-walk the site when a group adds units
+    const r = (company
+      ? db.prepare("select publisher from source_listing where provider = 'zhilian' and external_id like ? and publisher like 'zhilian:%' order by fetched_at desc limit 1").get(`${company}J%`)
+      : db.prepare("select publisher from source_listing where provider = 'zhilian' and content_path like ? escape '\\' and publisher like 'zhilian:%' order by fetched_at desc limit 1").get(`%-${cfg.id.replace(/[\\%_]/g, (c) => `\\${c}`)}.json`)) as { publisher: string } | undefined;
     return r ? { rootId: r.publisher.slice("zhilian:".length) } : null;
   },
   async fetch(cfg, ctx) {

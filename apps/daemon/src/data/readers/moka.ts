@@ -1,4 +1,4 @@
-import mokahr from "./career-ops/mokahr.mjs";
+import mokahr, { decryptMokaHrEnvelope, parseMokaHrJobs } from "./career-ops/mokahr.mjs";
 import { incomplete, type Listing, type Source, type SourceConfig, type SourceContext } from "../types.js";
 
 /**
@@ -50,6 +50,20 @@ export function toListing(j: VendorJob, cfg: SourceConfig): Listing {
   };
 }
 
+/** The tenant read from the host that serves it, the way its front end asks; answers plain or in Moka's envelope. */
+async function ownHost(origin: string, t: { orgId: string; siteId: string; canonical: string }, cfg: SourceConfig, ctx: SourceContext): Promise<VendorJob[]> {
+  const base = t.canonical.replace("https://app.mokahr.com", origin), seen = new Map<string, VendorJob>();
+  for (let page = 0; page < (cfg.maxPages ?? MAX_PAGES); page++) {
+    const r: any = await ctx.fetchJson(`${origin}/api/outer/ats-apply/website/jobs/v2`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ siteId: Number(t.siteId), orgId: t.orgId, locale: "zh-CN", limit: PAGE, offset: page * PAGE, ...(cfg.keywords?.[0] ? { keyword: cfg.keywords[0] } : {}) }) });
+    const body = r?.necromancer ? decryptMokaHrEnvelope(r) : r;
+    if (body?.success === false || !Array.isArray(body?.data?.jobs)) throw new Error(`SCHEMA_CHANGED: Moka ${origin}：${String(body?.msg ?? JSON.stringify(body)).slice(0, 80)}`);
+    for (const j of parseMokaHrJobs(body, cfg.name || t.orgId, base)) seen.set(j.url, j);
+    if (body.data.jobs.length < PAGE) break;
+    await ctx.sleep(400);
+  }
+  return [...seen.values()];
+}
+
 export const moka: Source = {
   id: "moka",
   name: "Moka", input: "app.mokahr.com/campus-recruitment/<公司>/<站点>（公司自有域名上的同样路径也认）",
@@ -64,7 +78,13 @@ export const moka: Source = {
     const jobs: VendorJob[] = await p.fetch(
       { name: cfg.name ?? "", careers_url: tenant.canonical, keywords: cfg.keywords?.length ? cfg.keywords : [""], max_pages: cfg.maxPages ?? MAX_PAGES },
       { fetchJson: ctx.fetchJson, fetchText: ctx.fetchText, sleep: ctx.sleep, maxPages: ctx.maxPages, transport: "http" },
-    );
+    ).catch((e: Error) => {
+      // Moka on DingTalk (app135149.eapps.dingtalkcloud.com): app.mokahr.com does not know the tenant, its own host answers
+      // the same API in plain JSON (利尔达, 珞石; verified 2026-10-30)
+      const own = new URL(cfg.url!).origin;
+      if (!/未找到对应的官网/.test(e.message) || own === "https://app.mokahr.com") throw e;
+      return ownHost(own, tenant, cfg, ctx);
+    });
     ctx.log(`moka ${cfg.name ?? cfg.url}: ${jobs.length} jobs`);
     const out = jobs.map((j) => toListing(j, cfg));
     // the vendored provider stops at its page cap without saying so: a list exactly that long may go on (徐工矿机: 585, ten pages read 500)

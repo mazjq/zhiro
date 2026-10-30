@@ -11,6 +11,9 @@ const ENGINEERING = /能源|化工|电力|制造|电子|通信|半导体|互联�
  */
 const MANUAL: Record<string, string> = {
   "zhaopin.cnpc.com.cn": "入口 zhaopin.cnpc.com.cn 有反爬，不自动读取：在本人浏览器里打开（全集团 132 个公告在一个列表），把相关公告页的正文交给 listing.capture 入库",
+  // 国家电网 and 南瑞: the same 瑞数 wall, every path HTTP 412 (checked 2026-10-30)
+  "zhaopin.sgcc.com.cn": "入口 zhaopin.sgcc.com.cn（国家电网招聘平台）有反爬，不自动读取：在本人浏览器里打开，把相关单位的公告页正文交给 listing.capture 入库；国聘和各单位公众号也会转发公告",
+  "job.sgepri.sgcc.com.cn": "入口 job.sgepri.sgcc.com.cn（南瑞招聘）有反爬，不自动读取：在本人浏览器里打开，把公告或岗位页的正文交给 listing.capture 入库",
 };
 
 /** Where a company's real job list lives, in the words the reason shows: readable now, needs the model, or not yet reachable. */

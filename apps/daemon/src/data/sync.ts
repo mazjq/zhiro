@@ -10,7 +10,8 @@ import { saveSources } from "./subscriptions.js";
 export const SYNC_REASONS: Record<string, string> = {
   NO_OFFICIAL_LINK: "还没有这家公司的官网招聘链接", UNSUPPORTED_PLATFORM: "官网用的招聘系统还读不了", TIMEOUT: "官网超时没响应", LOGIN_REQUIRED: "官网要登录才能看",
   BLOCKED: "被官网拦了（验证码或访问限制）", SCHEMA_CHANGED: "官网改版，读取方式要更新", DECRYPT_FAILED: "官网返回的数据解不开", ZERO_POSTS: "官网读到了，但一个岗位都没有",
-  SITE_DOWN: "官网打不开", SITE_GONE: "招聘站已撤或换了地址", LINK_STALE: "链接指向的岗位已下线，要换成公司的招聘主页", FAILED: "读取失败",
+  SITE_DOWN: "官网打不开", SITE_GONE: "招聘站已撤或换了地址", LINK_STALE: "链接指向的岗位已下线，要换成公司的招聘主页",
+  ELSEWHERE: "这里只是宣传页，岗位在公司的另一个招聘系统上", FAILED: "读取失败",
   NOT_PUBLIC: "表格没有公开，读不到", BAD_URL: "链接不是这类招聘站的地址", NO_COMPANY_COLUMN: "没认出哪一列是公司", EMPTY_TABLE: "表格读到了，但没有一行能成岗位", FILE_NOT_FOUND: "找不到这个文件",
 };
 export function reasonOf(error: string): string {
@@ -111,7 +112,7 @@ export function listSources(ctx: DataContext) {
  * week; 「立即更新」 reads it at once.
  */
 const RETRY_SOON_MS = 60 * 60_000, SOON_TRIES = 3, WEEK_MS = 7 * 24 * 3600_000;
-const STUCK = new Set(["BLOCKED", "LOGIN_REQUIRED", "SCHEMA_CHANGED", "DECRYPT_FAILED", "SITE_GONE", "LINK_STALE"]);
+const STUCK = new Set(["BLOCKED", "LOGIN_REQUIRED", "SCHEMA_CHANGED", "DECRYPT_FAILED", "SITE_GONE", "LINK_STALE", "ELSEWHERE"]);
 export function retryAfter(error: string, failures: number, pace: number): number {
   if (STUCK.has(reasonOf(error))) return Math.max(pace, Math.min(WEEK_MS, pace * 2 ** (failures - 1)));
   return failures <= SOON_TRIES ? Math.min(RETRY_SOON_MS, pace) : pace;
