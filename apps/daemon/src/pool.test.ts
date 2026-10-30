@@ -1,4 +1,4 @@
-import { describe, it, expect } from "vitest";
+import { describe, it, expect, vi } from "vitest";
 import { createServices, testConfig } from "./services.js";
 import { mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -401,6 +401,28 @@ describe("a deadline that moves and moves back (B28)", () => {
     expect(told()).toHaveLength(2);
     expect(told()[1]).toContain("改为 **");
     expect(told()[1]).toMatch(/11.*30.*改为.*10.*20/);
+  });
+});
+
+describe("deadline reminders count Beijing calendar days", () => {
+  it("「剩 1 天」 the morning before, 「今天」 the morning of, nothing after — not hours rounded up (2026-10-28)", async () => {
+    const { dir, domain, s } = setup();
+    ingest(domain, dir, "moka", "x", [listing({ validThrough: "2099-10-20" })]);
+    const id = ((await callTool("pool.list", {}, HUMAN, s)) as any).items[0].positions[0].id;
+    await callTool("position.watch", { positionId: id, priority: 2 }, HUMAN, s);
+    const said = () => (domain.db.prepare("select body from notice where kind = 'deadline' and title like '截止提醒%' order by rowid").all() as any[]).map((r) => JSON.parse(r.body)[0] as string);
+    const at = async (iso: string) => { vi.setSystemTime(new Date(iso)); return deadlineReminder(s).steps.remind({ subjectId: id, checkpoint: {} } as any) as Promise<any>; };
+    vi.useFakeTimers({ toFake: ["Date"] });
+    try {
+      // the machine may sit anywhere: 09:00 Beijing on the 19th is 19:00 the day before at UTC−6
+      const r1 = await at("2099-10-19T09:00:00+08:00");
+      expect(said().at(-1)).toContain("剩 1 天");
+      expect(r1).toEqual({ type: "sleep", until: new Date("2099-10-20T09:00:00+08:00").toISOString() }); // no waking every minute
+      await at("2099-10-20T09:00:00+08:00");
+      expect(said().at(-1)).toContain("今天");
+      expect(await at("2099-10-21T00:30:00+08:00")).toEqual({ type: "done" });
+      expect(said()).toHaveLength(2);
+    } finally { vi.useRealTimers(); }
   });
 });
 

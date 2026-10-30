@@ -47,7 +47,8 @@ const rank = (g: string) => GRADE_RANK[g] ?? 9;
 /** How a person names the source: a 汇总表 stays a 汇总表 whatever grade its rows carry. */
 export const sourceName = (s: { grade: string; sourceKind: string }) => (s.grade === "本人" ? "本人核实" : s.grade === "官方" ? "官网" : isAggregate(s.sourceKind) ? "汇总表" : s.grade === "校方转载" ? "校方转载" : "转载");
 
-export const localDay = (d = new Date()) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+/** The day in Beijing: every 截止 is a Beijing date, wherever the computer is (the author's runs at UTC−6, 14 hours behind). */
+export const beijingDay = (d = new Date()) => new Date(d.getTime() + 8 * 3600_000).toISOString().slice(0, 10);
 /** 2026-10-21 → 「10 月 21 日」; another year is spelled out. */
 export function sayDate(day: string, precision: Precision = "day"): string {
   const [y, m, d] = day.slice(0, 10).split("-").map(Number);
@@ -129,7 +130,7 @@ export function loadContext(db: Db, companyIds?: string[]): ResolveContext {
     (facts.get(k) ?? facts.set(k, []).get(k)!).push(f);
   }
   const overrides = new Map((db.prepare("select * from deadline_override").all() as unknown as OverrideRow[]).map((o) => [`${o.subject_type}:${o.subject_id}`, o]));
-  return { campaigns, byCompany, facts, overrides, today: localDay() };
+  return { campaigns, byCompany, facts, overrides, today: beijingDay() };
 }
 
 const UNKNOWN: Resolution = { policy: "unknown", date: null, dateText: "", status: "unverified", scope: "none", say: "截止未核实", source: null, conflicts: [], expired: false, process: "" };
@@ -187,7 +188,7 @@ export function resolvePost(post: PostRow, ctx: ResolveContext, twins: PostRow[]
   // another source that names a day this one does not allow. Not a conflict: another batch of the same source (different
   // batches close on different days), an equally graded source whose day has passed, a batch with several days of its own.
   // … but a better source's batch that closed in the last two months is worth a word beside a lesser source's later day
-  const since = localDay(new Date(Date.now() - 60 * 86400000));
+  const since = beijingDay(new Date(Date.now() - 60 * 86400000));
   const recent = closing.filter((f) => stale(f) && rank(f.grade) < rank(best.grade) && lastDay(f)! >= since);
   const conflicts = unspecified ? [] : [...close.slice(1), ...recent]
     .filter((f) => hasDate(f) && f.applies !== "campaign_unspecified" && !compatible(best, f))
@@ -265,7 +266,7 @@ export function resolveMany(db: Db, posts: (PostRow & { company_id: string })[],
  * whole answer has to be worked out.
  */
 export function expiredMany(db: Db, posts: (PostRow & { company_id: string })[], opts: { every?: boolean; twins?: () => Map<string, GroupPost[]> } = {}): Map<string, boolean> {
-  const k = tracked(db), day = localDay();
+  const k = tracked(db), day = beijingDay();
   const kept = k.day === day && !k.all ? k.expired : null;
   if (!kept) {
     const r = resolveMany(db, posts, opts.twins?.()), out = new Map<string, boolean>();

@@ -1,6 +1,6 @@
 import { poolUnrelatedWrite, deadlineBoard } from "./pool.js";
 import { NotFound, DomainError } from "./errors.js";
-import { loadContext as loadDeadlines, campaignSaying, expiredMany, localDay, type PostRow } from "./deadlines.js";
+import { loadContext as loadDeadlines, campaignSaying, expiredMany, beijingDay, type PostRow } from "./deadlines.js";
 import { ulid } from "ulid";
 import { genericCompany, companyKey, sha, upsertCompany, upsertCampaign, upsertPosition, type CampaignInput, type PositionExtra } from "../data/index.js";
 import type { Db } from "../db.js";
@@ -121,12 +121,12 @@ export class Domain {
   listCampaigns(q: { deadlineWithinDays?: number; city?: string; grade?: string; query?: string; limit?: number }): { items: CampaignT[]; total: number } {
     const where: string[] = [];
     const args: unknown[] = [];
-    // the local day, as everywhere (SQLite's date('now') is UTC: a day off around midnight)
-    const today = localDay();
+    // the Beijing day, as everywhere (SQLite's date('now') is UTC: a day off between 0 and 8 a.m. Beijing)
+    const today = beijingDay();
     if (q.deadlineWithinDays != null) {
-      const until = new Date(); until.setDate(until.getDate() + Math.floor(q.deadlineWithinDays));
+      const until = new Date(Date.now() + Math.floor(q.deadlineWithinDays) * 86400_000);
       where.push("c.closes_at is not null and c.closes_at >= ? and c.closes_at <= ?");
-      args.push(today, localDay(until));
+      args.push(today, beijingDay(until));
     }
     if (q.city) { where.push("c.cities like ?"); args.push(`%${q.city}%`); }
     if (q.grade) { where.push("c.source_grade = ?"); args.push(q.grade); }
