@@ -24,6 +24,7 @@ import { deadlineReminder, scheduleAllDeadlines } from "./workflows/deadline.js"
 import { sourceScan, scheduleSources } from "./data/index.js";
 import { researchRun } from "./agent/research.js";
 import { companyFind } from "./agent/find-company.js";
+import { sourceRelocate } from "./agent/relocate.js";
 import { topicRun } from "./agent/research-topic.js";
 import { smeRun } from "./service/sme.js";
 import { captureRecheck, scheduleRechecks } from "./workflows/recheck.js";
@@ -111,6 +112,7 @@ workflows.register(deadlineReminder(services));
 workflows.register(sourceScan(dataOf(services)));
 workflows.register(researchRun(services));
 workflows.register(companyFind(services));
+workflows.register(sourceRelocate(services));
 workflows.register(topicRun(services));
 workflows.register(smeRun(services));
 workflows.register(captureRecheck(services));

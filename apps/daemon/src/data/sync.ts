@@ -14,6 +14,8 @@ export const SYNC_REASONS: Record<string, string> = {
   ELSEWHERE: "这里只是宣传页，岗位在公司的另一个招聘系统上", FAILED: "读取失败",
   NOT_PUBLIC: "表格没有公开，读不到", BAD_URL: "链接不是这类招聘站的地址", NO_COMPANY_COLUMN: "没认出哪一列是公司", EMPTY_TABLE: "表格读到了，但没有一行能成岗位", FILE_NOT_FOUND: "找不到这个文件",
 };
+/** The reasons that mean "look for the new address" (agent/relocate.ts). */
+export const MOVED = new Set(["SITE_GONE", "LINK_STALE", "ELSEWHERE"]);
 export function reasonOf(error: string): string {
   const code = /^([A-Z_]{4,}):/.exec(error)?.[1];
   if (code && code in SYNC_REASONS && !(code === "SITE_DOWN" && /\b(404|410)\b/.test(error))) return code;
@@ -76,6 +78,8 @@ export async function runSource(ctx: DataContext, configId: string, opts: { quie
   } catch (e: any) {
     const error = String(e?.message ?? e);
     recordFailedRun(ctx, src.id, cfg.id, error, cost());
+    // the address is wrong, not the reading: waiting will not fix it, someone has to find where the jobs went
+    if (MOVED.has(reasonOf(error))) ctx.onMoved?.(cfg.id, error);
     return { ok: false, error };
   } finally {
     if (running.get(cfg.id) === progress) running.delete(cfg.id); // a second pull of it started meanwhile keeps its own
