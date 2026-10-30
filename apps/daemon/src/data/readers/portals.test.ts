@@ -1,4 +1,4 @@
-import { describe, it, expect } from "vitest";
+import { describe, it, expect, vi } from "vitest";
 import { zhilianUrl, itemToListing } from "./zhilian.js";
 import { iguopinUrl, pickNav, postToListing } from "./iguopin.js";
 import { sourceFor, siteKeyOf } from "./index.js";
@@ -42,6 +42,30 @@ describe("智联: a job link that is blocked or gone", () => {
     expect(zhilian.hint!({ id: "z", source: "zhilian", url: JOB }, db as any)).toEqual({ rootId: "105924" });
     expect(zhilian.hint!({ id: "z", source: "zhilian", url: JOB, rootId: "1" }, db as any)).toBeNull();
     expect(zhilian.hint!({ id: "z", source: "zhilian", url: "https://cssc.zhaopin.com/" }, db as any)).toBeNull();
+    // a group site: the ids its own earlier reads came under (its snapshots end in -<subscription id>.json)
+    const own = { prepare: (sql: string) => ({ get: (like: string) => (/content_path like/.test(sql) && like === "%-zhilian-河北建投集团.json" ? { publisher: "zhilian:106566,106565" } : undefined) }) };
+    expect(zhilian.hint!({ id: "zhilian-河北建投集团", source: "zhilian", url: "https://hecic2027.zhaopin.com/jobs/index.html" }, own as any)).toEqual({ rootId: "106566,106565" });
+  });
+  it("a group site Zhilian answers 403 for is gone, not blocked", async () => {
+    const { zhilian } = await import("./zhilian.js");
+    const ctx = { sleep: async () => {}, log: () => {}, fetchText: async (u: string) => { throw new Error(`BLOCKED: HTTP 403 ${u}`); }, fetchJson: async () => ({}) };
+    await expect(zhilian.fetch!({ id: "z", source: "zhilian", url: "https://gone2027.zhaopin.com/" }, ctx as any)).rejects.toThrow(/^SITE_GONE: /);
+  });
+});
+
+describe("Moka on a DingTalk host", () => {
+  it("reads the tenant from its own host when app.mokahr.com does not know it", async () => {
+    const { moka } = await import("./moka.js");
+    const asked: string[] = [];
+    const ctx = { sleep: async () => {}, log: () => {}, fetchText: async () => "",
+      fetchJson: async (u: string) => {
+        asked.push(new URL(u).host);
+        if (u.startsWith("https://app.mokahr.com")) throw new Error("API error: 未找到对应的官网");
+        return { code: 0, data: { jobs: [{ id: "j1", title: "嵌入式工程师", commitment: "校招", locations: [{ provinceName: "浙江", cityName: "杭州" }] }] } };
+      } };
+    const out = await moka.fetch!({ id: "m", source: "moka", name: "示例科技", url: "https://app135149.eapps.dingtalkcloud.com/campus-recruitment/demo/100004103#/" }, ctx as any);
+    expect(asked).toEqual(["app.mokahr.com", "app135149.eapps.dingtalkcloud.com"]);
+    expect(out.map((l) => [l.title, l.url, l.publisher, l.locations])).toEqual([["嵌入式工程师", "https://app135149.eapps.dingtalkcloud.com/campus-recruitment/demo/100004103#/job/j1", "moka:demo", ["浙江 杭州"]]]);
   });
 });
 
@@ -123,6 +147,53 @@ describe("大易 and 51job, offline parts", () => {
     expect(job51Url("https://jobs.51job.com/campus/x.html")).toBe(false);
     const l = jobToListing({ JobID: "g1", CjobName: "海外研究", JobAreaname: "北京", DegreeFrom: "硕士" }, { OrgName: "中粮集团有限公司/中粮糖业控股股份有限公司/进出口业务部", CJobInfo: "<p>专业要求：经济</p>", Url: "//xym.51job.com/apply?jobid=1" }, { id: "c", source: "job51" }, "中粮集团")!;
     expect(l).toMatchObject({ company: "中粮糖业控股股份有限公司", orgUnit: "进出口业务部", locations: ["北京"], description: "专业要求：经济", url: "https://xym.51job.com/apply?jobid=1" });
+  });
+  it("51job: unquoted script tags and a webpack runtime's lazy chunks are followed", async () => {
+    const { siteLinks } = await import("./job51.js");
+    const base = "https://campus.51job.com/demo2023/";
+    expect(siteLinks(`<script defer=defer src=js/runtime.a73.bundle.js?5d98></script><script src=js/vendor.e9a.bundle.js?5d98></script>`, base)).toEqual([base + "js/runtime.a73.bundle.js"]);
+    expect(siteLinks(`o.u=e=>"js/"+(886===e?"inline":e)+"."+{272:"d5ef79b1",670:"9e7f4af4"}[e]+".chunk.js",o.miniCssF=e=>"css/"+e+".css"`, base)).toEqual([base + "js/272.d5ef79b1.chunk.js", base + "js/670.9e7f4af4.chunk.js"]);
+  });
+  it("51job: a page that only sends applicants to another hiring system says where", async () => {
+    const { job51 } = await import("./job51.js");
+    const pages: Record<string, string> = { "https://campus.51job.com/demoslb/": `<script src="js/job.js"></script>`, "https://campus.51job.com/demoslb/js/job.js": `let jobdata=[{name:'现场作业岗',attr5:'https://demo.tupu360.com/position/detail/68be?type=CAMPUSRECRUITMENT'}]` };
+    const ctx = { sleep: async () => {}, log: () => {}, fetchText: async (u: string) => pages[u] ?? "", fetchJson: async () => ({}) };
+    await expect(job51.fetch!({ id: "j", source: "job51", url: "https://campus.51job.com/demoslb/" }, ctx as any)).rejects.toThrow("ELSEWHERE: 51job：这里只是宣传页，岗位和投递在 https://demo.tupu360.com/position/detail/68be?type=CAMPUSRECRUITMENT");
+  });
+  it("51job: a built site's ctmid is found in its lazy chunk past the source paths its bundle names, and kept", async () => {
+    const { job51 } = await import("./job51.js");
+    const b = "https://campus.51job.com/demoapp/";
+    const pages: Record<string, string> = {
+      [b]: `<script src=js/main.143ad6fa.bundle.js?1></script><script src=js/runtime.a7351eab.bundle.js?1></script>`,
+      [`${b}js/main.143ad6fa.bundle.js`]: Array.from({ length: 30 }, (_, i) => `"./core/m${i}.js"`).join(","),
+      [`${b}js/runtime.a7351eab.bundle.js`]: `o.u=e=>"js/"+e+"."+{670:"9e7f4af4"}[e]+".chunk.js"`,
+      [`${b}js/670.9e7f4af4.chunk.js`]: `params:{ctmid:"7469956",pagesize:1999}`,
+    };
+    const learned: any[] = [];
+    const ctx = { sleep: async () => {}, log: () => {}, fetchJson: async () => ({}), learn: (p: any) => learned.push(p),
+      fetchText: async (u: string) => { if (u.includes("job_list.php")) throw new Error("stop here"); return pages[u] ?? ""; } };
+    vi.stubGlobal("fetch", async () => ({ headers: { get: () => null } }));
+    try { await expect(job51.fetch!({ id: "j", source: "job51", url: b }, ctx as any)).rejects.toThrow("stop here"); } finally { vi.unstubAllGlobals(); }
+    expect(learned).toEqual([{ ctmid: "7469956" }]);
+  });
+  it("51job coapi: a mixed site's 社会招聘 rows say so; dates and the JD are kept", async () => {
+    const { coapiToListing } = await import("./job51.js");
+    const l = coapiToListing({ jobid: "159609474", jobname: "社会招聘-电气专业工程师", coname: "示例电力设计院有限公司", divname: "电气部", jobareaname: "西安", issuedate: "2026-09-10", degreefrom: "本科" }, { jobinfo: "岗位职责：<br>1、设计", jumpurl: "" }, { id: "j", source: "job51" })!;
+    expect(l).toMatchObject({ externalId: "159609474", company: "示例电力设计院有限公司", orgUnit: "电气部", kind: "社招", batch: "社招", datePosted: "2026-09-10", description: "岗位职责：\n1、设计", url: "https://jobs.51job.com/all/159609474.html" });
+    expect(coapiToListing({ jobid: "2", jobname: "校园招聘-结构工程师" }, null, { id: "j", source: "job51" })!.kind).toBe("校招");
+  });
+  it("51job: an employer number with no recruiting GUID is read through coapi, and a list short of its total says so", async () => {
+    const { job51 } = await import("./job51.js");
+    const { incompleteWhy } = await import("../types.js");
+    vi.stubGlobal("fetch", async () => ({ headers: { get: () => null } })); // the apply link gives no GUID
+    const joblist = { a: { jobid: "1", jobname: "校园招聘-甲" }, b: { jobid: "2", jobname: "社会招聘-乙" } };
+    const ctx = { sleep: async () => {}, log: () => {}, fetchJson: async () => ({}),
+      fetchText: async (u: string) => u.includes("job_list.php") ? `jsoncallback(${JSON.stringify({ status: "1", resultbody: { totalnum: "3", joblist } })})`
+        : u.includes("job_detail.php") ? `jsoncallback({"status":"1","resultbody":{"jobinfo":"做事"}})` : "" };
+    try {
+      const out = await job51.fetch!({ id: "j", source: "job51", url: "https://ideal.51job.com/demo/campus.html?ctmid=1234567" }, ctx as any);
+      expect([out.map((l) => l.kind), out[0].description, incompleteWhy(out)]).toEqual([["校招", "社招"], "做事", "51job 2/3"]);
+    } finally { vi.unstubAllGlobals(); }
   });
 });
 
