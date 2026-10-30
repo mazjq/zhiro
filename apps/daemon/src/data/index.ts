@@ -9,10 +9,11 @@ export { sources, sourceFor, siteKeyOf, aggregateIds, isAggregate, aggregateSql,
 export { httpContext, publicUrl, isLocalPath, assertPublic, guardedFetch, guardedFetchTo } from "./http.js";
 export { ingest, recordFailedRun, campaignUrl, releaseClaims, type IngestResult, type Listed } from "./ingest.js";
 export { importFeed, liveFeedConfigs, feedConfigId, checkManifest, cleanListing, signedPart, FEED_PROTOCOL, type FeedConfig, type FeedManifest, type FeedSub, type FeedResult } from "./feed.js";
-export { runSource, type Progress, listSources, previewSource, forgetPreviews, reasonOf, SYNC_REASONS, sourceScan, scheduleSources } from "./sync.js";
+export { runSource, type Progress, listSources, previewSource, forgetPreviews, reasonOf, SYNC_REASONS, sourceScan, scheduleSources, wakeAfterUpgrade } from "./sync.js";
 export { addSource, removeSource, saveSources } from "./subscriptions.js";
 export { parseCsv, parseDeadline, splitList, gradeFromSource, FIELDS, BUILTIN_COLUMNS, guessColumns, csvToTable, listingsFromTable, type Columns, type Table } from "./sheet.js";
 export { genericCompany, companyKey, sha, campaignKey, upsertCompany, upsertCampaign, upsertPosition, type CampaignInput, type PositionExtra } from "./catalog.js";
 // two readers lend a part of themselves to the layer above: any public Bitable (a name list), and a 51job page's links
 export { readBase, parseBaseUrl } from "./readers/feishu-base.js";
 export { siteLinks } from "./readers/job51.js";
+export { dataCodeFingerprint } from "./fingerprint.js";

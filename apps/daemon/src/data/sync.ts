@@ -112,8 +112,8 @@ export function listSources(ctx: DataContext) {
  * What trying again cannot fix soon — a block, a login, a site whose format changed — gets no quick retries and waits
  * twice as long each time, up to a week: hammering a block makes it worse, and a changed site needs new code, not
  * another read (2026-10-14…28: 106 subscriptions failed every day for two weeks). A site that answers with no posts
- * keeps its pace: its new season can open any day. ponytail: a reader fixed in a new version still waits out its
- * week; 「立即更新」 reads it at once.
+ * keeps its pace: its new season can open any day. A reader fixed in a new version does not wait out that week
+ * (`wakeAfterUpgrade`).
  */
 const RETRY_SOON_MS = 60 * 60_000, SOON_TRIES = 3, WEEK_MS = 7 * 24 * 3600_000;
 const STUCK = new Set(["BLOCKED", "LOGIN_REQUIRED", "SCHEMA_CHANGED", "DECRYPT_FAILED", "SITE_GONE", "LINK_STALE", "ELSEWHERE"]);
@@ -147,6 +147,23 @@ export function sourceScan(ctx: DataContext): WorkflowDef {
       },
     },
   };
+}
+
+/**
+ * The code that reads and files posts changed since the last start (a reader fixed, paging read to the end): every
+ * subscription whose last read failed is read again now, not when its backoff runs out. 2026-10-30: eight subscriptions
+ * still showed errors fixed two days before (大易 recruitType, 51job's other API) and would have waited until 11-05.
+ * `fingerprint`: a hash of that code (main.ts). Program reads only; the platform gap spaces them out.
+ * ponytail: one fingerprint for the whole data layer, so any change re-reads every failing subscription (~30 reads);
+ * per-reader fingerprints if that ever costs.
+ */
+export function wakeAfterUpgrade(ctx: DataContext, fingerprint: string): number {
+  const seen = (ctx.db.prepare("select value from meta where key = 'data_code'").get() as { value: string } | undefined)?.value;
+  if (seen === fingerprint) return 0;
+  const t = new Date().toISOString();
+  const n = ctx.db.prepare("update workflow set next_run_at = ?, updated_at = ? where kind = 'source_scan' and state = 'running' and next_run_at > ? and coalesce(json_extract(checkpoint_json, '$.failures'), 0) > 0").run(t, t, t).changes;
+  ctx.db.prepare("insert into meta(key, value) values ('data_code', ?) on conflict(key) do update set value = excluded.value").run(fingerprint);
+  return Number(n);
 }
 
 /** Idempotent: one running workflow per enabled subscription — also for one that was removed and is back. */
