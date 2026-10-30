@@ -111,5 +111,6 @@ export function bookmarkletUrl(): string { return `${window.location.origin}${ba
 
 export function daysLeft(iso: string | null): number | null {
   if (!iso) return null;
-  return Math.ceil((Date.parse(iso + "T23:59:59+08:00") - Date.now()) / 86400_000);
+  // calendar days in Beijing (1 all the day before, 0 on the day), not hours rounded up
+  return Math.round((Date.parse(iso.slice(0, 10)) - Date.parse(new Date(Date.now() + 8 * 3600_000).toISOString().slice(0, 10))) / 86400_000);
 }

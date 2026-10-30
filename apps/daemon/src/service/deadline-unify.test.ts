@@ -8,7 +8,7 @@ import { Domain } from "./domain.js";
 import { callTool, type Services, type Actor } from "../registry.js";
 import { ingest } from "../data/index.js";
 import type { Listing } from "../data/index.js";
-import { localDay } from "./deadlines.js";
+import { beijingDay } from "./deadlines.js";
 import { loadContext as matchContext } from "../recommenders/common.js";
 import { expandable } from "../recommenders/expand.js";
 import { listGaps } from "./opportunity-gaps.js";
@@ -29,7 +29,7 @@ function setup() {
   return { dir, domain, db, s };
 }
 const listing = (o: Partial<Listing>): Listing => ({ externalId: o.title ?? "x", url: "https://example.com/j", title: "控制算法工程师", company: "示例", locations: ["武汉"], publisher: "示例", grade: "官方", isOriginal: true, confidence: 1, cohort: "2027届", batch: "秋招", ...o });
-const day = (n: number) => localDay(new Date(Date.now() + n * 86400000));
+const day = (n: number) => beijingDay(new Date(Date.now() + n * 86400000));
 const tick = () => new Promise((r) => setTimeout(r, 5));
 // an ingest is a background write: the pool answers from its old rows once and rebuilds behind; here, read it fresh
 const company = async (s: Services, name: string) => { poolDirty(); return ((await callTool("pool.list", { query: name }, HUMAN, s)) as any).items.find((x: any) => x.companyName === name); };
@@ -182,14 +182,14 @@ describe("本人的判断只存一份", () => {
   });
 });
 
-describe("午夜前后：都按本地日期", () => {
-  // SQLite's date('now') is the UTC day of the real clock: a few hours off the local day around midnight (Beijing 0–8 时,
-  // Alberta 18–24 时). A fake clock cannot move SQLite's, so the test sets the local clock to 1 a.m. three days ahead —
-  // a local day SQLite's real UTC day cannot be — and asks every caller which day it is.
-  it("at 1 a.m. local, yesterday's deadline has passed for every caller, today's has not", async () => {
+describe("午夜前后：都按北京日期", () => {
+  // SQLite's date('now') is the UTC day of the real clock: a day off the Beijing day from 0 to 8 a.m. Beijing. A fake
+  // clock cannot move SQLite's, so the test sets the clock to 1 a.m. Beijing three days ahead — a day SQLite's real UTC
+  // day cannot be — and asks every caller which day it is. Deadlines are Beijing dates wherever the computer is.
+  it("at 1 a.m. Beijing, yesterday's deadline has passed for every caller, today's has not", async () => {
     const { dir, domain, db, s } = setup();
-    const at = new Date(); at.setDate(at.getDate() + 3); at.setHours(1, 0, 0, 0);
-    const yesterday = localDay(new Date(at.getTime() - 2 * 3600_000)), today = localDay(at);
+    const at = new Date(beijingDay(new Date(Date.now() + 3 * 86400000)) + "T01:00:00+08:00");
+    const yesterday = beijingDay(new Date(at.getTime() - 2 * 3600_000)), today = beijingDay(at);
     ingest(domain, dir, "feishu-base", "f1", [listing({ company: "昨天截止", externalId: "a", grade: "聚合", validThrough: yesterday, url: "https://mp.weixin.qq.com/s/a" }), listing({ company: "今天截止", externalId: "b", grade: "聚合", validThrough: today, url: "https://mp.weixin.qq.com/s/b" })]);
     const gone = companyId(db, "昨天截止"), open = companyId(db, "今天截止");
     const goneP = (db.prepare("select p.id from position p join campaign c on c.id = p.campaign_id where c.company_id = ?").get(gone) as any).id;

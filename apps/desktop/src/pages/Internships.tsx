@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { call } from "../api";
+import { call, daysLeft } from "../api";
 import { useLatest, useOnDataChange } from "../refresh";
 import { H1, Card, Button, Chip, Empty, STATE_LABEL, deadlineTone, plain } from "../ui";
 
@@ -9,7 +9,6 @@ import { H1, Card, Button, Chip, Empty, STATE_LABEL, deadlineTone, plain } from 
  */
 const PAGE = 50;
 const FIT_TONE: Record<string, "good" | "accent" | "amber" | ""> = { 优先考虑: "good", 可迁移: "accent", 明显缺口: "amber" };
-const daysTo = (d: string | null) => (d ? Math.ceil((Date.parse(`${d}T23:59:59+08:00`) - Date.now()) / 86400_000) : null);
 
 export default function Internships() {
   const [query, setQuery] = useState("");
@@ -60,7 +59,7 @@ function Row({ p, open, onToggle, onWatch }: { p: any; open: boolean; onToggle: 
   const [d, setD] = useState<any>(null);
   useEffect(() => { if (open && !d) call("position.get", { id: p.id }).then(setD).catch(() => setD({ error: true })); }, [open]);
   const dl = p.deadline ?? {};
-  const left = dl.expired === false ? daysTo(p.closesAt) : null;
+  const left = dl.expired === false ? daysLeft(p.closesAt) : null;
   const when = p.closesAt ? `截止 ${p.closesAt.slice(5)}` : dl.deadlineKind === "rolling" || dl.deadlineKind === "until_filled" ? "宜尽早" : "截止未写明";
   const pos = d?.position ?? d;
   return (

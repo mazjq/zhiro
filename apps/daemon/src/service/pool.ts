@@ -2,7 +2,7 @@ import type { Db } from "../db.js";
 import { staleReason } from "./stale.js";
 import { json } from "../db.js";
 import { loadExpectations, judge, statusRank, type ExpStatus, type Verdict } from "./expectations.js";
-import { loadContext, resolvePost, summarize, applyRules, localDay, campaignSaying, type Resolution } from "./deadlines.js";
+import { loadContext, resolvePost, summarize, applyRules, beijingDay, campaignSaying, type Resolution } from "./deadlines.js";
 import { groupPosts, titleKey } from "./post-groups.js";
 
 /** ADR-015: lower = more trusted. Unknown grades sort last; the person's own word (本人) above all. */
@@ -22,7 +22,7 @@ export interface PoolQuery { companyId?: string; query?: string; tag?: string; r
 // every tool call — reads included — writes an audit row; counted here so that reading the pool does not itself expire it
 const unrelated = new WeakMap<Db, number>();
 export const poolUnrelatedWrite = (db: Db): void => { unrelated.set(db, (unrelated.get(db) ?? 0) + 1); };
-const stamp = (db: Db, days: number) => `${(db.prepare("select total_changes() as n").get() as any).n - (unrelated.get(db) ?? 0)}|${days}|${localDay()}`;
+const stamp = (db: Db, days: number) => `${(db.prepare("select total_changes() as n").get() as any).n - (unrelated.get(db) ?? 0)}|${days}|${beijingDay()}`;
 /**
  * Two kinds of staleness. After the user's own write (a tool call) the next read must show it: rebuild first, then
  * answer. After a background write (a scheduled scan, a recommender rerun — minutes of them at startup) nobody is
@@ -67,7 +67,7 @@ function build(db: Db, newWithinDays: number): Pick<NonNullable<typeof cache>, "
   for (const r of recs) (recsByCompany.get(r.company_id) ?? recsByCompany.set(r.company_id, []).get(r.company_id)!).push(r);
   const titleOf = new Map<string, string>(positions.map((p) => [p.id, p.title]));
   const cohortOf = new Map<string, string>(campaigns.map((c) => [c.id, c.cohort ?? ""]));
-  const today = localDay();
+  const today = beijingDay();
 
   const rows: Row[] = [];
   const counts = new Map<string, number>();
@@ -184,7 +184,7 @@ export interface BoardItem { companyId: string; companyName: string; positionId:
  * within one risk the better match first. A submitted application needs neither.
  */
 export function deadlineBoard(db: Db, days = 14, verifyLimit = 5): { deadlines: BoardItem[]; verify: BoardItem[] } {
-  const today = localDay(), until = localDay(new Date(Date.now() + days * 86400_000)), soon = localDay(new Date(Date.now() + 14 * 86400_000));
+  const today = beijingDay(), until = beijingDay(new Date(Date.now() + days * 86400_000)), soon = beijingDay(new Date(Date.now() + 14 * 86400_000));
   const left = (d: string) => Math.round((Date.parse(d) - Date.parse(today)) / 86400_000);
   const deadlines: BoardItem[] = [], risky: { it: BoardItem; risk: number; held: number; score: number }[] = [];
   for (const r of ensure(db, 3).rows) {

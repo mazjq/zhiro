@@ -5,13 +5,13 @@ import { join } from "node:path";
 import { openDb, type Db } from "../db.js";
 import { Domain } from "./domain.js";
 import { ingest, type Listing } from "../data/index.js";
-import { expiredMany, changedCompanies, resolveMany, localDay, setOverride, recordFact } from "./deadlines.js";
+import { expiredMany, changedCompanies, resolveMany, beijingDay, setOverride, recordFact } from "./deadlines.js";
 
 /**
  * 「还能投吗」 is kept between callers and worked out again only for the companies where something it reads changed
  * (deadlines.ts expiredMany). After every kind of change, what is kept must be what a fresh resolution says.
  */
-const day = (n: number) => localDay(new Date(Date.now() + n * 86400000));
+const day = (n: number) => beijingDay(new Date(Date.now() + n * 86400000));
 const site = (id: string, title: string, over: Partial<Listing> = {}): Listing => ({ externalId: id, url: `https://app.mokahr.com/campus-recruitment/acme/1#/job/${id}`, title, company: "示例重工",
   locations: ["武汉"], publisher: "moka:acme", grade: "官方", isOriginal: true, confidence: 1, cohort: "2027届", batch: "校招", ...over });
 const sheet = (company: string, title: string, deadline: string): Listing => ({ externalId: `${company}|${title}`, url: "https://example.com/a", title, company, locations: ["北京"],

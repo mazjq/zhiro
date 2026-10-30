@@ -14,6 +14,7 @@ import { createHash } from "node:crypto";
 import { ulid } from "ulid";
 import { tx, type Db } from "../db.js";
 import { deadlineBoard } from "../service/pool.js";
+import { beijingDay } from "../service/deadlines.js";
 import { enqueue } from "../notify/center.js";
 import { SYNC_REASONS, reasonOf } from "../data/index.js";
 
@@ -74,7 +75,7 @@ export function makeBrief(db: Db, now = Date.now()): Brief {
   const hanging: BriefItem[] = [];
   for (const a of db.prepare(`select a.id, a.updated_at, co.name company, p.title, c.closes_at from application a join position p on p.id = a.position_id join campaign c on c.id = a.campaign_id
       join company co on co.id = c.company_id where a.state = 'draft'`).all() as any[]) {
-    const past = a.closes_at && String(a.closes_at).slice(0, 10) < localDay(now);
+    const past = a.closes_at && String(a.closes_at).slice(0, 10) < beijingDay(new Date(now));
     const idle = Date.parse(a.updated_at) < now - 5 * DAY;
     if (past) hanging.push({ key: `hang:past:${a.id}`, state: `past:${a.closes_at}`, text: `草稿已过截止 · ${a.company} · ${a.title}：核实是否延期或补录，否则结束准备`, link: { page: "pipeline", id: a.id } });
     else if (idle) hanging.push({ key: `hang:idle:${a.id}`, state: `idle:${a.updated_at}`, text: `草稿放了 ${Math.floor((now - Date.parse(a.updated_at)) / DAY)} 天 · ${a.company} · ${a.title}：投还是不投？`, link: { page: "pipeline", id: a.id } });

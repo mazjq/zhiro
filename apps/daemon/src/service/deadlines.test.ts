@@ -8,7 +8,7 @@ import { Domain } from "./domain.js";
 import { callTool, type Services, type Actor } from "../registry.js";
 import { ingest } from "../data/index.js";
 import type { Listing } from "../data/index.js";
-import { localDay, recordFact } from "./deadlines.js";
+import { beijingDay, recordFact } from "./deadlines.js";
 
 const HUMAN: Actor = { kind: "human", via: "desktop" };
 function setup() {
@@ -20,7 +20,7 @@ function setup() {
 }
 const listing = (o: Partial<Listing>): Listing => ({ externalId: o.title ?? "x", url: "https://example.com/j", title: "控制算法工程师", company: "示例", locations: ["武汉"], publisher: "示例", grade: "官方", isOriginal: true, confidence: 1, cohort: "2027届", batch: "秋招", ...o });
 /** n days from today, local */
-const day = (n: number) => localDay(new Date(Date.now() + n * 86400000));
+const day = (n: number) => beijingDay(new Date(Date.now() + n * 86400000));
 const company = async (s: Services, name: string) => ((await callTool("pool.list", { query: name }, HUMAN, s)) as any).items[0];
 const post = async (s: Services, id: string) => ((await callTool("position.get", { id }, HUMAN, s)) as any);
 
