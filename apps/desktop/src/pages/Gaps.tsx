@@ -23,13 +23,13 @@ export default function Gaps() {
   const load = () => latest("gaps", call("gap.list", {})).then(setD).catch(() => setD((x: any) => x ?? { items: [], assessed: 0, related: 0 }));
   useEffect(() => { load(); }, []);
   useOnDataChange(load);
-  const say = async (row: any, what: "know" | "no" | "clear") => {
+  const say = async (row: any, what: "know" | "learn" | "no" | "clear") => {
     setBusy(row.conceptId);
     // shown at once: the row moves (or goes) now; the daemon reruns the matcher for a few seconds, then the list reloads
-    setD((x: any) => ({ ...x, items: what === "know" ? x.items.filter((r: any) => r.conceptId !== row.conceptId) : x.items.map((r: any) => (r.conceptId === row.conceptId ? { ...r, status: what === "no" ? "gap" : "unknown" } : r)) }));
-    setNote(what === "know" ? `已记下「${row.label}」为你的技能，正在重算相关岗位…` : what === "no" ? `已记下「${row.label}」没做过，正在重算相关岗位…` : `已撤回「${row.label}」，正在重算…`);
+    setD((x: any) => ({ ...x, items: what === "know" || what === "learn" ? x.items.filter((r: any) => r.conceptId !== row.conceptId) : x.items.map((r: any) => (r.conceptId === row.conceptId ? { ...r, status: what === "no" ? "gap" : "unknown" } : r)) }));
+    setNote(what === "know" ? `已记下「${row.label}」为你的技能，正在重算相关岗位…` : what === "learn" ? `已记下「${row.label}」在学，要求用过的岗位会算「有相关、不完全对口」，正在重算…` : what === "no" ? `已记下「${row.label}」没做过，正在重算相关岗位…` : `已撤回「${row.label}」，正在重算…`);
     try {
-      if (what === "know") await call("fact.upsert", { kind: "skill", data: { name: row.label } });
+      if (what === "know" || what === "learn") await call("fact.upsert", { kind: "skill", data: { name: row.label, ...(what === "learn" ? { level: "在学" } : {}) } });
       else await call("gap.confirm", { conceptId: row.conceptId, status: what === "no" ? "confirmed" : "cleared", note: what === "no" ? "没做过" : "" });
       setTimeout(() => { load(); setNote(""); }, 5000);
     } catch (e: any) { setNote(e.message); load(); } finally { setBusy(""); }
@@ -38,7 +38,7 @@ export default function Gaps() {
   const groups = ["unknown", "transferable", "gap"].map((st) => [st, d.items.filter((x: any) => x.status === st)] as const);
   return (
     <>
-      <H1 sub={`和你工作相关的 ${d.related} 个岗位里，规则没能确认的要求，按「作为核心要求出现的次数」排序；答一下「我会 / 没做过」，相关岗位会重算。点错了：「我会」记的是资料里的一张技能卡，去 求职资料 → 资料 删掉即可；「没做过」可直接撤回`}>机会缺口</H1>
+      <H1 sub={`和你工作相关的 ${d.related} 个岗位里，规则没能确认的要求，按「作为核心要求出现的次数」排序；答一下「我会 / 在学 / 没做过」，相关岗位会重算。点错了：「我会」记的是资料里的一张技能卡，去 求职资料 → 资料 删掉即可；「没做过」可直接撤回`}>机会缺口</H1>
       {note && <div className="text-xs bg-amber-soft text-amber rounded px-3 py-2 mb-3">{note}</div>}
       {d.items.length === 0 ? <Empty>还没有可统计的缺口：等推荐重算后再看</Empty> : groups.map(([st, rows]) => rows.length > 0 && (
         <div key={st} className="mb-5">
@@ -51,6 +51,7 @@ export default function Gaps() {
                   <span className="text-xs text-ink-3">{r.positions} 个岗位 · {r.companies} 家公司{r.core ? ` · ${r.core} 次为核心要求` : ""}</span>
                   <span className="ml-auto flex gap-3 text-xs">
                     {st !== "gap" && <button className="text-accent" disabled={busy === r.conceptId} onClick={() => say(r, "know")} title="记成你资料里的一项技能，之后按有证据算">我会</button>}
+                    {st !== "gap" && <button className="text-ink-2" disabled={busy === r.conceptId} onClick={() => say(r, "learn")} title="记成「在学」的技能卡：只算知道，要求用过的岗位算有相关、不完全对口">在学</button>}
                     {st !== "gap" && <button className="text-ink-2" disabled={busy === r.conceptId} onClick={() => say(r, "no")} title="只记「没做过」：不影响别的能力">没做过</button>}
                     {st === "gap" && <button className="text-accent" disabled={busy === r.conceptId} onClick={() => say(r, "clear")}>撤回</button>}
                   </span>

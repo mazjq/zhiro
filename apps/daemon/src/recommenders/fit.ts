@@ -18,7 +18,8 @@ export type Tier = "优先考虑" | "可迁移" | "待补资料" | "明显缺口
 export interface Assessment { A: number; B: number | null; C: number; D: number; S: number; tier: Tier; info: "adequate" | "partial" | "lead"; taskWhy: string; eligibility: "pass" | "unknown" | "fail"; eligibilityWhy: string; judgements: Judgement[] }
 
 const RANK: Record<Depth, number> = { knows: 0, used: 1, delivered: 2 };
-const DEPTH_OF_KIND: Record<string, Depth> = { skill: "used", direction: "used", project: "delivered", experience: "delivered", publication: "delivered", patent: "delivered", award: "delivered", education: "knows" };
+export const LEARNING = /在学|学习中|正在学|了解|入门/;
+const DEPTH_OF_KIND: Record<string, Depth> ={ skill: "used", direction: "used", project: "delivered", experience: "delivered", publication: "delivered", patent: "delivered", award: "delivered", education: "knows" };
 const RULES_VERSION = "v2.1";
 const MAJOR_IMPLIES: [RegExp, string[]][] = [
   [/控制|自动化/, ["control_theory", "pid", "matlab_simulink"]],
@@ -32,7 +33,8 @@ export function profileEvidence(facts: { id: string; kind: string; statement?: s
   for (const f of facts) {
     if (f.kind === "exclude" || f.kind === "preference" || f.kind === "basic") continue;
     const text = [f.statement, ...Object.values(f.data ?? {})].filter(Boolean).join(" / "); // the statement may leave a description out
-    const depth = DEPTH_OF_KIND[f.kind] ?? "knows";
+    // a skill the person says they are still learning is something they know of, not something they have used
+    const depth = f.kind === "skill" && LEARNING.test(String(f.data?.level ?? "")) ? "knows" : DEPTH_OF_KIND[f.kind] ?? "knows";
     const domains = domainsIn(text);
     for (const id of conceptsIn(text)) if (concept(id)?.kind !== "domain") out.push({ conceptId: id, depth, domains, factId: f.id, kind: f.kind, quote: text.slice(0, 80) });
     // a degree in the field is evidence of its foundations: a 控制科学与工程 / 自动化 graduate knows control theory and PID
