@@ -190,6 +190,20 @@ describe("profile + recommend", () => {
   });
 });
 
+describe("tracking a company before it posts anything", () => {
+  it("重点 on a name not in the library keeps a row; posts that come in later under that name land on it tagged", async () => {
+    const { dir, domain, s } = setup();
+    const r: any = await callTool("recommend.tag", { companyName: "示例海洋装备有限公司", tag: "重点", reason: "公众号看到的" }, HUMAN, s);
+    expect(r.ok).toBe(true);
+    expect(domain.db.prepare("select count(*) n from campaign").get()).toEqual({ n: 0 }); // nothing to show until it posts
+    ingest(domain, dir, "moka", "sea", [listing({ company: "示例海洋装备", publisher: "示例海洋装备", title: "运动控制算法工程师" })]);
+    const { items } = (await callTool("pool.list", {}, HUMAN, s)) as any;
+    expect(items).toHaveLength(1);
+    expect(items[0].companyId).toBe(r.companyId);
+    expect(items[0].tags.map((t: any) => t.tag)).toContain("重点");
+  });
+});
+
 describe("applications page", () => {
   it("application.list carries company, title, stages and the last event", async () => {
     const { dir, domain, s } = setup();

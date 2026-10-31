@@ -64,6 +64,19 @@ describe("the daily brief", () => {
     expect(idle(now + 9 * DAY)).toBe(true); // a week on, said again
   });
 
+  it("a new post at a 重点 company is news even when the matcher did not pick it, and goes first", async () => {
+    const { s } = await world();
+    const db = s.domain.db, now = Date.now();
+    db.prepare("delete from recommendation").run();
+    const p = db.prepare("select p.id, c.company_id co from position p join campaign c on c.id = p.campaign_id where not exists (select 1 from application a where a.position_id = p.id) limit 1").get() as any;
+    db.prepare("update position set created_at = ?, watch_priority = null, status = 'open' where id = ?").run(new Date(now - H).toISOString(), p.id);
+    db.prepare("insert into recommendation(id, company_id, position_id, mode, tag, score, reason, run_id, created_at) values (?,?,'','manual','重点',5,'',?,?)").run(ulid(), p.co, "", new Date().toISOString());
+    const b = runBrief(db, now);
+    expect(b.fresh.map((x) => x.key)).toContain(`new:${p.id}`);
+    expect(b.fresh[0].text.startsWith("重点公司 · ")).toBe(true);
+    expect(runBrief(db, now + DAY).fresh.map((x) => x.key)).not.toContain(`new:${p.id}`); // said once
+  });
+
   it("adds up every lookup since the last brief, and writes nothing when the brief cannot be kept", async () => {
     const { s } = await world();
     const db = s.domain.db, now = Date.now();

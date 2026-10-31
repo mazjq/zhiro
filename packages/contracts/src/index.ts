@@ -1084,7 +1084,7 @@ export const tools = {
   }),
   "recommend.tag": defineTool({
     name: "recommend.tag",
-    description: "手动（或由外部 agent 提案）给一家公司打推荐标签，附理由。公司用 companyId 或 companyName 指定，须已在岗位库中。",
+    description: "手动（或由外部 agent 提案）给一家公司打推荐标签，附理由。公司用 companyId 或 companyName 指定。companyName 不在岗位库里时会先记下这家公司（还没发岗位、只在公众号或新闻里见过的公司也能标「重点」跟踪）：用它对外招聘的全称，之后按这个名字进来的岗位会落到这家、带着标签，每日简报会单独报「重点公司」的新岗位。",
     input: Type.Object({ companyId: Type.Optional(Id), companyName: Type.Optional(Type.String()), tag: Type.String(), reason: Type.Optional(Type.String()), score: Type.Optional(Type.Number()) }),
     output: Type.Object({ ok: Type.Boolean(), companyId: Id }),
     effects: WRITE,
