@@ -1,6 +1,7 @@
 import { describe, it, expect } from "vitest";
 import { conceptsIn } from "./concepts.js";
 import { parseJd } from "./requirements.js";
+import { profileEvidence } from "./fit.js";
 
 describe("concepts", () => {
   it("reads spellings into concepts; Latin names need word boundaries; 规控 opens into planning + control", () => {
@@ -9,6 +10,15 @@ describe("concepts", () => {
     expect(conceptsIn("prospect analysis").has("ros")).toBe(false);
     expect(conceptsIn("熟悉Linux/ROS开发环境").has("ros")).toBe(true);
     expect(conceptsIn("熟悉 DWA、A*、MPC、PID、LQR 等算法").size).toBe(4);
+  });
+});
+
+describe("a skill still being learned", () => {
+  it("counts as knowing of it, not having used it", () => {
+    const ev = (level?: string) => profileEvidence([{ id: "f", kind: "skill", data: { name: "ROS", ...(level ? { level } : {}) } }]).find((e) => e.conceptId === "ros")?.depth;
+    expect(ev()).toBe("used");
+    expect(ev("熟练")).toBe("used");
+    expect(ev("在学")).toBe("knows");
   });
 });
 
