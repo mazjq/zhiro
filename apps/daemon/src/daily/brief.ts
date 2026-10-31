@@ -60,6 +60,15 @@ export function makeBrief(db: Db, now = Date.now()): Brief {
         and not exists (select 1 from brief_item b where b.key = 'new:' || p.id)
       group by p.id order by score desc limit ?`).all(floor, FRESH_MAX) as any[])
     .map((r) => ({ key: `new:${r.id}`, state: "new", text: `${String(r.reason).startsWith("优先考虑") ? "很对口" : "部分对口"} · ${r.company} · ${r.title}`, why: String(r.reason).replace(/^(优先考虑|可迁移)[：:]?\s*/, "").slice(0, 60), link: { page: "jobs", id: r.id, company: r.company } }));
+  // a company the user marked 重点 is news whenever it posts, matched or not — they asked to follow it; these go first
+  const keyCo = (db.prepare(`select p.id, p.title, co.name company from position p join campaign c on c.id = p.campaign_id join company co on co.id = c.company_id
+      where p.created_at >= ? and p.status = 'open' and p.watch_priority is null and not exists (select 1 from application a where a.position_id = p.id)
+        and exists (select 1 from recommendation r where r.company_id = co.id and r.mode = 'manual' and r.tag = '重点')
+        and not exists (select 1 from brief_item b where b.key = 'new:' || p.id)
+      order by p.created_at desc limit ?`).all(floor, FRESH_MAX) as any[])
+    .map((r) => ({ key: `new:${r.id}`, state: "new", text: `重点公司 · ${r.company} · ${r.title}`, link: { page: "jobs", id: r.id, company: r.company } }));
+  fresh.splice(0, 0, ...keyCo.filter((k) => !fresh.some((f) => f.key === k.key)));
+  fresh.splice(FRESH_MAX);
 
   // 重新找过的: every run of the daily lookup of thin companies since the last brief, added up
   const found: BriefItem[] = [];

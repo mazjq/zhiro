@@ -2,6 +2,7 @@ import { ulid } from "ulid";
 import type { Services } from "../services.js";
 import { now, tx } from "../db.js";
 import { NotFound } from "../service/domain.js";
+import { upsertCompany } from "../data/index.js";
 import { profileMatch } from "./profile-match.js";
 import { expand } from "./expand.js";
 import { listPresets, runPreset } from "./preset.js";
@@ -48,7 +49,10 @@ export async function rerunAuto(s: Services): Promise<void> {
 
 export function tagCompany(s: Services, p: { companyId?: string; companyName?: string; tag: string; reason?: string; score?: number }) {
   const db = s.domain.db;
-  const co = (p.companyId ? db.prepare("select id from company where id = ?").get(p.companyId) : db.prepare("select id from company where name = ? or aliases like ?").get(p.companyName ?? "", `%${JSON.stringify(p.companyName ?? "")}%`)) as { id: string } | undefined;
+  const name = p.companyName?.trim() ?? "";
+  // a company heard of before it posts anything (a 公众号 push, a funding story) is tracked by name: its row waits, and
+  // whatever later comes in under that name lands on it already tagged
+  const co = (p.companyId ? db.prepare("select id from company where id = ?").get(p.companyId) : name ? { id: upsertCompany(db, name) } : undefined) as { id: string } | undefined;
   if (!co) throw new NotFound(`company ${p.companyId ?? p.companyName}（不在岗位库中）`);
   db.prepare("insert into recommendation(id, company_id, position_id, mode, tag, score, reason, run_id, created_at) values (?,?,'','manual',?,?,?,'',?) on conflict(company_id, position_id, mode, tag) do update set score = excluded.score, reason = excluded.reason")
     .run(ulid(), co.id, p.tag, p.score ?? 5, p.reason ?? "", now());
