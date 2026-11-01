@@ -22,6 +22,7 @@ const RULES: Rule[] = [
   ["agent.harnessConfirm", (v) => oneOf(v, ["harness", "window"]), "只能是 harness 或 window"],
   ["agent.backend", (v) => oneOf(v, ["builtin", "claude", "codex", "dsh"]), "只能是 builtin / claude / codex / dsh"],
   ["brief.at", (v) => str(v) && AT.test(v as string), "要是 0–23 点、0–59 分，如 8:00"],
+  ["shortlist.cities", (v) => Array.isArray(v) && v.every((t) => Array.isArray(t) && t.every(str)), "要是按优先级分层的城市列表，如 [[武汉], [深圳, 上海], [成都, 合肥], [北京]]"],
   ["background.reserve", (v) => num(v, 0, 0.9), "要是 0–0.9（给你留的额度比例）"],
   ["background.apiDailyUsd", (v) => num(v, 0, 10000), "要是不小于 0 的数"],
   ["background.unknownDailyTokens", (v) => int(v, 0, 1e9), "要是不小于 0 的整数"],

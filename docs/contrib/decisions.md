@@ -193,3 +193,19 @@ entries condense what still holds.
   it on a local branch that is never pushed (`local/*`, refused by the pre-push hook), at their own risk.
   Reviewed by Codex (2026-10-21), which advised a local branch over a plugin loader: the BOSS code leans on internals
   a loader would have to expose.
+- **D-32 · 2026-11-01 · 每周短名单: a few cards a week, chosen by company, title and city — not by the match tiers.** Of the
+  20 applications the first person actually sent, 12 posts had never been assessed (the rules skip a post whose duties
+  they cannot read, which is most research institutes' JDs), one was 低相关 and none 优先考虑; only 6.6% of the open posts
+  carried an assessment at all. So the weekly list (service/shortlist.ts, with Monday's brief) takes as candidates the
+  posts whose title names something the person has evidence for — a concept, or a head word that recurs in their task
+  concepts' names (控制, 算法, 跟踪) — in a city on their list (config `shortlist.cities`, tiers in order), every new post
+  of a 重点 company, and whatever a group they already applied to posts. The tiers only order the candidates and word the
+  two lines on a card (a quote from the post, and what the assessment found or did not). At most six 新机会, three
+  要决定 (drafts left two weeks, and what was put aside last week), two 可补 (one open core skill, with a date). What a
+  rule kept out is listed with the reason and can be put back, which also takes the rule back; rules come only from the
+  person's own choice on a card (这家公司不投 / 这类岗位不投 / 不去这个城市 / 这个集团只投一个) — a reason an agent wrote is never
+  one. Same-group posts stay side by side with a 「同集团已投」 note; a group is excluded only when the person said it takes
+  one application. Replayed on the first library: 16 of the 20 real applications would have been cards the week they
+  appeared, 2 were kept out by the city list, 2 had titles naming nothing (an AI-coding post, a generic 技术研发). Reviewed
+  by four agents with no shared context (a blank-sheet design, the job seeker's own view, an attack on the draft, the
+  laziest cut); the attack found the tier premise, the replay confirmed it.
