@@ -79,6 +79,24 @@ describe("what the first real Moka form got wrong", () => {
     expect(pickOption(["四级", "六级"], "英语六级")).toBe("六级");
   });
 
+  it("an answer typed on one company's form is copied to another only when it is a short fact", async () => {
+    const d = db();
+    upsertFact(d, { kind: "basic", data: { field: "身高", value: "178" } }, "本人确认");
+    upsertFact(d, { kind: "basic", data: { field: "为什么选择我司", value: "看好示例甲的方向", company: "示例甲科技有限公司" } }, "本人确认");
+    upsertFact(d, { kind: "basic", data: { field: "科研经历概述", value: "在示例大学做了四年运动控制方向的研究，主持过两个横向项目，发表三篇论文，负责算法设计与实验平台搭建。" } }, "本人确认");
+    upsertFact(d, { kind: "basic", data: { field: "姓名", value: "李示例" } }, "本人确认");
+    const fields = ["身高", "为什么选择我司", "科研经历概述", "姓名"].map((l, i) => ({ ...field(l), index: i, local: i }));
+    const at = async (company: string) => (await mapFields(d, undefined, fields, null, company)).map((m) => [m.label, m.status, m.proposed]);
+    expect(await at("示例乙电子有限公司")).toEqual([
+      ["身高", "可填", "178"],
+      ["为什么选择我司", "由你填写", ""],
+      ["科研经历概述", "由你填写", ""], // long, and learned before answers carried their company: not copied anywhere
+      ["姓名", "可填", "李示例"],
+    ]);
+    expect((await mapFields(d, undefined, fields, null, "示例乙电子有限公司"))[1].source).toContain("上次在「示例甲科技有限公司」答过这一题");
+    expect((await at("示例甲科技有限公司"))[1]).toEqual(["为什么选择我司", "可填", "看好示例甲的方向"]);
+  });
+
   it("项目描述 is the project, 职责 is what the person did; one award spelled two ways goes once; the document's list wins", () => {
     const d = db();
     const entry = (labels: string[], section: string) => labels.map((label, i) => ({ ...field(label, "textarea"), section, entry: 0, index: i, local: i }));
