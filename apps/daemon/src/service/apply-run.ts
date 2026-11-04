@@ -500,9 +500,9 @@ function finish(s: Services, ok: boolean, why: string): void {
     if (/^[+\-\d\s]*$/.test(normLabel(f.label)) || /发送|获取|重新/.test(f.label)) continue; // 「+86」, a button's text: not a question
     const kind = f.factKey.startsWith("pref.") ? "preference" : "basic";
     const field = f.factKey ? f.factKey.slice(f.factKey.indexOf(".") + 1) : normLabel(f.label);
-    // an answer under the form's own label that is long or about the company carries the company: copied there only (mapFields)
+    // an answer under the form's own label to a question about the company carries the company: copied there only (mapFields)
     const data: Record<string, string> = { field, value: v };
-    if (!f.factKey && !reusableAnswer(field, v, undefined, undefined)) data.company = run.company;
+    if (!f.factKey && !reusableAnswer(field, undefined, undefined)) data.company = run.company;
     try { upsertFact(s.domain.db, { kind, data }, "本人确认"); learned.push(f.label); } catch { /* not a fact the profile can hold */ }
   }
   if (ok) s.domain.updateApplication({ id: run.applicationId, state: "submitted", resumeLabel: run.resume || undefined, note: `网申：${why}` }, "jobos:apply");

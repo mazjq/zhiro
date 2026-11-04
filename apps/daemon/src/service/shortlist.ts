@@ -23,6 +23,7 @@ import { DomainError, NotFound, sha } from "./domain.js";
 import { listFacts, upsertFact, removeFact } from "./profile.js";
 import { beijingDay } from "./deadlines.js";
 import { groupOf } from "./same-company.js";
+import { PLACE } from "./intel.js";
 import { low, terms, levelOf, minLevel } from "../recommenders/common.js";
 import { assess, userSide, parseJd, label, type Assessment, type Judgement } from "../recommenders/fit.js";
 import { conceptsIn, concept } from "../recommenders/concepts.js";
@@ -284,9 +285,14 @@ const hostOf = (u: string) => { try { return new URL(u).host.replace(/^www\./, "
 export function companyCard(db: Db, rules: Rules, today: string): Card | null {
   const cos = db.prepare(`select co.id, co.name from company co where exists (select 1 from recommendation r where r.company_id = co.id and r.mode = 'manual' and r.tag = '重点')
       and not exists (select 1 from position p join campaign c on c.id = p.campaign_id where c.company_id = co.id and p.status = 'open')`).all() as { id: string; name: string }[];
+  // the same brand followed under another legal name that does post (示例（北京）机器人 / 示例海洋科技集团): not "no post"
+  // ponytail: the brand is the name's first 4 characters after a leading place; a person merging the two is the real fix
+  const brand = (n: string) => n.normalize("NFKC").replace(PLACE, "").slice(0, 4);
+  const posting = new Set((db.prepare(`select co.name from company co where exists (select 1 from recommendation r where r.company_id = co.id and r.mode = 'manual' and r.tag = '重点')
+      and exists (select 1 from position p join campaign c on c.id = p.campaign_id where c.company_id = co.id and p.status = 'open')`).all() as { name: string }[]).map((r) => brand(r.name)));
   let best: { card: Card; at: string } | null = null;
   for (const co of cos) {
-    if (rules.blocked.has(co.id)) continue;
+    if (rules.blocked.has(co.id) || posting.has(brand(co.name))) continue;
     const seen = (db.prepare("select max(decided_at) at from shortlist_item where key = ? and decision in ('seen', 'skip')").get(`co:${co.id}`) as { at: string | null }).at ?? "";
     const ev: { line: string; link: { text: string; url: string }; at: string }[] = [];
     for (const r of db.prepare("select site_key, basis_url, verified_at from company_site where company_id = ? and status = 'active' and (expires_at is null or expires_at > ?) order by verified_at desc limit 2").all(co.id, now()) as { site_key: string; basis_url: string; verified_at: string }[])
