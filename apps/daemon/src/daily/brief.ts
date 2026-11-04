@@ -149,16 +149,16 @@ export function keepChanged(db: Db, b: Brief): Brief {
 }
 
 /** Make, keep and announce today's brief: what was shown, the brief and its notice are written together or not at all. */
-export function runBrief(db: Db, now = Date.now()): Brief {
+export function runBrief(db: Db, now = Date.now(), lead: string[] = []): Brief {
   return tx(db, () => {
     const b = keepChanged(db, makeBrief(db, now));
-    const empty = !b.must.length && !b.fresh.length && !b.found.length && !b.hanging.length;
+    const empty = !b.must.length && !b.fresh.length && !b.found.length && !b.hanging.length && !lead.length;
     db.prepare("insert into brief_run(id, at, since, brief_json) values (?,?,?,?)").run(b.id, b.at, b.since, JSON.stringify(b));
     if (!empty) {
       const part = (title: string, xs: BriefItem[], n = 5) => (xs.length ? [`**${title} · ${xs.length}**`, ...xs.slice(0, n).map((x) => `· ${x.text}`), ...(xs.length > n ? [`· 还有 ${xs.length - n} 条，在 Zhiro「今日」里看`] : [])] : []);
       const day = new Date(now).toLocaleDateString("zh-CN", { month: "numeric", day: "numeric", weekday: "short" });
-      // one notice per run (a brief made by hand later the same day is its own)
-      enqueue(db, { key: `brief:${localDay(now)}:${b.id}`, kind: "brief", urgency: "info", title: `今日简报 · ${day}`, lines: [...part("今天必须做", b.must), ...part("新出现的", b.fresh), ...part("重新找过的", b.found), ...part("悬着的", b.hanging)] }, now);
+      // one notice per run (a brief made by hand later the same day is its own); `lead` = the week's shortlist, said first on Monday
+      enqueue(db, { key: `brief:${localDay(now)}:${b.id}`, kind: "brief", urgency: "info", title: `今日简报 · ${day}`, lines: [...lead, ...part("今天必须做", b.must), ...part("新出现的", b.fresh), ...part("重新找过的", b.found), ...part("悬着的", b.hanging)] }, now);
     }
     return b;
   });
