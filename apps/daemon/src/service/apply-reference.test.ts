@@ -96,7 +96,7 @@ describe("what the first real Moka form got wrong", () => {
     expect(m[2]).toMatchObject({ status: "可填", proposed: "大学英语六级" });
   });
 
-  it("an answer typed on one company's form is copied to another only when it is a short fact", async () => {
+  it("an answer typed on one company's form is copied to another unless the question is about the company", async () => {
     const d = db();
     upsertFact(d, { kind: "basic", data: { field: "身高", value: "178" } }, "本人确认");
     upsertFact(d, { kind: "basic", data: { field: "为什么选择我司", value: "看好示例甲的方向", company: "示例甲科技有限公司" } }, "本人确认");
@@ -107,7 +107,7 @@ describe("what the first real Moka form got wrong", () => {
     expect(await at("示例乙电子有限公司")).toEqual([
       ["身高", "可填", "178"],
       ["为什么选择我司", "由你填写", ""],
-      ["科研经历概述", "由你填写", ""], // long, and learned before answers carried their company: not copied anywhere
+      ["科研经历概述", "可填", "在示例大学做了四年运动控制方向的研究，主持过两个横向项目，发表三篇论文，负责算法设计与实验平台搭建。"], // long, but not about a company: the same on every form
       ["姓名", "可填", "李示例"],
     ]);
     expect((await mapFields(d, undefined, fields, null, "示例乙电子有限公司"))[1].source).toContain("上次在「示例甲科技有限公司」答过这一题");

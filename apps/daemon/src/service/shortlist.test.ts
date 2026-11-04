@@ -292,4 +292,12 @@ describe("重点公司 card: no open post, a known way to apply", async () => {
     expect(after).toEqual(["示例甲科技有限公司"]);
     expect(() => decideCard(s, { runId: list.id, key: list.cards.find((c) => c.slot !== "company")?.key ?? card.key, decision: "seen" })).toThrow();
   });
+
+  it("the same brand followed under another legal name that posts is not 「还没有在招的岗位」", () => {
+    const { s, db, id } = setup();
+    tagCompany(s, { companyName: "深圳示例丁科技研究院有限公司", tag: "重点", reason: "测试" }); // 丁 posts under 示例丁科技有限公司
+    db.prepare("update campaign set apply_url = 'https://ding.example.org/', updated_at = '2099-01-01T00:00:00Z' where company_id = ?").run(id("示例丁科技有限公司"));
+    addSite(db, { companyId: id("深圳示例丁科技研究院有限公司"), siteKey: "ding.example.org", rootKind: "exchange", basisUrl: "https://example.org/d", basisQuote: "公司网址：ding.example.org", fingerprint: "test" });
+    expect(runShortlist(s).cards.filter((c) => c.slot === "company").map((c) => c.company)).not.toContain("深圳示例丁科技研究院有限公司");
+  });
 });

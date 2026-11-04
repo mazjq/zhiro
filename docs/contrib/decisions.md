@@ -232,4 +232,5 @@ entries condense what still holds.
   a word that the date passed), or a captured article whose title names it (ponytail: by name). The card says how to
   apply and links each piece of evidence; the company whose evidence is newest comes first. Decisions: 看过了 (`seen`,
   a new value of shortlist.decide), after which the company comes back only with evidence newer than that; 不投这家, which
-  is the existing 不投 company rule. No other decision is taken on it.
+  is the existing 不投 company rule. No other decision is taken on it. A company is left out when the same brand (first 4 characters after a
+  leading place) is followed under another legal name that does post (the first library had two such pairs).
