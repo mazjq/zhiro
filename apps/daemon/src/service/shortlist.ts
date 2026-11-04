@@ -29,6 +29,8 @@ import { tagCompany } from "../recommenders/index.js";
 import { isAggregate } from "../data/index.js";
 import { deepFit, profileText } from "./fit.js";
 import { asBackground } from "../budget/index.js";
+import { parseJsonWithRepair, contentText } from "@earendil-works/pi-ai";
+import { withPurpose } from "./usage.js";
 
 export type Slot = "new" | "decide" | "fill";
 export type Decision = "pending" | "apply" | "skip" | "hold" | "fill";
@@ -38,6 +40,8 @@ export interface Card {
   key: string; slot: Slot; positionId: string; applicationId?: string; companyId: string; company: string; title: string; cities: string[]; closesAt: string | null;
   cityRank: number; tier?: string; why: string; gap: string; notes: string[]; group?: string; groupApplied: string[];
   gapConcept?: string; unlocks?: number; expiresAt?: string; decision: Decision; reason?: string; detail?: string;
+  /** 补一下: the plan written once by the model, or why there is none */
+  plan?: string; planNote?: string;
 }
 export interface Skipped { reason: string; rule?: Rule; positionId: string; company: string; title: string }
 export interface Shortlist { id: string; week: string; at: string; cards: Card[]; skipped: Skipped[]; skippedTotal: number; skippedBy: Record<string, number> }
@@ -251,7 +255,7 @@ function decideCards(db: Db, me: Me, rules: Rules, applied: Map<string, string[]
     if (p.decision === "fill" && was.expiresAt && was.expiresAt < today) continue; // ran out: listed as skipped by the maker
     const card = toCard(r, assessed(db, r, me), me, rules, applied, today, "decide");
     card.notes.unshift(p.decision === "hold" ? "上周先放着的：这次定一下" : `上周说补一下（${was.gapConcept ?? ""}）：补了没？到 ${was.expiresAt} 为止`);
-    if (p.decision === "fill") { card.gapConcept = was.gapConcept; card.expiresAt = was.expiresAt; }
+    if (p.decision === "fill") { card.gapConcept = was.gapConcept; card.expiresAt = was.expiresAt; card.plan = was.plan; card.planNote = was.planNote; }
     out.push(card);
   }
   for (const a of db.prepare(`select a.id app_id, a.updated_at, p.id, p.title, p.cities, p.jd_text, c.closes_at, co.id company_id, co.name company from application a join position p on p.id = a.position_id
@@ -461,6 +465,80 @@ export async function deepenShortlist(s: Services, runId: string, nowMs = Date.n
   });
   if (n) s.onDataChanged?.();
   return n;
+}
+
+/** Change one card of a kept list in place (the list and its item row), then tell the screens. */
+function patchCard(s: Services, runId: string, key: string, f: (c: Card) => void): void {
+  const db = s.domain.db;
+  const list = load(db, runId);
+  const c = list.cards.find((x) => x.key === key);
+  if (!c) return;
+  f(c);
+  tx(db, () => {
+    db.prepare("update shortlist_run set json = ? where id = ?").run(JSON.stringify(list), runId);
+    db.prepare("update shortlist_item set card_json = ? where run_id = ? and key = ?").run(JSON.stringify(c), runId, key);
+  });
+  s.onDataChanged?.();
+}
+
+const PLAN_SYSTEM = `你帮一位在读研究生补上一个岗位要求。给你：岗位名、岗位里他还没有证据的那条要求（原文），以及他资料里的项目和经历。
+只依据给出的内容，不要编造他没有的经历。从他的项目里挑一个最接得上的，写一件具体的小事：几天内做得完，做完就能在简历或面试里说清自己有这项能力。
+只输出 JSON：{"project": "所用项目的名称，照抄资料里的写法", "task": "要做的那件小事（60 字内，大白话）", "time": "大约多久，如 两个晚上、三天"}`;
+
+/** Other open posts that ask the same skill and do not see it in the person's evidence yet. */
+function sameSkillPosts(db: Db, positionId: string, conceptId: string): number {
+  let n = 0;
+  for (const r of db.prepare("select a.json from position_assessment a join position p on p.id = a.position_id where p.status = 'open' and p.id <> ?").all(positionId) as { json: string }[]) {
+    const a = json.parse(r.json, null as Assessment | null);
+    if (a?.judgements?.some((j) => j.status !== "supported" && j.status !== "transferable" && j.concepts.includes(conceptId))) n++;
+  }
+  return n;
+}
+
+/**
+ * 补一下: once per card, one model call (held background work `shortlist_fill`, purpose shortlist.fill) for a short plan —
+ * the missing requirement as the post words it, one small task on one of the person's own projects, about how long;
+ * the days left and how many other posts the same skill opens are counted here, not asked. No model, a refusal, an
+ * error or a plan on no project of theirs: the card says so, and no plan is made up by rules.
+ */
+export async function fillPlan(s: Services, runId: string, key: string, nowMs = Date.now()): Promise<void> {
+  const db = s.domain.db;
+  const card = load(db, runId).cards.find((c) => c.key === key);
+  if (!card || card.plan || card.planNote) return; // once
+  const note = (planNote: string) => patchCard(s, runId, key, (c) => { c.planNote = planNote; });
+  const quote = /「([^」]+)」/.exec(card.gap)?.[1];
+  if (!quote) return note("这张卡没读出具体差哪一条要求，没写补的计划");
+  const own = listFacts(db).items.filter((f) => ["project", "experience", "publication"].includes(f.kind))
+    .map((f) => ({ name: f.data.title || [f.data.org, f.data.role].filter(Boolean).join(" "), text: (f as any).statement || Object.values(f.data ?? {}).join(" / ") })).filter((x) => x.name);
+  if (!own.length) return note("资料里还没有项目或经历，没法接着你自己的项目写计划；先在「资料」里补上");
+  const to = s.llm?.route?.();
+  if (!s.llm || to?.kind === "waiting" || to?.kind === "unavailable") return note("现在没有能用的模型，没写补的计划");
+  let o: any;
+  try {
+    const text = `岗位：${card.company} · ${card.title}\n还差的要求（原文）：「${quote}」\n\n他的项目和经历：\n${own.map((x) => `- ${x.text}`).join("\n")}`;
+    const msg = await asBackground("shortlist_fill", () => withPurpose("shortlist.fill", card.positionId, () =>
+      s.llm!.models.completeSimple(s.llm!.model(), { systemPrompt: PLAN_SYSTEM, messages: [{ role: "user", content: [{ type: "text", text }], timestamp: Date.now() }] }, { reasoning: "low" })));
+    o = parseJsonWithRepair<any>(contentText(msg.content).trim().replace(/^```(?:json)?\s*|\s*```$/g, ""));
+  } catch (e: any) {
+    return note(e?.code === "BUDGET_DEFERRED" ? `额度要先留给你自己用（${String(e.message).slice(0, 60)}），这次没写补的计划` : "写补的计划时模型出错了，这次没写");
+  }
+  const flat = (t: unknown) => low(String(t ?? "")).replace(/\s+/g, "");
+  const said = flat(o?.project);
+  const project = said.length >= 2 ? own.find((x) => flat(x.name) && (said.includes(flat(x.name)) || flat(x.name).includes(said))) : undefined;
+  const task = String(o?.task ?? "").trim().slice(0, 80), time = String(o?.time ?? "").trim().slice(0, 20);
+  if (!project || !task) return note("模型给的计划没接上你资料里的项目，没有采用");
+  const left = daysLeft(card.closesAt, beijingDay(new Date(nowMs)));
+  const a = json.parse((db.prepare("select json from position_assessment where position_id = ?").get(card.positionId) as { json: string } | undefined)?.json ?? "", null as Assessment | null);
+  const conceptId = a?.judgements.find((j) => j.status !== "supported" && (j.quote.includes(quote) || quote.includes(j.quote.slice(0, 60))))?.concepts[0];
+  const others = card.unlocks ? card.unlocks - 1 : conceptId ? sameSkillPosts(db, card.positionId, conceptId) : null;
+  const plan = [
+    `差的：「${quote}」`,
+    `怎么补：${task}（接着你的「${project.name}」做）`,
+    ...(time ? [`大约要：${time}`] : []),
+    left == null ? "这个岗位没写截止日期" : left < 0 ? "这个岗位已过截止" : left === 0 ? "这个岗位今天截止" : `这个岗位还剩 ${left} 天截止`,
+    ...(others != null ? [others ? `补上这一项，还能投另外 ${others} 个要它的岗位` : "暂时没有别的岗位要这一项"] : []),
+  ].join("\n");
+  patchCard(s, runId, key, (c) => { c.plan = plan; });
 }
 
 /** Lines for the Monday brief notice. */
