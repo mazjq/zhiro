@@ -72,6 +72,8 @@ function ShortlistCard({ go }: { go: (p: string) => void }) {
               </div>
               <div className="text-sm text-ink-2 mt-0.5">为什么是你：{c.why}</div>
               <div className="text-sm text-ink-2">差什么：{c.gap}</div>
+              {c.plan && <div className="text-sm text-ink-2 mt-1 pl-2 border-l-2 border-line whitespace-pre-line">{c.plan}</div>}
+              {c.planNote && <div className="text-xs text-ink-3 mt-0.5">{c.planNote}</div>}
               <div className="flex items-center gap-2 mt-1.5 flex-wrap">
                 {c.decision !== "pending" ? <>
                   <Chip tone={c.decision === "apply" ? "good" : c.decision === "skip" ? "" : "amber"}>{DECIDED[c.decision]}{c.reason && c.reason !== "single" ? `（${REASONS.find(([k]) => k === c.reason)?.[1]}${c.detail ? "：" + c.detail : ""}）` : ""}{c.expiresAt && c.decision !== "apply" ? ` · 到 ${c.expiresAt}` : ""}</Chip>
