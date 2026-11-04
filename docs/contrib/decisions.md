@@ -209,3 +209,11 @@ entries condense what still holds.
   appeared, 2 were kept out by the city list, 2 had titles naming nothing (an AI-coding post, a generic 技术研发). Reviewed
   by four agents with no shared context (a blank-sheet design, the job seeker's own view, an attack on the draft, the
   laziest cut); the attack found the tier premise, the replay confirmed it.
+- **D-34 · 2026-11-04 · 补一下: one plan, written by the model or not at all.** When the person picks 「补一下」 on a
+  shortlist card, one model call (held background work `shortlist_fill`, purpose `shortlist.fill`, after the decision
+  is saved) writes a short plan kept on the card: the missing requirement as the card already quotes it, one small task
+  on one of the person's own projects / experiences / publications, and about how long. The days left and how many
+  other open posts ask the same skill are counted by Zhiro, not asked. The plan is used only when the project it names
+  is one in the person's facts. No model, a gate refusal, an error, no project on file or a plan on a project they do
+  not have: the card says so in one line, and no plan is made up by rules. Once per card; the 要决定 card next week
+  carries it.
