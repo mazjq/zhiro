@@ -22,6 +22,10 @@ const GROUPS: [RegExp, string][] = [
   [/^(中国核工业集团(有限公司)?|中核集团|中核)/, "中核"],
   [/^(中国能源建设集团(有限公司)?|中国能建)/, "中国能建"],
   [/^(中国电力建设集团(有限公司)?|中国电建)/, "中国电建"],
+  [/^(中国海洋石油集团(有限公司)?|中国海油|中海油)/, "中海油"],
+  [/^(中国石油天然气集团(有限公司)?|中国石油集团|中国石油|中石油)/, "中石油"],
+  [/^(中国石油化工集团(有限公司)?|中国石化集团|中国石化|中石化)/, "中石化"],
+  [/^(中国电信集团(有限公司)?|中国电信|中电信)/, "中国电信"],
 ];
 const DIGIT: Record<string, string> = { 〇: "0", 零: "0", 一: "1", 二: "2", 三: "3", 四: "4", 五: "5", 六: "6", 七: "7", 八: "8", 九: "9" };
 
@@ -33,6 +37,12 @@ function numerals(s: string): string {
     if (/[十]/.test(b ?? "") || (a && a.length > 1)) return run;
     return String((a ? Number(DIGIT[a]) : 1) * 10 + (b ? Number(DIGIT[b] ?? 0) : 0));
   });
+}
+
+/** The big group a company name starts with (「中船」「航天科工」…), or null when it is not one of the groups known here. */
+export function groupOf(name: string): string | null {
+  const s = name.normalize("NFKC").replace(/\s+/g, "");
+  return GROUPS.find(([re]) => re.test(s))?.[1] ?? null;
 }
 
 export function unitKey(name: string): string {

@@ -34,6 +34,77 @@ function BriefCard({ go }: { go: (p: string) => void }) {
   );
 }
 
+const SLOT: Record<string, string> = { new: "新机会", decide: "要决定", fill: "可补" };
+const REASONS: [string, string][] = [["single", "只是这一个"], ["company", "这家公司不投"], ["type", "这类岗位不投"], ["city", "不去这个城市"], ["group", "这个集团只投一个"]];
+const DECIDED: Record<string, string> = { apply: "投：草稿建好了", skip: "不投", hold: "先放着", fill: "补一下" };
+
+/** 本周短名单: the week's cards, decided here — one main button, 不投 asks why once, what a rule kept out can be put back. */
+function ShortlistCard({ go }: { go: (p: string) => void }) {
+  const [l, setL] = useState<any>(null);
+  const [busy, setBusy] = useState(false);
+  const [asking, setAsking] = useState<{ key: string; reason: string; detail: string } | null>(null);
+  const [showSkipped, setShowSkipped] = useState(false);
+  const [err, setErr] = useState("");
+  const latest = useLatest();
+  const load = () => { latest("sl", call("shortlist.current", {})).then((r) => setL(r.shortlist)).catch(() => {}); };
+  useEffect(load, []);
+  useOnDataChange(load);
+  const run = async (f: () => Promise<any>) => { setBusy(true); setErr(""); try { const r = await f(); if (r?.shortlist) setL(r.shortlist); else load(); } catch (e: any) { setErr(FRIENDLY[e.code] ?? e.message); } finally { setBusy(false); } };
+  const decide = (c: any, decision: string, reason?: string, detail?: string) => run(() => call("shortlist.decide", { runId: l.id, key: c.key, decision, reason, detail }));
+  const reasonFor = (c: any) => REASONS.filter(([k]) => k !== "group" || (c.group && c.groupApplied?.length));
+  if (!l) return null;
+  const slots = ["new", "decide", "fill"].map((s) => [s, l.cards.filter((c: any) => c.slot === s)] as const).filter(([, xs]) => xs.length);
+  return (
+    <Card className="mb-6 px-4 py-3">
+      <div className="flex items-center gap-2 mb-2"><div className="font-bold">本周短名单 · {l.cards.length} 张</div>
+        <span className="text-xs text-ink-3">{l.week} 这周 · 每张卡定一下就行，一周 15 分钟</span>
+        <button className="ml-auto text-xs text-accent disabled:opacity-40" disabled={busy} onClick={() => run(() => call("shortlist.make", {}))}>重出一份</button></div>
+      {err && <div className="text-sm text-bad mb-2">{err}</div>}
+      {!l.cards.length && <div className="text-sm text-ink-3">这周没有够格的新机会；没上卡的在下面。</div>}
+      {slots.map(([slot, xs]) => (
+        <div key={slot} className="mb-2"><div className="text-xs text-ink-3 mb-1">{SLOT[slot]} · {xs.length}</div>
+          {xs.map((c: any) => { const ask = asking && asking.key === c.key ? asking : null; return (
+            <div key={c.key} className="py-2 border-t border-line">
+              <div className="flex items-baseline gap-2 flex-wrap">
+                <span className="font-medium hover:text-accent cursor-pointer" onClick={() => openInJobs(c.company, c.positionId)}>{c.company} · {c.title}</span>
+                {c.cities?.length > 0 && <span className="text-xs text-ink-3">{c.cities.slice(0, 3).join("/")}</span>}
+                {c.notes?.map((n: string) => <Chip key={n} tone={/重点|放回/.test(n) ? "accent" : /截止|到期|剩/.test(n) ? "amber" : ""}>{n}</Chip>)}
+              </div>
+              <div className="text-sm text-ink-2 mt-0.5">为什么是你：{c.why}</div>
+              <div className="text-sm text-ink-2">差什么：{c.gap}</div>
+              <div className="flex items-center gap-2 mt-1.5 flex-wrap">
+                {c.decision !== "pending" ? <>
+                  <Chip tone={c.decision === "apply" ? "good" : c.decision === "skip" ? "" : "amber"}>{DECIDED[c.decision]}{c.reason && c.reason !== "single" ? `（${REASONS.find(([k]) => k === c.reason)?.[1]}${c.detail ? "：" + c.detail : ""}）` : ""}{c.expiresAt && c.decision !== "apply" ? ` · 到 ${c.expiresAt}` : ""}</Chip>
+                  {c.decision === "apply" && <button className="text-xs text-accent" onClick={() => go("pipeline")}>去准备申请</button>}
+                </> : ask ? <>
+                  <span className="text-xs text-ink-3">为什么不投：</span>
+                  {reasonFor(c).map(([k, t]) => <button key={k} className={`text-xs px-2 py-0.5 rounded border ${ask.reason === k ? "border-accent text-accent" : "border-line"}`} onClick={() => setAsking({ ...ask!, reason: k })}>{t}</button>)}
+                  {(ask.reason === "type" || ask.reason === "city") && <input className="text-xs border border-line rounded px-2 py-0.5 w-40" placeholder={ask.reason === "type" ? "岗位名里的词，如 销售" : "城市"} value={ask.detail} onChange={(e) => setAsking({ ...ask!, detail: e.target.value })} />}
+                  <Button tone="primary" disabled={busy} onClick={() => { decide(c, "skip", ask!.reason, ask!.detail); setAsking(null); }}>确定</Button>
+                  <Button onClick={() => setAsking(null)}>算了</Button>
+                </> : <>
+                  <Button tone="primary" disabled={busy} onClick={() => decide(c, "apply")}>{c.applicationId ? "投（去准备）" : "投"}</Button>
+                  <Button disabled={busy} onClick={() => setAsking({ key: c.key, reason: "single", detail: "" })}>不投</Button>
+                  {slot !== "decide" && <Button disabled={busy} onClick={() => decide(c, "hold")}>先放着</Button>}
+                  {slot !== "decide" && <Button disabled={busy} title={c.gapConcept ? `差「${c.gapConcept}」，到期前再问` : "差的那项补一下，到期前再问"} onClick={() => decide(c, "fill")}>补一下</Button>}
+                </>}
+              </div>
+            </div>); })}
+        </div>))}
+      {l.skippedTotal > 0 && <div className="text-xs text-ink-3 mt-1 border-t border-line pt-2">
+        <button className="text-accent" onClick={() => setShowSkipped(!showSkipped)}>本周没上卡 {l.skippedTotal} 个（{Object.entries(l.skippedBy ?? {}).map(([k, n]) => `${k} ${n}`).join("、")}）{showSkipped ? "，收起" : "：看看、放回来"}</button>
+        {showSkipped && l.skipped.map((x: any) => (
+          <div key={x.positionId} className="flex items-baseline gap-2 py-0.5">
+            <span className="flex-1 hover:text-accent cursor-pointer" onClick={() => openInJobs(x.company, x.positionId)}>{x.company} · {x.title}</span>
+            <span>{x.reason}</span>
+            <button className="text-accent shrink-0" disabled={busy} onClick={() => run(() => call("shortlist.restore", { runId: l.id, positionId: x.positionId }))}>{x.rule ? "放回来（撤销这条规则）" : "放回来"}</button>
+          </div>))}
+        {showSkipped && l.skipped.length < l.skippedTotal && <div>只列了前 {l.skipped.length} 个</div>}
+      </div>}
+    </Card>
+  );
+}
+
 /** Notices that did not reach the person: said first on the page, never left to look delivered (B1). */
 function NoticeLine({ go }: { go: (p: string) => void }) {
   const [c, setC] = useState<any>(null);
@@ -111,6 +182,7 @@ export default function Today({ go }: { go: (p: any) => void }) {
     <>
       <H1 sub={today}>今日</H1>
       <NoticeLine go={go} />
+      <ShortlistCard go={go} />
       <BriefCard go={go} />
       <Pending />
 

@@ -515,6 +515,14 @@ export const MIGRATIONS: string[] = [
   alter table scan_run add column fetch_ms integer;
   alter table scan_run add column requests integer;
   `,
+  // v53: the weekly shortlist (service/shortlist.ts) — each week's list whole, and the person's decision on every card
+  // (a 不投 keeps the post out of later lists; 先放着 / 补一下 bring it back under 要决定)
+  `
+  create table shortlist_run (id text primary key, week text not null, at text not null, json text not null);
+  create table shortlist_item (run_id text not null references shortlist_run(id) on delete cascade, key text not null, position_id text not null, slot text not null,
+    decision text not null default 'pending', reason text not null default '', card_json text not null default '{}', decided_at text, primary key (run_id, key)) without rowid;
+  create index shortlist_item_key on shortlist_item(key, decision);
+  `,
 ];
 
 /**

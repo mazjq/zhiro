@@ -66,6 +66,7 @@ import { budgetStatus, type GateDeps } from "./budget/gate.js";
 import { cardView } from "./service/card-state.js";
 import { tx } from "./db.js";
 import { latestBrief, runBrief } from "./daily/brief.js";
+import { latestShortlist, runShortlist, decideCard, restoreCard } from "./service/shortlist.js";
 import { nextAt, normalizeAt } from "./workflows/daily.js";
 import { pullFeeds } from "./workflows/feed.js";
 import { setupFeishu } from "./workflows/notify.js";
@@ -377,6 +378,10 @@ const handlers: { [N in ToolName]: Handler<N> } = {
     return { at, next };
   },
   "brief.make": (_i, a, s) => { humanOnly(a); const b = runBrief(s.domain.db); s.domain.db.prepare("update brief_run set seen_at = ? where id = ?").run(new Date().toISOString(), b.id); return { id: b.id }; },
+  "shortlist.current": (_i, _a, s) => ({ shortlist: latestShortlist(s.domain.db) }),
+  "shortlist.decide": (i, a, s) => { humanOnly(a); return { shortlist: decideCard(s, i) }; },
+  "shortlist.restore": (i, a, s) => { humanOnly(a); return { shortlist: restoreCard(s, i) }; },
+  "shortlist.make": (_i, a, s) => { humanOnly(a); const l = runShortlist(s); s.onDataChanged?.(); return { id: l.id, cards: l.cards.length }; },
   "usage.summary": (_i, _a, s) => usageSummary(s.domain.db),
   "profile.import": (i, _a, s) => {
     if (i.path) { if (!existsSync(i.path)) throw new ToolError("FILE_NOT_FOUND", i.path); return addDocument(docDeps(s), basename(i.path), readFileSync(i.path)); }
@@ -649,7 +654,7 @@ function executeDirect<N extends ToolName>(name: N, input: ToolInput<N>, actor: 
  *  - agent + write/effect tool → proposal (returned as { proposal }) instead of execution
  *  - audit row for every call
  */
-export const HUMAN_ONLY = new Set(["notice.account", "feed.pull", "brief.at", "brief.make", "notify.setup", "notice.ack", "proposal.dismiss", "proposal.renew", "agent.model", "gap.confirm", "model.login", "model.answer", "model.cancel", "model.provider", "model.select", "model.refresh", "inbox.connect", "inbox.disconnect", "history.undo", "agent.mode", "agent.backend", "agent.harnessConfirm", "agent.background", "data.export", "data.move"]);
+export const HUMAN_ONLY = new Set(["notice.account", "feed.pull", "brief.at", "brief.make", "shortlist.decide", "shortlist.restore", "shortlist.make", "notify.setup", "notice.ack", "proposal.dismiss", "proposal.renew", "agent.model", "gap.confirm", "model.login", "model.answer", "model.cancel", "model.provider", "model.select", "model.refresh", "inbox.connect", "inbox.disconnect", "history.undo", "agent.mode", "agent.backend", "agent.harnessConfirm", "agent.background", "data.export", "data.move"]);
 
 /** What an actor may call at all: agents never see the human-only tools or proposal.decide (they would only be refused) — except the person's own harness, when confirmation happens there (ADR-047). */
 export const callableBy = (actor: Actor, s?: Services) => {
