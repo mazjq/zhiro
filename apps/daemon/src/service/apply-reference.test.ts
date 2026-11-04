@@ -79,6 +79,23 @@ describe("what the first real Moka form got wrong", () => {
     expect(pickOption(["四级", "六级"], "英语六级")).toBe("六级");
   });
 
+  it("a native dropdown takes the equal option, else the single one that contains the value; several or none are left to the person, with why", async () => {
+    expect(pickOption(["中共党员", "中共预备党员", "共青团员"], "党员")).toBe(""); // was 中共党员, the first that merely contains it
+    expect(pickOption(["中共党员", "中共预备党员"], "中共党员")).toBe("中共党员");
+    expect(pickOption(["请选择", "硕士研究生", "博士研究生"], "博士")).toBe("博士研究生");
+    const d = db();
+    upsertFact(d, { kind: "basic", data: { field: "政治面貌", value: "党员" } }, "本人确认");
+    upsertFact(d, { kind: "basic", data: { field: "民族", value: "满族" } }, "本人确认");
+    const m = await mapFields(d, undefined, [
+      { ...field("政治面貌", "select"), index: 0, options: ["请选择", "中共党员", "中共预备党员", "共青团员", "群众"] },
+      { ...field("民族", "select"), index: 1, local: 1, options: ["请选择", "汉族", "回族"] },
+      { ...field("英语水平", "select"), index: 2, local: 2, options: ["请选择", "大学英语四级", "大学英语六级"] },
+    ]);
+    expect(m[0]).toMatchObject({ status: "由你填写", proposed: "", source: "有几个选项都像「党员」（中共党员、中共预备党员），请你选" });
+    expect(m[1]).toMatchObject({ status: "由你填写", proposed: "", source: "选项里没有和「满族」对得上的，请你选" });
+    expect(m[2]).toMatchObject({ status: "可填", proposed: "大学英语六级" });
+  });
+
   it("项目描述 is the project, 职责 is what the person did; one award spelled two ways goes once; the document's list wins", () => {
     const d = db();
     const entry = (labels: string[], section: string) => labels.map((label, i) => ({ ...field(label, "textarea"), section, entry: 0, index: i, local: i }));
