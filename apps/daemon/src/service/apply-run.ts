@@ -4,7 +4,7 @@ import type { Frame, Page } from "playwright-core";
 import type { Services } from "../services.js";
 import type { Db } from "../db.js";
 import { DomainError, NotFound } from "./domain.js";
-import { openBrowser, browserOpen, activePage, readForm, mapFields, normLabel, SENSITIVE, peopleSection, type Mapped, type FormField } from "./apply.js";
+import { openBrowser, browserOpen, activePage, readForm, mapFields, normLabel, reusableAnswer, SENSITIVE, peopleSection, type Mapped, type FormField } from "./apply.js";
 import { pickResume } from "./resumes.js";
 import { upsertFact } from "./profile.js";
 import { choose } from "./apply-widgets.js";
@@ -33,6 +33,8 @@ export interface Run {
   bySite: number;
   /** the recruiting platform the form is on (Moka, 北森, 企业自建站 …) */
   platform: string;
+  /** whose form it is: an answer to a question about the company is kept for that company only */
+  company: string;
   /** while filling: how far along, and the field being set now */
   progress: { done: number; total: number; current: string } | null;
 }
@@ -158,7 +160,7 @@ export async function startRun(s: Services, applicationId: string, opts: { tickM
   let resume = x.application.resumeLabel ?? "";
   if (!resume) { resume = pickResume(s.domain.db, x.application.positionId).pick?.resume.name ?? ""; if (resume) s.domain.updateApplication({ id: applicationId, resumeLabel: resume }, "jobos:apply"); }
   stopRun();
-  run = { applicationId, positionId: x.application.positionId, title: `${x.companyName} · ${x.title}`, url, resume, state: "准备中", reason: "正在打开专用浏览器", paused: false, filled: 0, attention: [], learned: [], startedAt: now(), updatedAt: now(), bySite: 0, progress: null, platform: platformOf(url)?.name ?? "" };
+  run = { applicationId, positionId: x.application.positionId, title: `${x.companyName} · ${x.title}`, url, resume, state: "准备中", reason: "正在打开专用浏览器", paused: false, filled: 0, attention: [], learned: [], startedAt: now(), updatedAt: now(), bySite: 0, progress: null, platform: platformOf(url)?.name ?? "", company: x.companyName };
   lastForm = []; ours = new Map(); filledSignature = ""; fillText = ""; lastText = ""; uploaded = false; gone = 0; beforeUpload = null; traces = []; shortened.clear(); hunts = 0; foundAs = "";
   await openBrowser(s.config.vault, url, { headless: opts.headless });
   const every = opts.tickMs ?? 2000;
@@ -192,7 +194,7 @@ async function tick(s: Services): Promise<void> {
     // N4: fields of earlier steps that are no longer on screen stay in lastForm, so what the user typed there is learned too
     if (labelled.length >= 3) {
       gone = 0;
-      const fresh = await mapFields(s.domain.db, undefined, form.fields);
+      const fresh = await mapFields(s.domain.db, undefined, form.fields, undefined, run.company);
       const merged = fresh.map((f) => { const old = lastForm.find((o) => keyOf(o) === keyOf(f)); return old ? { ...old, value: f.value } : f; });
       const seen = new Set(merged.map(keyOf));
       lastForm = [...lastForm.filter((o) => !seen.has(keyOf(o))), ...merged];
@@ -273,7 +275,7 @@ async function tick(s: Services): Promise<void> {
   }
 
   const ref = readReference(s.config.apply?.referenceDoc);
-  const mapped = await mapFields(s.domain.db, s.llm, form.fields, ref);
+  const mapped = await mapFields(s.domain.db, s.llm, form.fields, ref, run.company);
   const bySite = beforeUpload ? siteFilled(beforeUpload, form.fields) : 0;
   const todo = mapped.filter((f) => f.status === "可填" && f.proposed && EMPTY.test(f.value.trim()));
   let filled = 0, done = 0, wroteYear = "";
@@ -498,7 +500,10 @@ function finish(s: Services, ok: boolean, why: string): void {
     if (/^[+\-\d\s]*$/.test(normLabel(f.label)) || /发送|获取|重新/.test(f.label)) continue; // 「+86」, a button's text: not a question
     const kind = f.factKey.startsWith("pref.") ? "preference" : "basic";
     const field = f.factKey ? f.factKey.slice(f.factKey.indexOf(".") + 1) : normLabel(f.label);
-    try { upsertFact(s.domain.db, { kind, data: { field, value: v } }, "本人确认"); learned.push(f.label); } catch { /* not a fact the profile can hold */ }
+    // an answer under the form's own label that is long or about the company carries the company: copied there only (mapFields)
+    const data: Record<string, string> = { field, value: v };
+    if (!f.factKey && !reusableAnswer(field, v, undefined, undefined)) data.company = run.company;
+    try { upsertFact(s.domain.db, { kind, data }, "本人确认"); learned.push(f.label); } catch { /* not a fact the profile can hold */ }
   }
   if (ok) s.domain.updateApplication({ id: run.applicationId, state: "submitted", resumeLabel: run.resume || undefined, note: `网申：${why}` }, "jobos:apply");
   if (learned.length) s.onDataChanged?.();
