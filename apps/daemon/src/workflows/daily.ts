@@ -1,7 +1,7 @@
 import type { WorkflowDef } from "../service/workflow.js";
 import type { Services } from "../services.js";
 import { runBrief } from "../daily/brief.js";
-import { runShortlist, shortlistLines, weekOf } from "../service/shortlist.js";
+import { deepenShortlist, runShortlist, shortlistLines, weekOf } from "../service/shortlist.js";
 
 /** "H:MM" / "HH:MM" with a real hour and minute → "HH:MM"; anything else → null. */
 export function normalizeAt(at: string | undefined): string | null {
@@ -38,9 +38,11 @@ export function dailyBrief(s: Services): WorkflowDef {
           // the week's shortlist comes with Monday's brief; a week whose Monday the computer slept through gets it the next morning
           const week = weekOf();
           const has = s.domain.db.prepare("select 1 from shortlist_run where week = ?").get(week);
-          const lead = has ? [] : shortlistLines(runShortlist(s));
-          runBrief(s.domain.db, Date.now(), lead);
+          const list = has ? null : runShortlist(s);
+          runBrief(s.domain.db, Date.now(), list ? shortlistLines(list) : []);
           s.onBackgroundChanged?.("brief");
+          // the brief names only company and title, so it does not wait for the deep match; that never fails the step
+          if (list) await deepenShortlist(s, list.id).catch(() => 0);
         }
         const next = new Date(nextAt(s.config.brief?.at)).toISOString();
         return { type: "sleep", until: next, checkpoint: { next } };
