@@ -102,6 +102,8 @@ const READ_FORM = () => {
   // the field wrapper, skipping the inner "control" / "content" boxes whose class names also contain form-item
   // (Ant Design .ant-form-item-control, Element .el-form-item__content)
   const itemOf = (el: Element): Element | null => { let it = el.closest(ITEM); while (it && /(form-item-control|form-item__content|FormItem-control)/i.test(it.className?.toString() ?? "")) it = it.parentElement?.closest(ITEM) ?? null; return it; };
+  // option and button words ("是" / "否" / "无" / "请选择") are never a field's caption; kept in step with OPTION_WORD below
+  const OPTION_WORD = /^(无|否|是|有|没有|请选择|选择|男|女|确定|取消|添加|删除)$/;
   const SECTION = ".createFormSection-title,h1,h2,h3,h4,h5,legend,[class*='blockTitle'],[class*='block-title'],[class*='section-title'],[class*='sectionTitle'],[class*='group-title'],[class*='groupTitle'],[class*='module-title']";
   // option = a radio / checkbox: the <label> around it names the option, never the question
   const labelOf = (el: Element, option = false): string => {
@@ -114,11 +116,11 @@ const READ_FORM = () => {
     const own = item?.querySelector(":scope > .atsx-form-item-label, .field-label .topichtml, .form-item__text");
     if (own && text(own)) return text(own);
     // a <label> wrapping an input is an option ("是" / "否"), not the field's caption
-    const inItem = item && Array.from(item.querySelectorAll(LABEL)).find((l) => !l.contains(el) && !l.querySelector("input") && text(l) && text(l).length <= 30);
+    const inItem = item && Array.from(item.querySelectorAll(LABEL)).find((l) => !l.contains(el) && !l.querySelector("input") && text(l) && text(l).length <= 30 && !OPTION_WORD.test(text(l)));
     if (inItem) return text(inItem);
     const wrap = option ? null : el.closest("label"); if (wrap && text(wrap)) return text(wrap);
     const td = el.closest("td")?.previousElementSibling; if (td && text(td)) return text(td);
-    const prev = (item ?? el).previousElementSibling; if (prev && text(prev) && text(prev).length <= 20) return text(prev);
+    const prev = (item ?? el).previousElementSibling; if (prev && text(prev) && text(prev).length <= 20 && !OPTION_WORD.test(text(prev))) return text(prev);
     return "";
   };
   const sectionOf = (el: Element): string => {
@@ -165,7 +167,7 @@ const READ_FORM = () => {
       const group = itemOf(el) ?? el.parentElement?.parentElement ?? el;
       if (seen.has(group)) continue;
       const opts = Array.from(group.querySelectorAll(`input[type="${t}"]`)).map(optText);
-      seen.add(group); if (visible(el) || visible(group)) out.push({ local: stamp(group), value: Array.from(group.querySelectorAll(`input[type="${t}"]`)).filter((o) => (o as HTMLInputElement).checked).map(optText).join("、"), section: sectionOf(group), label: labelOf(el, true) || text(group.querySelector(LABEL)), type: t, required: required(el), options: opts, placeholder: "", name: el.getAttribute("name") ?? "", entry: entryOf(group) });
+      seen.add(group); if (visible(el) || visible(group)) out.push({ local: stamp(group), value: Array.from(group.querySelectorAll(`input[type="${t}"]`)).filter((o) => (o as HTMLInputElement).checked).map(optText).join("、"), section: sectionOf(group), label: labelOf(el, true) || Array.from(group.querySelectorAll(LABEL)).map(text).find((x) => x && !OPTION_WORD.test(x) && !opts.includes(x)) || "", type: t, required: required(el), options: opts, placeholder: "", name: el.getAttribute("name") ?? "", entry: entryOf(group) });
     } else if (t === "file") push(el, "file", [], "");
     else {
       const custom = el.closest(".atsx-select, .atsx-date-picker, [class*='atsx-date-picker'], .atsx-cascader, .ant-calendar-picker, .ant-select, .el-select, .arco-select, .ant-picker, .el-date-editor, .ant-cascader, .el-cascader, [role='combobox'], [class*='Select-container'], [class*='select-container'], [class*='Dropdown-container'], [class*='DatePicker'], [class*='Cascader'], .phoenix-select, [class*='phoenix-select'], .phoenix-auto-complete-container")
@@ -232,6 +234,8 @@ const NOT_EDU = /区域|地区|所在地|所在省|所在市|城市|省份|国�
 /** 「海外院校毕业」「是否留学」: a yes / no question about the education records, not the school's name. */
 const ABROAD = /海外|境外|留学|国外/;
 
+/** Words of an option or a button, never a question: a field "labelled" so was read wrong (READ_FORM keeps its own copy). */
+export const OPTION_WORD = /^(无|否|是|有|没有|请选择|选择|男|女|确定|取消|添加|删除)$/;
 export const normLabel = (s: string) => s.replace(/[（(][^）)]*[）)]/g, "").replace(/[*＊:：\s]/g, "").replace(/^(您的|你的|请输入|请填写|请选择)/, "").trim();
 // 「是否接受意向城市调剂」 is a yes / no question, not the city (it got 「武汉」 on 大疆, 2026-10-14)
 export const canonOf = (label: string) => (/是否/.test(label) ? "" : CANON.find(([re]) => re.test(normLabel(label)))?.[1] ?? "");
