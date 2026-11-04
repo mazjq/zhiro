@@ -11,13 +11,14 @@
  * one open core requirement is a skill the person can still pick up, with a date). What a rule kept out is listed, not
  * dropped — the person can put one back, which also undoes the rule. Rules come only from the person's own choices
  * on a card (不投 → 这家公司 / 这类岗位 / 这个城市 / 这个集团只投一个); nothing an agent wrote is a rule.
- * ponytail: no model call here — the two lines on a card quote what the assessment already found; a deep match on the
- * chosen cards is the upgrade.
+ * The two lines on a card quote what the rule assessment found; after the list is made, the model's deep match
+ * (service/fit.ts) rewords the 新机会 / 可补 cards when the allowance allows — at most DEEP_PER_WEEK calls a week, held
+ * like other background work, and only lines whose quote is the post's own text replace the rule wording (D-33).
  */
 import { ulid } from "ulid";
 import { json, now, tx, type Db } from "../db.js";
 import type { Services } from "../services.js";
-import { DomainError, NotFound } from "./domain.js";
+import { DomainError, NotFound, sha } from "./domain.js";
 import { listFacts, upsertFact, removeFact } from "./profile.js";
 import { beijingDay } from "./deadlines.js";
 import { groupOf } from "./same-company.js";
@@ -26,6 +27,8 @@ import { assess, userSide, parseJd, label, type Assessment, type Judgement } fro
 import { conceptsIn, concept } from "../recommenders/concepts.js";
 import { tagCompany } from "../recommenders/index.js";
 import { isAggregate } from "../data/index.js";
+import { deepFit, profileText } from "./fit.js";
+import { asBackground } from "../budget/index.js";
 
 export type Slot = "new" | "decide" | "fill";
 export type Decision = "pending" | "apply" | "skip" | "hold" | "fill";
@@ -384,6 +387,80 @@ export function restoreCard(s: Services, p: { runId: string; positionId: string 
   save(db, list, true);
   s.onDataChanged?.();
   return list;
+}
+
+export const DEEP_PER_WEEK = 15;
+
+/** A model line kept only when its 「…」 is the post's own text (spaces aside); anything else is a judgement without a quote. */
+export function quotedLine(item: string, post: string): string | null {
+  const m = /^\s*「([^」]{2,80})」/.exec(item);
+  const flat = (t: string) => low(t).replace(/\s+/g, "");
+  return m && flat(post).includes(flat(m[1])) ? item.trim().slice(0, 120) : null;
+}
+
+/** The two lines from a deep match, or null when neither quotes the post. No gaps at all reads as 「要求都对得上」, as the rules say it. */
+export function deepWording(fit: { meets: string[]; gaps: string[] }, post: string): { why?: string; gap?: string } | null {
+  const why = fit.meets.map((m) => quotedLine(m, post)).find(Boolean) ?? undefined;
+  const gap = fit.gaps.length ? fit.gaps.map((g) => quotedLine(g, post)).find(Boolean) ?? undefined : why ? "要求都对得上" : undefined;
+  return why || gap ? { why, gap } : null;
+}
+
+/**
+ * After the list is made: the 新机会 / 可补 cards still undecided get their two lines from the model's deep match. A deep
+ * match already made against the current profile is read, not asked again. The calls run as background work
+ * `shortlist_fit` (held by the gate like lead lookups); a refusal stops the rest, a model error skips that card — either
+ * way the rule wording stays, and the list is never failed. Returns how many cards were reworded.
+ * ponytail: the weekly count is read from llm_usage (purpose shortlist.fit), so a call the provider did not report is
+ * not counted beyond this run.
+ */
+export async function deepenShortlist(s: Services, runId: string, nowMs = Date.now()): Promise<number> {
+  const db = s.domain.db;
+  const to = s.llm?.route?.();
+  if (!s.llm || to?.kind === "waiting" || to?.kind === "unavailable") return 0; // nobody answers now: no jobs left for the agent
+  const since = new Date(`${weekOf(nowMs)}T00:00:00`).toISOString();
+  let left = DEEP_PER_WEEK - (db.prepare("select count(*) n from llm_usage where purpose = 'shortlist.fit' and at >= ?").get(since) as { n: number }).n;
+  const hash = sha(profileText(s));
+  const fitOf = (id: string) => {
+    const r = db.prepare("select meets, gaps, profile_hash from position_fit where position_id = ?").get(id) as { meets: string; gaps: string; profile_hash: string } | undefined;
+    return r && r.profile_hash === hash ? { meets: json.parse(r.meets, [] as string[]), gaps: json.parse(r.gaps, [] as string[]) } : null;
+  };
+  const postOf = (id: string) => {
+    const p = db.prepare("select p.title, p.jd_text, p.degree_req, p.major_req, c.degree_req c_degree, c.major_req c_major from position p join campaign c on c.id = p.campaign_id where p.id = ?").get(id) as Record<string, string | null> | undefined;
+    return p ? Object.values(p).filter(Boolean).join("\n") : "";
+  };
+  const lines = new Map<string, { why?: string; gap?: string }>();
+  for (const c of load(db, runId).cards) {
+    if (c.slot === "decide" || c.decision !== "pending") continue;
+    const post = postOf(c.positionId);
+    if (!post) continue;
+    let w = (() => { const f = fitOf(c.positionId); return f && deepWording(f, post); })();
+    if (!w) {
+      if (left <= 0) break;
+      left--;
+      try { await asBackground("shortlist_fit", () => deepFit(s, c.positionId, "shortlist.fit")); }
+      catch (e: any) { if (e?.code === "BUDGET_DEFERRED" || e?.code === "MODEL_DELEGATED") break; continue; }
+      const f = fitOf(c.positionId);
+      w = f && deepWording(f, post);
+    }
+    if (w) lines.set(c.key, w);
+  }
+  if (!lines.size) return 0;
+  // the person may have decided on a card meanwhile: read the list again and touch only the undecided ones
+  const list = load(db, runId);
+  const upd = db.prepare("update shortlist_item set card_json = ? where run_id = ? and key = ? and decision = 'pending'");
+  let n = 0;
+  tx(db, () => {
+    for (const c of list.cards) {
+      const w = lines.get(c.key);
+      if (!w || c.decision !== "pending") continue;
+      if (w.why) c.why = w.why;
+      if (w.gap) c.gap = w.gap;
+      upd.run(JSON.stringify(c), runId, c.key); n++;
+    }
+    db.prepare("update shortlist_run set json = ? where id = ?").run(JSON.stringify(list), runId);
+  });
+  if (n) s.onDataChanged?.();
+  return n;
 }
 
 /** Lines for the Monday brief notice. */
