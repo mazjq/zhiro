@@ -23,6 +23,7 @@ const FORM = `<!doctype html><meta charset="utf-8"><title>申请职位</title>
 <div class="apply-field-a1"><div class="title-b1">手机号码</div><input></div>
 <div class="apply-field-a1"><div class="title-b1">政治面貌</div><input></div>
 <div class="apply-field-a1"><div class="title-b1">身份证号</div><input></div>
+<div class="apply-field-a1"><div class="title-b1">为什么选择我司</div><input></div>
 <div class="apply-field-a1"><div class="title-b1">最高学历</div><select><option>请选择</option><option>本科</option><option>博士研究生</option></select></div>
 <div class="blockTitle-x1">上传</div>
 <div class="apply-field-a1"><div class="title-b1">上传简历</div><div class="upload-btn">上传简历<input type="file" style="display:none"></div></div>
@@ -52,7 +53,7 @@ describe.skipIf(!CHROME)("开始网申 (ADR-024)", () => {
     await until(() => currentRun()?.state === "待你提交");
     const page = await activePage();
     const values = await page.evaluate(() => ({ inputs: Array.from(document.querySelectorAll("input:not([type=file])")).map((i) => (i as HTMLInputElement).value), degree: (document.querySelector("select") as HTMLSelectElement).selectedOptions[0].text, files: Array.from(document.querySelectorAll("input[type=file]")).map((i) => (i as HTMLInputElement).files?.length ?? 0) }));
-    expect(values).toEqual({ inputs: ["李示例", "old@example.com", "13800000000", "", ""], degree: "博士研究生", files: [1, 0] });
+    expect(values).toEqual({ inputs: ["李示例", "old@example.com", "13800000000", "", "", ""], degree: "博士研究生", files: [1, 0] });
     const run = currentRun()!;
     expect(run.filled).toBe(3);
     expect(run.resume).toBe("通用版");
@@ -61,13 +62,15 @@ describe.skipIf(!CHROME)("开始网申 (ADR-024)", () => {
     // the user completes the form and submits
     await page.locator("input").nth(3).fill("中共党员");
     await page.locator("input").nth(4).fill("420100200001010000");
+    await page.locator("input").nth(5).fill("看好示例汽车的方向");
     await new Promise((r) => setTimeout(r, 500));
     await page.locator("button").click();
     await until(() => currentRun()?.state === "已投递");
     expect(domain.getApplication(app.id)).toMatchObject({ state: "submitted", resumeLabel: "通用版" });
-    expect(currentRun()!.learned).toEqual(["政治面貌"]);
-    const basics = listFacts(db).items.filter((f) => f.kind === "basic").map((f) => `${f.data.field}=${f.data.value}`);
+    expect(currentRun()!.learned).toEqual(["政治面貌", "为什么选择我司"]);
+    const basics = listFacts(db).items.filter((f) => f.kind === "basic").map((f) => `${f.data.field}=${f.data.value}${f.data.company ? `@${f.data.company}` : ""}`);
     expect(basics).toContain("政治面貌=中共党员");
+    expect(basics).toContain("为什么选择我司=看好示例汽车的方向@示例汽车"); // a question about the company: kept for that company
     expect(basics.join()).not.toContain("4201");
   }, 60_000);
 });

@@ -11,30 +11,41 @@
  * one open core requirement is a skill the person can still pick up, with a date). What a rule kept out is listed, not
  * dropped — the person can put one back, which also undoes the rule. Rules come only from the person's own choices
  * on a card (不投 → 这家公司 / 这类岗位 / 这个城市 / 这个集团只投一个); nothing an agent wrote is a rule.
- * ponytail: no model call here — the two lines on a card quote what the assessment already found; a deep match on the
- * chosen cards is the upgrade.
+ * The two lines on a card quote what the rule assessment found; after the list is made, the model's deep match
+ * (service/fit.ts) rewords the 新机会 / 可补 cards when the allowance allows — at most DEEP_PER_WEEK calls a week, held
+ * like other background work, and only lines whose quote is the post's own text replace the rule wording (D-33).
+ * A fourth slot, 重点公司 (≤1): a company the person marked 重点 that has no open post but a known way to apply (D-35).
  */
 import { ulid } from "ulid";
 import { json, now, tx, type Db } from "../db.js";
 import type { Services } from "../services.js";
-import { DomainError, NotFound } from "./domain.js";
+import { DomainError, NotFound, sha } from "./domain.js";
 import { listFacts, upsertFact, removeFact } from "./profile.js";
 import { beijingDay } from "./deadlines.js";
 import { groupOf } from "./same-company.js";
+import { PLACE } from "./intel.js";
 import { low, terms, levelOf, minLevel } from "../recommenders/common.js";
 import { assess, userSide, parseJd, label, type Assessment, type Judgement } from "../recommenders/fit.js";
 import { conceptsIn, concept } from "../recommenders/concepts.js";
 import { tagCompany } from "../recommenders/index.js";
 import { isAggregate } from "../data/index.js";
+import { deepFit, profileText } from "./fit.js";
+import { asBackground } from "../budget/index.js";
+import { parseJsonWithRepair, contentText } from "@earendil-works/pi-ai";
+import { withPurpose } from "./usage.js";
 
-export type Slot = "new" | "decide" | "fill";
-export type Decision = "pending" | "apply" | "skip" | "hold" | "fill";
+export type Slot = "new" | "decide" | "fill" | "company";
+export type Decision = "pending" | "apply" | "skip" | "hold" | "fill" | "seen";
 export type RuleKind = "company" | "type" | "city" | "group";
 export interface Rule { kind: RuleKind; value: string }
 export interface Card {
   key: string; slot: Slot; positionId: string; applicationId?: string; companyId: string; company: string; title: string; cities: string[]; closesAt: string | null;
   cityRank: number; tier?: string; why: string; gap: string; notes: string[]; group?: string; groupApplied: string[];
   gapConcept?: string; unlocks?: number; expiresAt?: string; decision: Decision; reason?: string; detail?: string;
+  /** 补一下: the plan written once by the model, or why there is none */
+  plan?: string; planNote?: string;
+  /** a 重点公司 card: the evidence of how to apply, each a link */
+  links?: { text: string; url: string }[];
 }
 export interface Skipped { reason: string; rule?: Rule; positionId: string; company: string; title: string }
 export interface Shortlist { id: string; week: string; at: string; cards: Card[]; skipped: Skipped[]; skippedTotal: number; skippedBy: Record<string, number> }
@@ -248,7 +259,7 @@ function decideCards(db: Db, me: Me, rules: Rules, applied: Map<string, string[]
     if (p.decision === "fill" && was.expiresAt && was.expiresAt < today) continue; // ran out: listed as skipped by the maker
     const card = toCard(r, assessed(db, r, me), me, rules, applied, today, "decide");
     card.notes.unshift(p.decision === "hold" ? "上周先放着的：这次定一下" : `上周说补一下（${was.gapConcept ?? ""}）：补了没？到 ${was.expiresAt} 为止`);
-    if (p.decision === "fill") { card.gapConcept = was.gapConcept; card.expiresAt = was.expiresAt; }
+    if (p.decision === "fill") { card.gapConcept = was.gapConcept; card.expiresAt = was.expiresAt; card.plan = was.plan; card.planNote = was.planNote; }
     out.push(card);
   }
   for (const a of db.prepare(`select a.id app_id, a.updated_at, p.id, p.title, p.cities, p.jd_text, c.closes_at, co.id company_id, co.name company from application a join position p on p.id = a.position_id
@@ -260,6 +271,52 @@ function decideCards(db: Db, me: Me, rules: Rules, applied: Map<string, string[]
       why: `草稿放了 ${days} 天`, gap: left != null && left < 0 ? "已过截止：核实有没有延期，否则不投" : "投还是不投？", notes: left != null && left >= 0 ? [`还剩 ${left} 天`] : [], groupApplied: [], decision: "pending" });
   }
   return out.slice(0, MAX_DECIDE);
+}
+
+/** What a URL is called on a card: its host, without www. */
+const hostOf = (u: string) => { try { return new URL(u).host.replace(/^www\./, ""); } catch { return u; } };
+
+/**
+ * 重点公司: at most one card a week for a company the person marked 重点 that has no open post in the library but a known
+ * way to apply — its own site on record (company_site), an apply or notice link of any of its campaigns, or a captured
+ * article naming it. The company whose evidence is newest comes first; one the person said 看过了 comes back only with
+ * evidence newer than that. ponytail: a captured article is matched by the company's name in its title.
+ */
+export function companyCard(db: Db, rules: Rules, today: string): Card | null {
+  const cos = db.prepare(`select co.id, co.name from company co where exists (select 1 from recommendation r where r.company_id = co.id and r.mode = 'manual' and r.tag = '重点')
+      and not exists (select 1 from position p join campaign c on c.id = p.campaign_id where c.company_id = co.id and p.status = 'open')`).all() as { id: string; name: string }[];
+  // the same brand followed under another legal name that does post (示例（北京）机器人 / 示例海洋科技集团): not "no post"
+  // ponytail: the brand is the name's first 4 characters after a leading place; a person merging the two is the real fix
+  const brand = (n: string) => n.normalize("NFKC").replace(PLACE, "").slice(0, 4);
+  const posting = new Set((db.prepare(`select co.name from company co where exists (select 1 from recommendation r where r.company_id = co.id and r.mode = 'manual' and r.tag = '重点')
+      and exists (select 1 from position p join campaign c on c.id = p.campaign_id where c.company_id = co.id and p.status = 'open')`).all() as { name: string }[]).map((r) => brand(r.name)));
+  let best: { card: Card; at: string } | null = null;
+  for (const co of cos) {
+    if (rules.blocked.has(co.id) || posting.has(brand(co.name))) continue;
+    const seen = (db.prepare("select max(decided_at) at from shortlist_item where key = ? and decision in ('seen', 'skip')").get(`co:${co.id}`) as { at: string | null }).at ?? "";
+    const ev: { line: string; link: { text: string; url: string }; at: string }[] = [];
+    for (const r of db.prepare("select site_key, basis_url, verified_at from company_site where company_id = ? and status = 'active' and (expires_at is null or expires_at > ?) order by verified_at desc limit 2").all(co.id, now()) as { site_key: string; basis_url: string; verified_at: string }[])
+      ev.push({ line: `官网 ${r.site_key}：在官网的招聘或加入我们页面投递`, link: { text: `官网 ${r.site_key}`, url: /^https?:/.test(r.site_key) ? r.site_key : `https://${r.site_key}` }, at: r.verified_at });
+    for (const r of db.prepare("select cohort, batch, apply_url, notice_url, closes_at, updated_at from campaign where company_id = ? and (apply_url <> '' or notice_url <> '') order by updated_at desc limit 3").all(co.id) as { cohort: string; batch: string; apply_url: string; notice_url: string; closes_at: string | null; updated_at: string }[]) {
+      const what = [r.cohort, r.batch].filter(Boolean).join(" ") || "招聘";
+      const left = daysLeft(r.closes_at, today);
+      const when = left == null ? "" : left < 0 ? "（已过截止，看看有没有补录）" : `（还剩 ${left} 天截止）`;
+      if (r.apply_url) ev.push({ line: `${what}投递入口 ${hostOf(r.apply_url)}${when}`, link: { text: `${what}投递入口`, url: r.apply_url }, at: r.updated_at });
+      if (r.notice_url && r.notice_url !== r.apply_url) ev.push({ line: `${what}招聘公告${r.apply_url ? "" : `：按公告里写的方式投${when}`}`, link: { text: `${what}招聘公告`, url: r.notice_url }, at: r.updated_at });
+    }
+    const short = co.name.replace(/(股份)?有限(责任)?公司$|集团$/, "");
+    if (short.length >= 2)
+      for (const r of db.prepare("select url, title, created_at from capture where instr(title, ?) > 0 order by created_at desc limit 2").all(short) as { url: string; title: string; created_at: string }[])
+        ev.push({ line: `你收藏的文章「${r.title.slice(0, 40)}」里写了怎么投`, link: { text: `文章：${r.title.slice(0, 24)}`, url: r.url }, at: r.created_at });
+    if (!ev.length) continue;
+    const at = ev.map((e) => e.at).sort().at(-1)!;
+    if (seen && at <= seen) continue;
+    if (best && at <= best.at) continue;
+    const links = [...new Map(ev.map((e) => [e.link.url, e.link])).values()].slice(0, 4);
+    best = { at, card: { key: `co:${co.id}`, slot: "company", positionId: "", companyId: co.id, company: co.name, title: "还没有在招的岗位", cities: [], closesAt: null, cityRank: 0,
+      why: "你标了重点，岗位库里还没有它在招的岗位", gap: ev[0].line, notes: ["重点公司"], groupApplied: [], links, decision: "pending" } };
+  }
+  return best?.card ?? null;
 }
 
 /** Make this week's list and keep it. */
@@ -277,7 +334,8 @@ export function runShortlist(s: Services, nowMs = Date.now()): Shortlist {
     const was = json.parse(p.card_json, {} as Partial<Card>);
     if (was.expiresAt && was.expiresAt < today && was.company && was.title) skipped.unshift({ reason: `可补到期没补（${was.gapConcept ?? ""}）`, positionId: p.key, company: was.company, title: was.title });
   }
-  const all = [...cards.filter((c) => c.slot === "new"), ...decideCards(db, me, rules, applied, today, nowMs), ...cards.filter((c) => c.slot === "fill")];
+  const co = companyCard(db, rules, today);
+  const all = [...cards.filter((c) => c.slot === "new"), ...decideCards(db, me, rules, applied, today, nowMs), ...cards.filter((c) => c.slot === "fill"), ...(co ? [co] : [])];
   // what a rule or the cap kept out is what the person may want back: those stay in the kept part; the rest is counted
   const kind = (x: Skipped) => x.rule ? `规则：${x.rule.kind === "company" ? "不投的公司" : x.rule.kind === "type" ? "排除词" : x.rule.kind === "city" ? "不去的城市" : "集团只投一个"}` : x.reason.startsWith("超出") ? "超出张数" : x.reason.startsWith("可补") ? "可补到期" : x.reason.startsWith("核心") ? "你说过没做过" : "城市不在名单";
   const skippedBy: Record<string, number> = {};
@@ -332,6 +390,10 @@ export function decideCard(s: Services, p: { runId: string; key: string; decisio
   const card = list.cards.find((c) => c.key === p.key);
   if (!card) throw new NotFound(`card ${p.key}`);
   const today = beijingDay(new Date());
+  // a 重点公司 card has no post: 看过了, or 不投这家 (the company rule)
+  if (card.slot === "company" ? !(p.decision === "seen" || (p.decision === "skip" && (p.reason ?? "company") === "company")) : p.decision === "seen")
+    throw new DomainError("BAD_INPUT", card.slot === "company" ? "这张卡只能选「看过了」或「不投这家」" : "「看过了」只用在重点公司卡上");
+  if (card.slot === "company" && p.decision === "skip") p.reason = "company";
   if (p.decision === "apply") {
     if (!card.applicationId && !db.prepare("select 1 from application where position_id = ?").get(card.positionId)) {
       const a = s.domain.createApplication(card.positionId, "", "每周短名单：本人选了「投」", "human:shortlist");
@@ -386,10 +448,158 @@ export function restoreCard(s: Services, p: { runId: string; positionId: string 
   return list;
 }
 
+export const DEEP_PER_WEEK = 15;
+
+/** A model line kept only when its 「…」 is the post's own text (spaces aside); anything else is a judgement without a quote. */
+export function quotedLine(item: string, post: string): string | null {
+  const m = /^\s*「([^」]{2,80})」/.exec(item);
+  const flat = (t: string) => low(t).replace(/\s+/g, "");
+  return m && flat(post).includes(flat(m[1])) ? item.trim().slice(0, 120) : null;
+}
+
+/** The two lines from a deep match, or null when neither quotes the post. No gaps at all reads as 「要求都对得上」, as the rules say it. */
+export function deepWording(fit: { meets: string[]; gaps: string[] }, post: string): { why?: string; gap?: string } | null {
+  const why = fit.meets.map((m) => quotedLine(m, post)).find(Boolean) ?? undefined;
+  const gap = fit.gaps.length ? fit.gaps.map((g) => quotedLine(g, post)).find(Boolean) ?? undefined : why ? "要求都对得上" : undefined;
+  return why || gap ? { why, gap } : null;
+}
+
+/**
+ * After the list is made: the 新机会 / 可补 cards still undecided get their two lines from the model's deep match. A deep
+ * match already made against the current profile is read, not asked again. The calls run as background work
+ * `shortlist_fit` (held by the gate like lead lookups); a refusal stops the rest, a model error skips that card — either
+ * way the rule wording stays, and the list is never failed. Returns how many cards were reworded.
+ * ponytail: the weekly count is read from llm_usage (purpose shortlist.fit), so a call the provider did not report is
+ * not counted beyond this run.
+ */
+export async function deepenShortlist(s: Services, runId: string, nowMs = Date.now()): Promise<number> {
+  const db = s.domain.db;
+  const to = s.llm?.route?.();
+  if (!s.llm || to?.kind === "waiting" || to?.kind === "unavailable") return 0; // nobody answers now: no jobs left for the agent
+  const since = new Date(`${weekOf(nowMs)}T00:00:00`).toISOString();
+  let left = DEEP_PER_WEEK - (db.prepare("select count(*) n from llm_usage where purpose = 'shortlist.fit' and at >= ?").get(since) as { n: number }).n;
+  const hash = sha(profileText(s));
+  const fitOf = (id: string) => {
+    const r = db.prepare("select meets, gaps, profile_hash from position_fit where position_id = ?").get(id) as { meets: string; gaps: string; profile_hash: string } | undefined;
+    return r && r.profile_hash === hash ? { meets: json.parse(r.meets, [] as string[]), gaps: json.parse(r.gaps, [] as string[]) } : null;
+  };
+  const postOf = (id: string) => {
+    const p = db.prepare("select p.title, p.jd_text, p.degree_req, p.major_req, c.degree_req c_degree, c.major_req c_major from position p join campaign c on c.id = p.campaign_id where p.id = ?").get(id) as Record<string, string | null> | undefined;
+    return p ? Object.values(p).filter(Boolean).join("\n") : "";
+  };
+  const lines = new Map<string, { why?: string; gap?: string }>();
+  for (const c of load(db, runId).cards) {
+    if (c.slot === "decide" || c.decision !== "pending") continue;
+    const post = postOf(c.positionId);
+    if (!post) continue;
+    let w = (() => { const f = fitOf(c.positionId); return f && deepWording(f, post); })();
+    if (!w) {
+      if (left <= 0) break;
+      left--;
+      try { await asBackground("shortlist_fit", () => deepFit(s, c.positionId, "shortlist.fit")); }
+      catch (e: any) { if (e?.code === "BUDGET_DEFERRED" || e?.code === "MODEL_DELEGATED") break; continue; }
+      const f = fitOf(c.positionId);
+      w = f && deepWording(f, post);
+    }
+    if (w) lines.set(c.key, w);
+  }
+  if (!lines.size) return 0;
+  // the person may have decided on a card meanwhile: read the list again and touch only the undecided ones
+  const list = load(db, runId);
+  const upd = db.prepare("update shortlist_item set card_json = ? where run_id = ? and key = ? and decision = 'pending'");
+  let n = 0;
+  tx(db, () => {
+    for (const c of list.cards) {
+      const w = lines.get(c.key);
+      if (!w || c.decision !== "pending") continue;
+      if (w.why) c.why = w.why;
+      if (w.gap) c.gap = w.gap;
+      upd.run(JSON.stringify(c), runId, c.key); n++;
+    }
+    db.prepare("update shortlist_run set json = ? where id = ?").run(JSON.stringify(list), runId);
+  });
+  if (n) s.onDataChanged?.();
+  return n;
+}
+
+/** Change one card of a kept list in place (the list and its item row), then tell the screens. */
+function patchCard(s: Services, runId: string, key: string, f: (c: Card) => void): void {
+  const db = s.domain.db;
+  const list = load(db, runId);
+  const c = list.cards.find((x) => x.key === key);
+  if (!c) return;
+  f(c);
+  tx(db, () => {
+    db.prepare("update shortlist_run set json = ? where id = ?").run(JSON.stringify(list), runId);
+    db.prepare("update shortlist_item set card_json = ? where run_id = ? and key = ?").run(JSON.stringify(c), runId, key);
+  });
+  s.onDataChanged?.();
+}
+
+const PLAN_SYSTEM = `你帮一位在读研究生补上一个岗位要求。给你：岗位名、岗位里他还没有证据的那条要求（原文），以及他资料里的项目和经历。
+只依据给出的内容，不要编造他没有的经历。从他的项目里挑一个最接得上的，写一件具体的小事：几天内做得完，做完就能在简历或面试里说清自己有这项能力。
+只输出 JSON：{"project": "所用项目的名称，照抄资料里的写法", "task": "要做的那件小事（60 字内，大白话）", "time": "大约多久，如 两个晚上、三天"}`;
+
+/** Other open posts that ask the same skill and do not see it in the person's evidence yet. */
+function sameSkillPosts(db: Db, positionId: string, conceptId: string): number {
+  let n = 0;
+  for (const r of db.prepare("select a.json from position_assessment a join position p on p.id = a.position_id where p.status = 'open' and p.id <> ?").all(positionId) as { json: string }[]) {
+    const a = json.parse(r.json, null as Assessment | null);
+    if (a?.judgements?.some((j) => j.status !== "supported" && j.status !== "transferable" && j.concepts.includes(conceptId))) n++;
+  }
+  return n;
+}
+
+/**
+ * 补一下: once per card, one model call (held background work `shortlist_fill`, purpose shortlist.fill) for a short plan —
+ * the missing requirement as the post words it, one small task on one of the person's own projects, about how long;
+ * the days left and how many other posts the same skill opens are counted here, not asked. No model, a refusal, an
+ * error or a plan on no project of theirs: the card says so, and no plan is made up by rules.
+ */
+export async function fillPlan(s: Services, runId: string, key: string, nowMs = Date.now()): Promise<void> {
+  const db = s.domain.db;
+  const card = load(db, runId).cards.find((c) => c.key === key);
+  if (!card || card.plan || card.planNote) return; // once
+  const note = (planNote: string) => patchCard(s, runId, key, (c) => { c.planNote = planNote; });
+  const quote = /「([^」]+)」/.exec(card.gap)?.[1];
+  if (!quote) return note("这张卡没读出具体差哪一条要求，没写补的计划");
+  const own = listFacts(db).items.filter((f) => ["project", "experience", "publication"].includes(f.kind))
+    .map((f) => ({ name: f.data.title || [f.data.org, f.data.role].filter(Boolean).join(" "), text: (f as any).statement || Object.values(f.data ?? {}).join(" / ") })).filter((x) => x.name);
+  if (!own.length) return note("资料里还没有项目或经历，没法接着你自己的项目写计划；先在「资料」里补上");
+  const to = s.llm?.route?.();
+  if (!s.llm || to?.kind === "waiting" || to?.kind === "unavailable") return note("现在没有能用的模型，没写补的计划");
+  let o: any;
+  try {
+    const text = `岗位：${card.company} · ${card.title}\n还差的要求（原文）：「${quote}」\n\n他的项目和经历：\n${own.map((x) => `- ${x.text}`).join("\n")}`;
+    const msg = await asBackground("shortlist_fill", () => withPurpose("shortlist.fill", card.positionId, () =>
+      s.llm!.models.completeSimple(s.llm!.model(), { systemPrompt: PLAN_SYSTEM, messages: [{ role: "user", content: [{ type: "text", text }], timestamp: Date.now() }] }, { reasoning: "low" })));
+    o = parseJsonWithRepair<any>(contentText(msg.content).trim().replace(/^```(?:json)?\s*|\s*```$/g, ""));
+  } catch (e: any) {
+    return note(e?.code === "BUDGET_DEFERRED" ? `额度要先留给你自己用（${String(e.message).slice(0, 60)}），这次没写补的计划` : "写补的计划时模型出错了，这次没写");
+  }
+  const flat = (t: unknown) => low(String(t ?? "")).replace(/\s+/g, "");
+  const said = flat(o?.project);
+  const project = said.length >= 2 ? own.find((x) => flat(x.name) && (said.includes(flat(x.name)) || flat(x.name).includes(said))) : undefined;
+  const task = String(o?.task ?? "").trim().slice(0, 80), time = String(o?.time ?? "").trim().slice(0, 20);
+  if (!project || !task) return note("模型给的计划没接上你资料里的项目，没有采用");
+  const left = daysLeft(card.closesAt, beijingDay(new Date(nowMs)));
+  const a = json.parse((db.prepare("select json from position_assessment where position_id = ?").get(card.positionId) as { json: string } | undefined)?.json ?? "", null as Assessment | null);
+  const conceptId = a?.judgements.find((j) => j.status !== "supported" && (j.quote.includes(quote) || quote.includes(j.quote.slice(0, 60))))?.concepts[0];
+  const others = card.unlocks ? card.unlocks - 1 : conceptId ? sameSkillPosts(db, card.positionId, conceptId) : null;
+  const plan = [
+    `差的：「${quote}」`,
+    `怎么补：${task}（接着你的「${project.name}」做）`,
+    ...(time ? [`大约要：${time}`] : []),
+    left == null ? "这个岗位没写截止日期" : left < 0 ? "这个岗位已过截止" : left === 0 ? "这个岗位今天截止" : `这个岗位还剩 ${left} 天截止`,
+    ...(others != null ? [others ? `补上这一项，还能投另外 ${others} 个要它的岗位` : "暂时没有别的岗位要这一项"] : []),
+  ].join("\n");
+  patchCard(s, runId, key, (c) => { c.plan = plan; });
+}
+
 /** Lines for the Monday brief notice. */
 export function shortlistLines(list: Shortlist): string[] {
   if (!list.cards.length) return [];
-  const name = (c: Card) => `· ${c.slot === "decide" ? "要决定 · " : c.slot === "fill" ? "可补 · " : ""}${c.company} · ${c.title}`;
+  const name = (c: Card) => `· ${c.slot === "decide" ? "要决定 · " : c.slot === "fill" ? "可补 · " : c.slot === "company" ? "重点公司 · " : ""}${c.company} · ${c.title}`;
   const by = Object.entries(list.skippedBy ?? {}).map(([k, n]) => `${k} ${n}`).join("、");
   return [`**本周短名单 · ${list.cards.length} 张**`, ...list.cards.slice(0, 10).map(name), ...(list.skippedTotal ? [`· 另有 ${list.skippedTotal} 个没上卡（${by}），在 Zhiro「今日」里看和放回`] : ["· 在 Zhiro「今日」里决定"])];
 }

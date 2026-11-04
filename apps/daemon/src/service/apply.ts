@@ -102,6 +102,8 @@ const READ_FORM = () => {
   // the field wrapper, skipping the inner "control" / "content" boxes whose class names also contain form-item
   // (Ant Design .ant-form-item-control, Element .el-form-item__content)
   const itemOf = (el: Element): Element | null => { let it = el.closest(ITEM); while (it && /(form-item-control|form-item__content|FormItem-control)/i.test(it.className?.toString() ?? "")) it = it.parentElement?.closest(ITEM) ?? null; return it; };
+  // option and button words ("是" / "否" / "无" / "请选择") are never a field's caption; kept in step with OPTION_WORD below
+  const OPTION_WORD = /^(无|否|是|有|没有|请选择|选择|男|女|确定|取消|添加|删除)$/;
   const SECTION = ".createFormSection-title,h1,h2,h3,h4,h5,legend,[class*='blockTitle'],[class*='block-title'],[class*='section-title'],[class*='sectionTitle'],[class*='group-title'],[class*='groupTitle'],[class*='module-title']";
   // option = a radio / checkbox: the <label> around it names the option, never the question
   const labelOf = (el: Element, option = false): string => {
@@ -114,11 +116,11 @@ const READ_FORM = () => {
     const own = item?.querySelector(":scope > .atsx-form-item-label, .field-label .topichtml, .form-item__text");
     if (own && text(own)) return text(own);
     // a <label> wrapping an input is an option ("是" / "否"), not the field's caption
-    const inItem = item && Array.from(item.querySelectorAll(LABEL)).find((l) => !l.contains(el) && !l.querySelector("input") && text(l) && text(l).length <= 30);
+    const inItem = item && Array.from(item.querySelectorAll(LABEL)).find((l) => !l.contains(el) && !l.querySelector("input") && text(l) && text(l).length <= 30 && !OPTION_WORD.test(text(l)));
     if (inItem) return text(inItem);
     const wrap = option ? null : el.closest("label"); if (wrap && text(wrap)) return text(wrap);
     const td = el.closest("td")?.previousElementSibling; if (td && text(td)) return text(td);
-    const prev = (item ?? el).previousElementSibling; if (prev && text(prev) && text(prev).length <= 20) return text(prev);
+    const prev = (item ?? el).previousElementSibling; if (prev && text(prev) && text(prev).length <= 20 && !OPTION_WORD.test(text(prev))) return text(prev);
     return "";
   };
   const sectionOf = (el: Element): string => {
@@ -165,7 +167,7 @@ const READ_FORM = () => {
       const group = itemOf(el) ?? el.parentElement?.parentElement ?? el;
       if (seen.has(group)) continue;
       const opts = Array.from(group.querySelectorAll(`input[type="${t}"]`)).map(optText);
-      seen.add(group); if (visible(el) || visible(group)) out.push({ local: stamp(group), value: Array.from(group.querySelectorAll(`input[type="${t}"]`)).filter((o) => (o as HTMLInputElement).checked).map(optText).join("、"), section: sectionOf(group), label: labelOf(el, true) || text(group.querySelector(LABEL)), type: t, required: required(el), options: opts, placeholder: "", name: el.getAttribute("name") ?? "", entry: entryOf(group) });
+      seen.add(group); if (visible(el) || visible(group)) out.push({ local: stamp(group), value: Array.from(group.querySelectorAll(`input[type="${t}"]`)).filter((o) => (o as HTMLInputElement).checked).map(optText).join("、"), section: sectionOf(group), label: labelOf(el, true) || Array.from(group.querySelectorAll(LABEL)).map(text).find((x) => x && !OPTION_WORD.test(x) && !opts.includes(x)) || "", type: t, required: required(el), options: opts, placeholder: "", name: el.getAttribute("name") ?? "", entry: entryOf(group) });
     } else if (t === "file") push(el, "file", [], "");
     else {
       const custom = el.closest(".atsx-select, .atsx-date-picker, [class*='atsx-date-picker'], .atsx-cascader, .ant-calendar-picker, .ant-select, .el-select, .arco-select, .ant-picker, .el-date-editor, .ant-cascader, .el-cascader, [role='combobox'], [class*='Select-container'], [class*='select-container'], [class*='Dropdown-container'], [class*='DatePicker'], [class*='Cascader'], .phoenix-select, [class*='phoenix-select'], .phoenix-auto-complete-container")
@@ -232,9 +234,22 @@ const NOT_EDU = /区域|地区|所在地|所在省|所在市|城市|省份|国�
 /** 「海外院校毕业」「是否留学」: a yes / no question about the education records, not the school's name. */
 const ABROAD = /海外|境外|留学|国外/;
 
+/** Words of an option or a button, never a question: a field "labelled" so was read wrong (READ_FORM keeps its own copy). */
+export const OPTION_WORD = /^(无|否|是|有|没有|请选择|选择|男|女|确定|取消|添加|删除)$/;
 export const normLabel = (s: string) => s.replace(/[（(][^）)]*[）)]/g, "").replace(/[*＊:：\s]/g, "").replace(/^(您的|你的|请输入|请填写|请选择)/, "").trim();
 // 「是否接受意向城市调剂」 is a yes / no question, not the city (it got 「武汉」 on 大疆, 2026-10-14)
 export const canonOf = (label: string) => (/是否/.test(label) ? "" : CANON.find(([re]) => re.test(normLabel(label)))?.[1] ?? "");
+
+/** A question about the company or the post asked: its answer is for that company (「为什么选择我司」「对岗位的理解」). */
+export const COMPANY_ASKED = /我司|贵司|贵公司|本公司|公司|集团|为什么|为何|原因|动机|了解|认识|看法|理解|加入|应聘|岗位|职位|部门|业务|产品|项目组/;
+/**
+ * May an answer the person typed on a form, kept under that form's own label, be copied into this company's form? An
+ * answer to a question about the company only where it was given (one learned before answers carried their company is
+ * not copied at all); anything else anywhere, long or short — 补充信息 / 在校职务 are the same text on every form
+ * (replayed on the first library's 15 saved forms: a length rule held back only such self-descriptions).
+ */
+export const reusableAnswer = (label: string, learnedAt: string | undefined, company: string | undefined): boolean =>
+  !COMPANY_ASKED.test(label) || (!!learnedAt && !!company && learnedAt === company);
 
 export interface Mapped extends FormField { factKey: string; proposed: string; source: string; status: "可填" | "由你填写" | "不代填" | "画像里没有" | "上传文件" | "已有内容" | "多段"; how: "规则" | "模型" | "文档" | "" }
 
@@ -291,11 +306,24 @@ function valueFor(facts: any[], key: string, section: string, ref?: Reference | 
   return { value: "", source: "" };
 }
 
-/** Closest option to a profile value ("博士" → "博士研究生"); empty when nothing is close enough to propose. */
-export const pickOption = (options: string[], value: string) => {
-  for (const v of optionAliases(value)) { const hit = options.find((o) => o === v) ?? options.find((o) => o.includes(v) || v.includes(o)); if (hit) return hit; }
-  return "";
-};
+/**
+ * The option for a profile value: one equal to it (or to an alias: CET-6 → 大学英语六级) first, else the single option that
+ * contains it or is contained in it ("博士" → "博士研究生"). Several such (「党员」 in 中共党员 / 中共预备党员) is no answer:
+ * the first of them was picked before, and it was the wrong one as often as not.
+ */
+export function optionMatch(options: string[], value: string): { hit: string } | { several: string[] } | null {
+  const vs = optionAliases(value);
+  const exact = options.find((o) => vs.includes(o));
+  if (exact) return { hit: exact };
+  for (const v of vs) {
+    const xs = [...new Set(options.filter((o) => o && (o.includes(v) || v.includes(o))))];
+    if (xs.length === 1) return { hit: xs[0] };
+    if (xs.length > 1) return { several: xs };
+  }
+  return null;
+}
+/** Closest option to a profile value; empty when no single option is close enough to propose. */
+export const pickOption = (options: string[], value: string) => { const m = optionMatch(options, value); return m && "hit" in m ? m.hit : ""; };
 
 const LLM_KEYS = ["basic.姓名", "basic.邮箱", "basic.电话", "basic.微信", "basic.出生年月", "basic.性别", "basic.政治面貌", "basic.籍贯", "basic.民族", "basic.现居地", "basic.预计毕业时间", "basic.英语水平", "basic.个人主页", "basic.工作经验", "basic.自我描述", "education.school", "education.degree", "education.major", "education.period", "publication", "patent", "project", "experience", "award", "skill", "none"];
 
@@ -309,8 +337,11 @@ key 只能取：${LLM_KEYS.join(" / ")}。publication/patent/project/experience/
   return new Map((o.map ?? []).filter((m) => LLM_KEYS.includes(m.key) && m.key !== "none").map((m) => [m.index, m.key]));
 }
 
-/** `ref`: the person's 「系统填写」 document, preferred over the profile for what it answers (apply-reference.ts). */
-export async function mapFields(db: Db, llm: Llm | undefined, fields: FormField[], ref?: Reference | null): Promise<Mapped[]> {
+/**
+ * `ref`: the person's 「系统填写」 document, preferred over the profile for what it answers (apply-reference.ts).
+ * `company`: whose form this is — an answer to a question about another company is not copied here.
+ */
+export async function mapFields(db: Db, llm: Llm | undefined, fields: FormField[], ref?: Reference | null, company?: string): Promise<Mapped[]> {
   const facts = listFacts(db).items;
   const out: Mapped[] = fields.map((f) => ({ ...f, factKey: "", proposed: "", source: "", status: "画像里没有", how: "" }));
   const open: Mapped[] = [];
@@ -333,8 +364,12 @@ export async function mapFields(db: Db, llm: Llm | undefined, fields: FormField[
     if (edu) { m.factKey = `education.${edu[1]}`; m.how = "规则"; }
     else if (canon) { m.factKey = `${PERSONAL_CHOICE.test(label) ? "pref" : "basic"}.${canon}`; m.how = "规则"; }
     else if (PERSONAL_CHOICE.test(label)) { m.factKey = `pref.${label}`; m.how = "规则"; }
-    // anything the user answered once under this very label, on any site
-    else if (label && facts.some((f) => (f.kind === "basic" || f.kind === "preference") && normLabel(f.data.field ?? "") === label)) { m.factKey = `basic.${label}`; m.how = "规则"; }
+    // anything the user answered once under this very label: on any site, except an answer about a company, only at that company
+    else if (label && facts.some((f) => (f.kind === "basic" || f.kind === "preference") && normLabel(f.data.field ?? "") === label)) {
+      const f = facts.find((x) => (x.kind === "basic" || x.kind === "preference") && normLabel(x.data.field ?? "") === label)!;
+      if (reusableAnswer(label, f.data.company, company)) { m.factKey = `basic.${label}`; m.how = "规则"; }
+      else { m.status = "由你填写"; m.source = f.data.company ? `上次在「${f.data.company}」答过这一题，是答那家公司的，这次请你自己写` : "以前答过这一题，但这是问公司的题，要按公司写，这次请你自己写"; }
+    }
     else if (!eduBlock && /经历|经验|项目|实习|工作|获奖|论文|专利/.test(m.section)) { m.factKey = /项目/.test(m.section) ? "project" : /获奖/.test(m.section) ? "award" : /论文|专利/.test(m.section) ? "publication" : "experience"; m.how = "规则"; }
     else open.push(m);
   }
@@ -377,7 +412,14 @@ export async function mapFields(db: Db, llm: Llm | undefined, fields: FormField[
       if (nums.length !== 1) { m.status = "画像里没有"; m.source = `这一栏只收数字，画像里是「${value}」`; continue; }
       value = nums[0];
     }
-    m.proposed = m.options.length ? pickOption(m.options, value) || value : value;
+    const pick = m.options.length ? optionMatch(m.options, value) : null;
+    // a native dropdown lists every option: no single match is the person's to choose, with the reason
+    if (m.type === "select" && m.options.length && !(pick && "hit" in pick)) {
+      m.status = "由你填写";
+      m.source = pick ? `有几个选项都像「${value}」（${pick.several.slice(0, 3).join("、")}），请你选` : `选项里没有和「${value}」对得上的，请你选`;
+      continue;
+    }
+    m.proposed = pick && "hit" in pick ? pick.hit : value;
     m.status = "可填";
   }
   return out;

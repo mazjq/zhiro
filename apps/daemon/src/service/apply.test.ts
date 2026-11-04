@@ -57,6 +57,17 @@ describe("apply probe: mapping", () => {
 describe.skipIf(!CHROME)("apply probe: reading a real page in the dedicated Chrome profile", () => {
   afterAll(() => closeBrowser());
 
+  it("an option's or a button's words are never taken as a field's caption", async () => {
+    const { vault } = profileDb();
+    writeFileSync(join(vault, "opts.html"), `<meta charset="utf-8"><title>opts</title>
+      <div class="form-item"><label class="opt-label"><input type="radio" name="a" value="1">是</label><label class="opt-label"><input type="radio" name="a" value="0">否</label></div>
+      <div class="form-item"><span class="field-label">无</span><span class="field-label">是否有海外经历</span><input name="abroad"></div>
+      <span>请选择</span><div class="form-item"><input name="city"></div>`);
+    await openBrowser(vault, pathToFileURL(join(vault, "opts.html")).href, { headless: true });
+    const labels = (await readForm()).fields.map((f) => f.label);
+    expect(labels).toEqual(["", "是否有海外经历", ""]);
+  });
+
   it("Moka's hashed CSS-module structure: field titles are labels, blockTitle is the section, read-only 请选择 is a dropdown", async () => {
     const { vault } = profileDb();
     // structure copied from app.mokahr.com's apply form (2026-09): class = stable prefix + hash
@@ -135,6 +146,19 @@ describe("mapping from what the user answered before", () => {
 });
 
 describe("profile gaps", () => {
+  it("an option or a button read as a field's caption (「无」「否」「是」「请选择」) is not a missing field", () => {
+    const { vault, db } = profileDb();
+    mkdirSync(join(vault, "runs", "apply"), { recursive: true });
+    writeFileSync(join(vault, "runs", "apply", "b.json"), JSON.stringify({ form: [
+      ...["无", "否", "是", "请选择", "请选择：", "有"].map((label) => ({ section: "个人信息", label, type: "radio", status: "由你填写" })),
+      { section: "个人信息", label: "全日制", type: "radio", options: ["全日制", "非全日制"], status: "由你填写" },
+      { section: "个人信息", label: "婚育状况", type: "radio", options: ["未婚", "已婚"], status: "由你填写" },
+    ] }));
+    const names = profileGaps(db, vault).items.map((g) => g.field);
+    for (const w of ["无", "否", "是", "请选择", "", "有", "全日制"]) expect(names).not.toContain(w);
+    expect(names).toContain("婚育状况");
+  });
+
   it("lists what forms asked for first, then the common fields, never an entry's own fields or sensitive ones", async () => {
     const { vault, db } = profileDb();
     upsertFact(db, { kind: "basic", data: { field: "性别", value: "男" } }, "本人确认");
