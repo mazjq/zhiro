@@ -209,3 +209,12 @@ entries condense what still holds.
   appeared, 2 were kept out by the city list, 2 had titles naming nothing (an AI-coding post, a generic 技术研发). Reviewed
   by four agents with no shared context (a blank-sheet design, the job seeker's own view, an attack on the draft, the
   laziest cut); the attack found the tier premise, the replay confirmed it.
+- **D-33 · 2026-11-04 · 短名单细评: the model words the cards, the rules stay underneath.** After the weekly list is made
+  (D-32), the 新机会 / 可补 cards still undecided get their two lines from the deep match of service/fit.ts (the same
+  prompt and `position_fit` table; the prompt now asks each 满足 / 缺口 item to start with the post's words in 「」). A line
+  is used only when its 「…」 is found in the post's own text (title, JD, degree and major requirements, spaces and case
+  aside); otherwise the rule wording stays. The calls run as background work `shortlist_fit` (held by the gate like
+  lead lookups, purpose `shortlist.fit`), at most 15 a week counted from llm_usage; a deep match already made against
+  the current profile is reused. A refusal stops the run, a model error skips the card, and the list itself is made and
+  saved before any call, so neither ever fails it; the brief does not wait for it. Nothing is asked when background
+  work would go to the person's agent (it would leave jobs nobody asked for).
