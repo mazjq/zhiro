@@ -233,3 +233,63 @@ describe("补一下: a plan written once", async () => {
     }
   });
 });
+
+
+describe("重点公司 card: no open post, a known way to apply", async () => {
+  const { mkdtempSync } = await import("node:fs");
+  const { tmpdir } = await import("node:os");
+  const { join } = await import("node:path");
+  const { openDb } = await import("../db.js");
+  const { Domain } = await import("./domain.js");
+  const { createServices, testConfig } = await import("../services.js");
+  const { ingest } = await import("../data/index.js");
+  const { tagCompany } = await import("../recommenders/index.js");
+  const { addSite } = await import("./trust.js");
+  const { runShortlist, decideCard, shortlistLines } = await import("./shortlist.js");
+
+  function setup() {
+    const dir = mkdtempSync(join(tmpdir(), "zhiro-shortlist-co-"));
+    const db = openDb(join(dir, "t.db"));
+    const domain = new Domain(db);
+    const s = createServices({ db, domain, config: testConfig(dir, { sources: [] }) });
+    // 甲: only an old, closed post, but its batch has an apply link; 乙: only its own site on record; 丙: nothing known; 丁: an open post
+    ingest(domain, dir, "capture", "c1", [
+      { externalId: "j1", url: "https://example.org/jobs/j1", title: "算法工程师", company: "示例甲科技有限公司", locations: ["武汉"], publisher: "site:example", grade: "官方", isOriginal: true, confidence: 1, cohort: "2027届", batch: "校招" },
+      { externalId: "j2", url: "https://example.org/jobs/j2", title: "算法工程师", company: "示例丁科技有限公司", locations: ["武汉"], publisher: "site:example", grade: "官方", isOriginal: true, confidence: 1, cohort: "2027届", batch: "校招" },
+    ] as any);
+    const id = (name: string) => (db.prepare("select id from company where name = ?").get(name) as any)?.id as string;
+    db.prepare("update position set status = 'closed' where campaign_id in (select id from campaign where company_id = ?)").run(id("示例甲科技有限公司"));
+    db.prepare("update campaign set apply_url = 'https://jobs.example.org/jia', updated_at = '2026-10-01T00:00:00Z' where company_id = ?").run(id("示例甲科技有限公司"));
+    for (const n of ["示例甲科技有限公司", "示例乙电子有限公司", "示例丙机械有限公司", "示例丁科技有限公司"]) tagCompany(s, { companyName: n, tag: "重点", reason: "测试" });
+    addSite(db, { companyId: id("示例乙电子有限公司"), siteKey: "yi.example.org", rootKind: "exchange", basisUrl: "https://example.org/disclosure", basisQuote: "公司网址：yi.example.org", fingerprint: "test" });
+    return { s, db, id };
+  }
+
+  it("one card, for the company with the newest evidence; it says how to apply and links the evidence; 看过了 keeps it away until something new", () => {
+    const { s, db, id } = setup();
+    const list = runShortlist(s);
+    const cos = list.cards.filter((c) => c.slot === "company");
+    expect(cos).toHaveLength(1);
+    expect(cos[0]).toMatchObject({ company: "示例乙电子有限公司", gap: expect.stringContaining("官网 yi.example.org"), links: [{ text: "官网 yi.example.org", url: "https://yi.example.org" }] });
+    expect(shortlistLines(list)).toContain("· 重点公司 · 示例乙电子有限公司 · 还没有在招的岗位");
+    expect(() => decideCard(s, { runId: list.id, key: cos[0].key, decision: "apply" })).toThrow(/看过了/);
+    decideCard(s, { runId: list.id, key: cos[0].key, decision: "seen" });
+    const next = runShortlist(s, Date.now() + 60_000).cards.find((c) => c.slot === "company")!;
+    expect(next).toMatchObject({ company: "示例甲科技有限公司", gap: expect.stringContaining("投递入口 jobs.example.org"), links: expect.arrayContaining([expect.objectContaining({ url: "https://jobs.example.org/jia" })]) });
+    // a captured article naming 乙 later brings it back
+    db.prepare("insert into capture(id, url, title, text_path, publisher, created_at) values (?,?,?,?,?,?)").run("cap1", "https://example.org/a/1", "示例乙电子2027届校园招聘启动", "", "wechat", "2099-01-01T00:00:00Z");
+    expect(runShortlist(s, Date.now() + 120_000).cards.find((c) => c.slot === "company")!.company).toBe("示例乙电子有限公司");
+    expect(id("示例丙机械有限公司")).toBeTruthy();
+  });
+
+  it("不投这家 is the 不投 company rule; a company with an open post or no known way never gets this card", () => {
+    const { s, db } = setup();
+    const list = runShortlist(s);
+    const card = list.cards.find((c) => c.slot === "company")!;
+    decideCard(s, { runId: list.id, key: card.key, decision: "skip" });
+    expect(db.prepare("select 1 from recommendation where company_id = ? and tag = '不投'").get(card.companyId)).toBeTruthy();
+    const after = runShortlist(s, Date.now() + 60_000).cards.filter((c) => c.slot === "company").map((c) => c.company);
+    expect(after).toEqual(["示例甲科技有限公司"]);
+    expect(() => decideCard(s, { runId: list.id, key: list.cards.find((c) => c.slot !== "company")?.key ?? card.key, decision: "seen" })).toThrow();
+  });
+});

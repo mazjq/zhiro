@@ -226,3 +226,10 @@ entries condense what still holds.
   is one in the person's facts. No model, a gate refusal, an error, no project on file or a plan on a project they do
   not have: the card says so in one line, and no plan is made up by rules. Once per card; the 要决定 card next week
   carries it.
+- **D-35 · 2026-11-04 · 重点公司 card: a company followed before it posts.** The weekly list (D-32) gets a fourth slot of
+  at most one card: a company the person marked 重点 that has no open post in the library but a known way to apply —
+  its own site on record (`company_site`, active), an apply or notice link on any of its campaigns (with days left, or
+  a word that the date passed), or a captured article whose title names it (ponytail: by name). The card says how to
+  apply and links each piece of evidence; the company whose evidence is newest comes first. Decisions: 看过了 (`seen`,
+  a new value of shortlist.decide), after which the company comes back only with evidence newer than that; 不投这家, which
+  is the existing 不投 company rule. No other decision is taken on it.

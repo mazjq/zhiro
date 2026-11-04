@@ -14,6 +14,7 @@
  * The two lines on a card quote what the rule assessment found; after the list is made, the model's deep match
  * (service/fit.ts) rewords the 新机会 / 可补 cards when the allowance allows — at most DEEP_PER_WEEK calls a week, held
  * like other background work, and only lines whose quote is the post's own text replace the rule wording (D-33).
+ * A fourth slot, 重点公司 (≤1): a company the person marked 重点 that has no open post but a known way to apply (D-35).
  */
 import { ulid } from "ulid";
 import { json, now, tx, type Db } from "../db.js";
@@ -32,8 +33,8 @@ import { asBackground } from "../budget/index.js";
 import { parseJsonWithRepair, contentText } from "@earendil-works/pi-ai";
 import { withPurpose } from "./usage.js";
 
-export type Slot = "new" | "decide" | "fill";
-export type Decision = "pending" | "apply" | "skip" | "hold" | "fill";
+export type Slot = "new" | "decide" | "fill" | "company";
+export type Decision = "pending" | "apply" | "skip" | "hold" | "fill" | "seen";
 export type RuleKind = "company" | "type" | "city" | "group";
 export interface Rule { kind: RuleKind; value: string }
 export interface Card {
@@ -42,6 +43,8 @@ export interface Card {
   gapConcept?: string; unlocks?: number; expiresAt?: string; decision: Decision; reason?: string; detail?: string;
   /** 补一下: the plan written once by the model, or why there is none */
   plan?: string; planNote?: string;
+  /** a 重点公司 card: the evidence of how to apply, each a link */
+  links?: { text: string; url: string }[];
 }
 export interface Skipped { reason: string; rule?: Rule; positionId: string; company: string; title: string }
 export interface Shortlist { id: string; week: string; at: string; cards: Card[]; skipped: Skipped[]; skippedTotal: number; skippedBy: Record<string, number> }
@@ -269,6 +272,47 @@ function decideCards(db: Db, me: Me, rules: Rules, applied: Map<string, string[]
   return out.slice(0, MAX_DECIDE);
 }
 
+/** What a URL is called on a card: its host, without www. */
+const hostOf = (u: string) => { try { return new URL(u).host.replace(/^www\./, ""); } catch { return u; } };
+
+/**
+ * 重点公司: at most one card a week for a company the person marked 重点 that has no open post in the library but a known
+ * way to apply — its own site on record (company_site), an apply or notice link of any of its campaigns, or a captured
+ * article naming it. The company whose evidence is newest comes first; one the person said 看过了 comes back only with
+ * evidence newer than that. ponytail: a captured article is matched by the company's name in its title.
+ */
+export function companyCard(db: Db, rules: Rules, today: string): Card | null {
+  const cos = db.prepare(`select co.id, co.name from company co where exists (select 1 from recommendation r where r.company_id = co.id and r.mode = 'manual' and r.tag = '重点')
+      and not exists (select 1 from position p join campaign c on c.id = p.campaign_id where c.company_id = co.id and p.status = 'open')`).all() as { id: string; name: string }[];
+  let best: { card: Card; at: string } | null = null;
+  for (const co of cos) {
+    if (rules.blocked.has(co.id)) continue;
+    const seen = (db.prepare("select max(decided_at) at from shortlist_item where key = ? and decision in ('seen', 'skip')").get(`co:${co.id}`) as { at: string | null }).at ?? "";
+    const ev: { line: string; link: { text: string; url: string }; at: string }[] = [];
+    for (const r of db.prepare("select site_key, basis_url, verified_at from company_site where company_id = ? and status = 'active' and (expires_at is null or expires_at > ?) order by verified_at desc limit 2").all(co.id, now()) as { site_key: string; basis_url: string; verified_at: string }[])
+      ev.push({ line: `官网 ${r.site_key}：在官网的招聘或加入我们页面投递`, link: { text: `官网 ${r.site_key}`, url: /^https?:/.test(r.site_key) ? r.site_key : `https://${r.site_key}` }, at: r.verified_at });
+    for (const r of db.prepare("select cohort, batch, apply_url, notice_url, closes_at, updated_at from campaign where company_id = ? and (apply_url <> '' or notice_url <> '') order by updated_at desc limit 3").all(co.id) as { cohort: string; batch: string; apply_url: string; notice_url: string; closes_at: string | null; updated_at: string }[]) {
+      const what = [r.cohort, r.batch].filter(Boolean).join(" ") || "招聘";
+      const left = daysLeft(r.closes_at, today);
+      const when = left == null ? "" : left < 0 ? "（已过截止，看看有没有补录）" : `（还剩 ${left} 天截止）`;
+      if (r.apply_url) ev.push({ line: `${what}投递入口 ${hostOf(r.apply_url)}${when}`, link: { text: `${what}投递入口`, url: r.apply_url }, at: r.updated_at });
+      if (r.notice_url && r.notice_url !== r.apply_url) ev.push({ line: `${what}招聘公告${r.apply_url ? "" : `：按公告里写的方式投${when}`}`, link: { text: `${what}招聘公告`, url: r.notice_url }, at: r.updated_at });
+    }
+    const short = co.name.replace(/(股份)?有限(责任)?公司$|集团$/, "");
+    if (short.length >= 2)
+      for (const r of db.prepare("select url, title, created_at from capture where instr(title, ?) > 0 order by created_at desc limit 2").all(short) as { url: string; title: string; created_at: string }[])
+        ev.push({ line: `你收藏的文章「${r.title.slice(0, 40)}」里写了怎么投`, link: { text: `文章：${r.title.slice(0, 24)}`, url: r.url }, at: r.created_at });
+    if (!ev.length) continue;
+    const at = ev.map((e) => e.at).sort().at(-1)!;
+    if (seen && at <= seen) continue;
+    if (best && at <= best.at) continue;
+    const links = [...new Map(ev.map((e) => [e.link.url, e.link])).values()].slice(0, 4);
+    best = { at, card: { key: `co:${co.id}`, slot: "company", positionId: "", companyId: co.id, company: co.name, title: "还没有在招的岗位", cities: [], closesAt: null, cityRank: 0,
+      why: "你标了重点，岗位库里还没有它在招的岗位", gap: ev[0].line, notes: ["重点公司"], groupApplied: [], links, decision: "pending" } };
+  }
+  return best?.card ?? null;
+}
+
 /** Make this week's list and keep it. */
 export function runShortlist(s: Services, nowMs = Date.now()): Shortlist {
   const db = s.domain.db;
@@ -284,7 +328,8 @@ export function runShortlist(s: Services, nowMs = Date.now()): Shortlist {
     const was = json.parse(p.card_json, {} as Partial<Card>);
     if (was.expiresAt && was.expiresAt < today && was.company && was.title) skipped.unshift({ reason: `可补到期没补（${was.gapConcept ?? ""}）`, positionId: p.key, company: was.company, title: was.title });
   }
-  const all = [...cards.filter((c) => c.slot === "new"), ...decideCards(db, me, rules, applied, today, nowMs), ...cards.filter((c) => c.slot === "fill")];
+  const co = companyCard(db, rules, today);
+  const all = [...cards.filter((c) => c.slot === "new"), ...decideCards(db, me, rules, applied, today, nowMs), ...cards.filter((c) => c.slot === "fill"), ...(co ? [co] : [])];
   // what a rule or the cap kept out is what the person may want back: those stay in the kept part; the rest is counted
   const kind = (x: Skipped) => x.rule ? `规则：${x.rule.kind === "company" ? "不投的公司" : x.rule.kind === "type" ? "排除词" : x.rule.kind === "city" ? "不去的城市" : "集团只投一个"}` : x.reason.startsWith("超出") ? "超出张数" : x.reason.startsWith("可补") ? "可补到期" : x.reason.startsWith("核心") ? "你说过没做过" : "城市不在名单";
   const skippedBy: Record<string, number> = {};
@@ -339,6 +384,10 @@ export function decideCard(s: Services, p: { runId: string; key: string; decisio
   const card = list.cards.find((c) => c.key === p.key);
   if (!card) throw new NotFound(`card ${p.key}`);
   const today = beijingDay(new Date());
+  // a 重点公司 card has no post: 看过了, or 不投这家 (the company rule)
+  if (card.slot === "company" ? !(p.decision === "seen" || (p.decision === "skip" && (p.reason ?? "company") === "company")) : p.decision === "seen")
+    throw new DomainError("BAD_INPUT", card.slot === "company" ? "这张卡只能选「看过了」或「不投这家」" : "「看过了」只用在重点公司卡上");
+  if (card.slot === "company" && p.decision === "skip") p.reason = "company";
   if (p.decision === "apply") {
     if (!card.applicationId && !db.prepare("select 1 from application where position_id = ?").get(card.positionId)) {
       const a = s.domain.createApplication(card.positionId, "", "每周短名单：本人选了「投」", "human:shortlist");
@@ -544,7 +593,7 @@ export async function fillPlan(s: Services, runId: string, key: string, nowMs = 
 /** Lines for the Monday brief notice. */
 export function shortlistLines(list: Shortlist): string[] {
   if (!list.cards.length) return [];
-  const name = (c: Card) => `· ${c.slot === "decide" ? "要决定 · " : c.slot === "fill" ? "可补 · " : ""}${c.company} · ${c.title}`;
+  const name = (c: Card) => `· ${c.slot === "decide" ? "要决定 · " : c.slot === "fill" ? "可补 · " : c.slot === "company" ? "重点公司 · " : ""}${c.company} · ${c.title}`;
   const by = Object.entries(list.skippedBy ?? {}).map(([k, n]) => `${k} ${n}`).join("、");
   return [`**本周短名单 · ${list.cards.length} 张**`, ...list.cards.slice(0, 10).map(name), ...(list.skippedTotal ? [`· 另有 ${list.skippedTotal} 个没上卡（${by}），在 Zhiro「今日」里看和放回`] : ["· 在 Zhiro「今日」里决定"])];
 }
