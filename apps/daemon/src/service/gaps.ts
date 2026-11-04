@@ -2,7 +2,7 @@ import { join } from "node:path";
 import { existsSync, readdirSync, readFileSync } from "node:fs";
 import type { Db } from "../db.js";
 import { listFacts } from "./profile.js";
-import { canonOf, normLabel, SENSITIVE } from "./apply.js";
+import { canonOf, normLabel, OPTION_WORD, SENSITIVE } from "./apply.js";
 
 /**
  * 还缺什么: the answers application forms keep asking for that the profile does not have yet, each with a hint on what
@@ -43,6 +43,9 @@ export function profileGaps(db: Db, vault: string): { items: Gap[] } {
     const seen = new Set<string>();
     for (const f of run.form ?? []) {
       if (!["由你填写", "画像里没有"].includes(f.status) || !f.label || f.type === "file" || f.type === "checkbox" || SENSITIVE.test(f.label)) continue;
+      // an option or a button read as the field's caption (「无」「否」「请选择」, or one of its own options): not a question
+      const bare = f.label.replace(/[*＊:：\s]/g, "");
+      if (!normLabel(f.label) || OPTION_WORD.test(bare) || (f.options ?? []).some((o: string) => o.trim() === f.label.trim())) continue;
       if (/经历|经验|项目|实习|工作|获奖|论文|专利|教育|更新说明/.test(f.section ?? "") && !/求职|意向|个人/.test(f.section ?? "")) continue; // multi-row blocks are a separate matter
       if (/推荐码|内推|推荐人|了解渠道|简历更新|最近公司|目前职位|所在行业|当前薪资|面试站点/.test(f.label)) continue; // per-application or not for new graduates
       // the fields of an internship / project / job entry, on forms without section headings (北森)

@@ -66,7 +66,7 @@ import { budgetStatus, type GateDeps } from "./budget/gate.js";
 import { cardView } from "./service/card-state.js";
 import { tx } from "./db.js";
 import { latestBrief, runBrief } from "./daily/brief.js";
-import { latestShortlist, runShortlist, decideCard, restoreCard } from "./service/shortlist.js";
+import { latestShortlist, runShortlist, deepenShortlist, decideCard, restoreCard, fillPlan } from "./service/shortlist.js";
 import { nextAt, normalizeAt } from "./workflows/daily.js";
 import { pullFeeds } from "./workflows/feed.js";
 import { setupFeishu } from "./workflows/notify.js";
@@ -379,9 +379,14 @@ const handlers: { [N in ToolName]: Handler<N> } = {
   },
   "brief.make": (_i, a, s) => { humanOnly(a); const b = runBrief(s.domain.db); s.domain.db.prepare("update brief_run set seen_at = ? where id = ?").run(new Date().toISOString(), b.id); return { id: b.id }; },
   "shortlist.current": (_i, _a, s) => ({ shortlist: latestShortlist(s.domain.db) }),
-  "shortlist.decide": (i, a, s) => { humanOnly(a); return { shortlist: decideCard(s, i) }; },
+  "shortlist.decide": (i, a, s) => {
+    humanOnly(a);
+    const shortlist = decideCard(s, i);
+    if (i.decision === "fill") void fillPlan(s, i.runId, i.key).catch(() => {}); // written behind the answer; the card shows it when done
+    return { shortlist };
+  },
   "shortlist.restore": (i, a, s) => { humanOnly(a); return { shortlist: restoreCard(s, i) }; },
-  "shortlist.make": (_i, a, s) => { humanOnly(a); const l = runShortlist(s); s.onDataChanged?.(); return { id: l.id, cards: l.cards.length }; },
+  "shortlist.make": (_i, a, s) => { humanOnly(a); const l = runShortlist(s); s.onDataChanged?.(); void deepenShortlist(s, l.id).catch(() => 0); return { id: l.id, cards: l.cards.length }; },
   "usage.summary": (_i, _a, s) => usageSummary(s.domain.db),
   "profile.import": (i, _a, s) => {
     if (i.path) { if (!existsSync(i.path)) throw new ToolError("FILE_NOT_FOUND", i.path); return addDocument(docDeps(s), basename(i.path), readFileSync(i.path)); }

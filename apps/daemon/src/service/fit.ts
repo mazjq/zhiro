@@ -16,6 +16,7 @@ import { withPurpose } from "./usage.js";
 const SYSTEM = `你是校招岗位匹配评估员。给你一位应届生的画像和一个岗位，逐条对照岗位的硬性要求（学历、专业、技能、经验、证书、地点）和工作内容，判断他能不能投、合不合适。
 只依据给出的内容，不要编造画像里没有的经历；岗位没写的要求不算缺口。
 只输出 JSON：{"score": 0-100 的整数, "verdict": "一句话结论（20 字内）", "meets": ["满足的要求，每条带画像里的依据"], "gaps": ["不满足或存疑的要求，每条写明差在哪"]}
+meets 和 gaps 每条先用「」一字不改地照抄岗位里对应的原文，再写依据或差在哪，例如：「熟悉 ROS」：做过基于 ROS 的导航项目。
 打分：硬性要求有明确不满足的不超过 40；硬性要求都满足且工作内容与其方向/研究/项目直接相关 80 以上；满足但方向只部分相关 55–79。`;
 
 export function profileText(s: Services): string {
@@ -23,7 +24,7 @@ export function profileText(s: Services): string {
     .map((f: any) => `- ${f.kind}：${f.statement || Object.values(f.data ?? {}).join(" / ")}`).join("\n");
 }
 
-function postText(s: Services, positionId: string): string | null {
+export function postText(s: Services, positionId: string): string | null {
   const p = s.domain.db.prepare(`select p.title, p.jd_text, p.degree_req, p.major_req, p.cities, c.degree_req c_degree, c.major_req c_major, c.cities c_cities, c.source_kind, co.name, co.type
     from position p join campaign c on c.id = p.campaign_id join company co on co.id = c.company_id where p.id = ?`).get(positionId) as any;
   if (!p) return null;
@@ -31,12 +32,13 @@ function postText(s: Services, positionId: string): string | null {
   return `公司：${p.name}（${p.type || "类型未知"}）\n岗位：${p.title}\n地点：${json.parse(p.cities, [] as string[]).join("、") || json.parse(p.c_cities, [] as string[]).join("、") || "未写"}\n学历要求：${p.degree_req || p.c_degree || "未写"}\n专业要求：${p.major_req || (agg ? p.c_major : "") || "未写"}\nJD：\n${(p.jd_text || "（来源没有提供 JD 正文，只能按岗位名判断）").slice(0, 5000)}`;
 }
 
-export async function deepFit(s: Services, positionId: string) {
+/** `purpose` tags the call in llm_usage: 岗位适配细评 by default, the weekly shortlist passes its own. */
+export async function deepFit(s: Services, positionId: string, purpose = "fit.deep") {
   if (!s.llm) throw new Error("没有配置模型");
   const post = postText(s, positionId);
   if (!post) return null;
   const profile = profileText(s);
-  const msg = await withPurpose("fit.deep", positionId, () => s.llm!.models.completeSimple(s.llm!.model(), { systemPrompt: SYSTEM, messages: [{ role: "user", content: [{ type: "text", text: `## 画像\n${profile}\n\n## 岗位\n${post}` }], timestamp: Date.now() }] }, { reasoning: "low" }));
+  const msg = await withPurpose(purpose, positionId, () => s.llm!.models.completeSimple(s.llm!.model(), { systemPrompt: SYSTEM, messages: [{ role: "user", content: [{ type: "text", text: `## 画像\n${profile}\n\n## 岗位\n${post}` }], timestamp: Date.now() }] }, { reasoning: "low" }));
   const o = parseJsonWithRepair<any>(contentText(msg.content).trim().replace(/^```(?:json)?\s*|\s*```$/g, ""));
   const list = (v: unknown) => (Array.isArray(v) ? v.map(String).slice(0, 10) : []);
   const score = Math.max(0, Math.min(100, Math.round(Number(o.score) || 0)));

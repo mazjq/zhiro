@@ -209,3 +209,28 @@ entries condense what still holds.
   appeared, 2 were kept out by the city list, 2 had titles naming nothing (an AI-coding post, a generic 技术研发). Reviewed
   by four agents with no shared context (a blank-sheet design, the job seeker's own view, an attack on the draft, the
   laziest cut); the attack found the tier premise, the replay confirmed it.
+- **D-33 · 2026-11-04 · 短名单细评: the model words the cards, the rules stay underneath.** After the weekly list is made
+  (D-32), the 新机会 / 可补 cards still undecided get their two lines from the deep match of service/fit.ts (the same
+  prompt and `position_fit` table; the prompt now asks each 满足 / 缺口 item to start with the post's words in 「」). A line
+  is used only when its 「…」 is found in the post's own text (title, JD, degree and major requirements, spaces and case
+  aside); otherwise the rule wording stays. The calls run as background work `shortlist_fit` (held by the gate like
+  lead lookups, purpose `shortlist.fit`), at most 15 a week counted from llm_usage; a deep match already made against
+  the current profile is reused. A refusal stops the run, a model error skips the card, and the list itself is made and
+  saved before any call, so neither ever fails it; the brief does not wait for it. Nothing is asked when background
+  work would go to the person's agent (it would leave jobs nobody asked for).
+- **D-34 · 2026-11-04 · 补一下: one plan, written by the model or not at all.** When the person picks 「补一下」 on a
+  shortlist card, one model call (held background work `shortlist_fill`, purpose `shortlist.fill`, after the decision
+  is saved) writes a short plan kept on the card: the missing requirement as the card already quotes it, one small task
+  on one of the person's own projects / experiences / publications, and about how long. The days left and how many
+  other open posts ask the same skill are counted by Zhiro, not asked. The plan is used only when the project it names
+  is one in the person's facts. No model, a gate refusal, an error, no project on file or a plan on a project they do
+  not have: the card says so in one line, and no plan is made up by rules. Once per card; the 要决定 card next week
+  carries it.
+- **D-35 · 2026-11-04 · 重点公司 card: a company followed before it posts.** The weekly list (D-32) gets a fourth slot of
+  at most one card: a company the person marked 重点 that has no open post in the library but a known way to apply —
+  its own site on record (`company_site`, active), an apply or notice link on any of its campaigns (with days left, or
+  a word that the date passed), or a captured article whose title names it (ponytail: by name). The card says how to
+  apply and links each piece of evidence; the company whose evidence is newest comes first. Decisions: 看过了 (`seen`,
+  a new value of shortlist.decide), after which the company comes back only with evidence newer than that; 不投这家, which
+  is the existing 不投 company rule. No other decision is taken on it. A company is left out when the same brand (first 4 characters after a
+  leading place) is followed under another legal name that does post (the first library had two such pairs).
