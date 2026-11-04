@@ -71,3 +71,92 @@ describe("标题词", () => {
     expect(stems).not.toContain("ros");
   });
 });
+
+describe("短名单细评: the two lines from the model's deep match", async () => {
+  const { mkdtempSync } = await import("node:fs");
+  const { tmpdir } = await import("node:os");
+  const { join } = await import("node:path");
+  const { openDb } = await import("../db.js");
+  const { Domain } = await import("./domain.js");
+  const { createServices, testConfig } = await import("../services.js");
+  const { ingest } = await import("../data/index.js");
+  const { tagCompany } = await import("../recommenders/index.js");
+  const { backgroundKind, BudgetDeferred } = await import("../budget/index.js");
+  const { currentPurpose } = await import("./usage.js");
+  const { runShortlist, deepenShortlist, quotedLine, DEEP_PER_WEEK } = await import("./shortlist.js");
+
+  const JD = "岗位职责：负责无人船运动控制算法开发。任职要求：熟悉 ROS；有 MPC 项目经验者优先。";
+  function setup(answer: (n: number) => any, posts = 1) {
+    const dir = mkdtempSync(join(tmpdir(), "zhiro-shortlist-deep-"));
+    const db = openDb(join(dir, "t.db"));
+    const domain = new Domain(db);
+    ingest(domain, dir, "capture", "c1", [...Array(posts)].map((_, i) => ({ externalId: `j${i}`, url: `https://example.org/jobs/j${i}`, title: `控制算法工程师${i}`, company: "示例海工有限公司",
+      locations: ["武汉"], description: JD, publisher: "site:example", grade: "官方", isOriginal: true, confidence: 1, cohort: "2027届", batch: "校招" }) as any));
+    const s = createServices({ db, domain, config: testConfig(dir, { sources: [] }) });
+    tagCompany(s, { companyId: (db.prepare("select id from company").get() as any).id, tag: "重点", reason: "测试" });
+    const calls: { kind: string | null; purpose: string }[] = [];
+    (s as any).llm = { model: () => ({ id: "fake" }), models: { completeSimple: async () => {
+      calls.push({ kind: backgroundKind(), purpose: currentPurpose().purpose });
+      const a = answer(calls.length);
+      if (a instanceof Error) throw a;
+      return { content: [{ type: "text", text: JSON.stringify(a) }] };
+    } } };
+    return { s, db, calls };
+  }
+  const good = { score: 80, verdict: "对口", meets: ["「负责无人船运动控制算法开发」：做过船舶运动控制课题"], gaps: ["「熟悉 ROS」：资料里没有 ROS 的经历"] };
+
+  it("a quoted line of the post replaces the rule wording; asked as held background work under shortlist.fit, once", async () => {
+    const { s, calls } = setup(() => good);
+    const list = runShortlist(s);
+    expect(list.cards).toHaveLength(1);
+    expect(await deepenShortlist(s, list.id)).toBe(1);
+    const card = (await import("./shortlist.js")).latestShortlist(s.domain.db)!.cards[0];
+    expect(card.why).toBe(good.meets[0]);
+    expect(card.gap).toBe(good.gaps[0]);
+    expect(calls).toEqual([{ kind: "shortlist_fit", purpose: "shortlist.fit" }]);
+    // the next list reads the same deep match: no second call
+    const again = runShortlist(s, Date.now() + 60_000);
+    await deepenShortlist(s, again.id);
+    expect(calls).toHaveLength(1);
+  });
+
+  it("a line whose quote is not in the post, a refusal of the gate, or a model error keeps the rule wording", async () => {
+    const made = { score: 70, verdict: "", meets: ["「精通强化学习」：有论文"], gaps: ["差 ROS"] };
+    const a = setup(() => made);
+    const la = runShortlist(a.s);
+    const before = la.cards[0];
+    expect(await deepenShortlist(a.s, la.id)).toBe(0);
+    expect(a.s.domain.db.prepare("select json from shortlist_run").get()).toEqual({ json: JSON.stringify(la) });
+    expect(before.why).not.toContain("强化学习");
+
+    const b = setup(() => new BudgetDeferred(new Date().toISOString(), "周额度已用 75%"), 3);
+    const lb = runShortlist(b.s);
+    expect(await deepenShortlist(b.s, lb.id)).toBe(0);
+    expect(b.calls).toHaveLength(1); // a refusal stops the rest of the week's run
+
+    const c = setup((n) => (n === 1 ? new Error("模型超时") : good), 2);
+    const lc = runShortlist(c.s);
+    expect(await deepenShortlist(c.s, lc.id)).toBe(1); // the failed card keeps the rules' lines, the next one is reworded
+    expect(c.calls).toHaveLength(2);
+  });
+
+  it("at most DEEP_PER_WEEK calls a week, counted from what this week already used", async () => {
+    const { s, db, calls } = setup(() => good, 3);
+    const ins = db.prepare("insert into llm_usage(id, at, purpose, ref, provider, model, input, output, cache_read, total, cost) values (?,?,?,?,?,?,?,?,?,?,?)");
+    for (let i = 0; i < DEEP_PER_WEEK - 1; i++) ins.run(`u${i}`, new Date().toISOString(), "shortlist.fit", "", "p", "m", 1, 1, 0, 2, 0);
+    const list = runShortlist(s);
+    expect(await deepenShortlist(s, list.id)).toBe(1);
+    expect(calls).toHaveLength(1);
+  });
+
+  it("a card decided meanwhile keeps its lines; the quote check ignores spaces and case", async () => {
+    expect(quotedLine("「熟悉ros」：有", JD)).toBe("「熟悉ros」：有");
+    expect(quotedLine("熟悉 ROS：有", JD)).toBeNull();
+    const { s } = setup(() => good);
+    const list = runShortlist(s);
+    const { decideCard, latestShortlist } = await import("./shortlist.js");
+    decideCard(s, { runId: list.id, key: list.cards[0].key, decision: "hold" });
+    await deepenShortlist(s, list.id);
+    expect(latestShortlist(s.domain.db)!.cards[0].why).toBe(list.cards[0].why);
+  });
+});
