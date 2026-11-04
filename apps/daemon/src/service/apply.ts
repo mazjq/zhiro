@@ -240,6 +240,16 @@ export const normLabel = (s: string) => s.replace(/[（(][^）)]*[）)]/g, "").r
 // 「是否接受意向城市调剂」 is a yes / no question, not the city (it got 「武汉」 on 大疆, 2026-10-14)
 export const canonOf = (label: string) => (/是否/.test(label) ? "" : CANON.find(([re]) => re.test(normLabel(label)))?.[1] ?? "");
 
+/** A question about the company or the post asked: its answer is for that company (「为什么选择我司」「对岗位的理解」). */
+export const COMPANY_ASKED = /我司|贵司|贵公司|本公司|公司|集团|为什么|为何|原因|动机|了解|认识|看法|理解|加入|应聘|岗位|职位|部门|业务|产品|项目组/;
+/**
+ * May an answer the person typed on a form, kept under that form's own label, be copied into this company's form? A short
+ * fact (身高 178, 高考分数 620) anywhere; a long answer or one to a question about the company only where it was given —
+ * an answer learned before it carried its company is not copied at all.
+ */
+export const reusableAnswer = (label: string, value: string, learnedAt: string | undefined, company: string | undefined): boolean =>
+  !(value.trim().length > 30 || COMPANY_ASKED.test(label)) || (!!learnedAt && !!company && learnedAt === company);
+
 export interface Mapped extends FormField { factKey: string; proposed: string; source: string; status: "可填" | "由你填写" | "不代填" | "画像里没有" | "上传文件" | "已有内容" | "多段"; how: "规则" | "模型" | "文档" | "" }
 
 /** The person's 「系统填写」 document answers this label: the same name, or one contains the other (特长 ↔ 个人特长). */
@@ -326,8 +336,11 @@ key 只能取：${LLM_KEYS.join(" / ")}。publication/patent/project/experience/
   return new Map((o.map ?? []).filter((m) => LLM_KEYS.includes(m.key) && m.key !== "none").map((m) => [m.index, m.key]));
 }
 
-/** `ref`: the person's 「系统填写」 document, preferred over the profile for what it answers (apply-reference.ts). */
-export async function mapFields(db: Db, llm: Llm | undefined, fields: FormField[], ref?: Reference | null): Promise<Mapped[]> {
+/**
+ * `ref`: the person's 「系统填写」 document, preferred over the profile for what it answers (apply-reference.ts).
+ * `company`: whose form this is — an answer typed on another company's form is copied only when it is a short fact.
+ */
+export async function mapFields(db: Db, llm: Llm | undefined, fields: FormField[], ref?: Reference | null, company?: string): Promise<Mapped[]> {
   const facts = listFacts(db).items;
   const out: Mapped[] = fields.map((f) => ({ ...f, factKey: "", proposed: "", source: "", status: "画像里没有", how: "" }));
   const open: Mapped[] = [];
@@ -350,8 +363,12 @@ export async function mapFields(db: Db, llm: Llm | undefined, fields: FormField[
     if (edu) { m.factKey = `education.${edu[1]}`; m.how = "规则"; }
     else if (canon) { m.factKey = `${PERSONAL_CHOICE.test(label) ? "pref" : "basic"}.${canon}`; m.how = "规则"; }
     else if (PERSONAL_CHOICE.test(label)) { m.factKey = `pref.${label}`; m.how = "规则"; }
-    // anything the user answered once under this very label, on any site
-    else if (label && facts.some((f) => (f.kind === "basic" || f.kind === "preference") && normLabel(f.data.field ?? "") === label)) { m.factKey = `basic.${label}`; m.how = "规则"; }
+    // anything the user answered once under this very label: a short fact on any site, a long or company answer only at that company
+    else if (label && facts.some((f) => (f.kind === "basic" || f.kind === "preference") && normLabel(f.data.field ?? "") === label)) {
+      const f = facts.find((x) => (x.kind === "basic" || x.kind === "preference") && normLabel(x.data.field ?? "") === label)!;
+      if (reusableAnswer(label, f.data.value ?? "", f.data.company, company)) { m.factKey = `basic.${label}`; m.how = "规则"; }
+      else { m.status = "由你填写"; m.source = f.data.company ? `上次在「${f.data.company}」答过这一题，是答那家公司的，这次请你自己写` : "以前答过这一题，但这种回答要按公司写，这次请你自己写"; }
+    }
     else if (!eduBlock && /经历|经验|项目|实习|工作|获奖|论文|专利/.test(m.section)) { m.factKey = /项目/.test(m.section) ? "project" : /获奖/.test(m.section) ? "award" : /论文|专利/.test(m.section) ? "publication" : "experience"; m.how = "规则"; }
     else open.push(m);
   }
