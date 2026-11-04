@@ -281,7 +281,7 @@ async function tick(s: Services): Promise<void> {
     if (run.paused) break;
     if (todo.includes(f)) { set(s, { progress: { done: done++, total: todo.length, current: f.label } }); await banner(page, `Zhiro 正在填写 ${done}/${todo.length}：${f.label}　请先别操作这个页面`, "#2563eb"); }
     if (f.status === "已有内容") { attention.push({ section: f.section, label: f.label, kind: "和画像不同", detail: `页面：${f.value}　画像：${f.proposed}` }); continue; }
-    if (f.status === "由你填写" || (f.status === "画像里没有" && f.required)) { attention.push({ section: f.section, label: f.label, kind: "留给你", detail: f.status === "由你填写" ? "" : f.source || "画像里没有" }); continue; }
+    if (f.status === "由你填写" || (f.status === "画像里没有" && f.required)) { attention.push({ section: f.section, label: f.label, kind: "留给你", detail: f.status === "由你填写" ? f.source : f.source || "画像里没有" }); continue; }
     if (f.status !== "可填" || !f.proposed) continue;
     if (!EMPTY.test(f.value.trim())) continue; // already there (account-level fields, the site's own parse): not ours to count
     const cur = await current(page, f);

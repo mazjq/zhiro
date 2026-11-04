@@ -291,11 +291,24 @@ function valueFor(facts: any[], key: string, section: string, ref?: Reference | 
   return { value: "", source: "" };
 }
 
-/** Closest option to a profile value ("博士" → "博士研究生"); empty when nothing is close enough to propose. */
-export const pickOption = (options: string[], value: string) => {
-  for (const v of optionAliases(value)) { const hit = options.find((o) => o === v) ?? options.find((o) => o.includes(v) || v.includes(o)); if (hit) return hit; }
-  return "";
-};
+/**
+ * The option for a profile value: one equal to it (or to an alias: CET-6 → 大学英语六级) first, else the single option that
+ * contains it or is contained in it ("博士" → "博士研究生"). Several such (「党员」 in 中共党员 / 中共预备党员) is no answer:
+ * the first of them was picked before, and it was the wrong one as often as not.
+ */
+export function optionMatch(options: string[], value: string): { hit: string } | { several: string[] } | null {
+  const vs = optionAliases(value);
+  const exact = options.find((o) => vs.includes(o));
+  if (exact) return { hit: exact };
+  for (const v of vs) {
+    const xs = [...new Set(options.filter((o) => o && (o.includes(v) || v.includes(o))))];
+    if (xs.length === 1) return { hit: xs[0] };
+    if (xs.length > 1) return { several: xs };
+  }
+  return null;
+}
+/** Closest option to a profile value; empty when no single option is close enough to propose. */
+export const pickOption = (options: string[], value: string) => { const m = optionMatch(options, value); return m && "hit" in m ? m.hit : ""; };
 
 const LLM_KEYS = ["basic.姓名", "basic.邮箱", "basic.电话", "basic.微信", "basic.出生年月", "basic.性别", "basic.政治面貌", "basic.籍贯", "basic.民族", "basic.现居地", "basic.预计毕业时间", "basic.英语水平", "basic.个人主页", "basic.工作经验", "basic.自我描述", "education.school", "education.degree", "education.major", "education.period", "publication", "patent", "project", "experience", "award", "skill", "none"];
 
@@ -377,7 +390,14 @@ export async function mapFields(db: Db, llm: Llm | undefined, fields: FormField[
       if (nums.length !== 1) { m.status = "画像里没有"; m.source = `这一栏只收数字，画像里是「${value}」`; continue; }
       value = nums[0];
     }
-    m.proposed = m.options.length ? pickOption(m.options, value) || value : value;
+    const pick = m.options.length ? optionMatch(m.options, value) : null;
+    // a native dropdown lists every option: no single match is the person's to choose, with the reason
+    if (m.type === "select" && m.options.length && !(pick && "hit" in pick)) {
+      m.status = "由你填写";
+      m.source = pick ? `有几个选项都像「${value}」（${pick.several.slice(0, 3).join("、")}），请你选` : `选项里没有和「${value}」对得上的，请你选`;
+      continue;
+    }
+    m.proposed = pick && "hit" in pick ? pick.hit : value;
     m.status = "可填";
   }
   return out;
