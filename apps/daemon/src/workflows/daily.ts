@@ -24,6 +24,19 @@ export function nextAt(at: string | undefined, now = Date.now()): number {
   return todayAt(at, d.getTime());
 }
 
+/**
+ * Whether a brief is owed now: the latest hour that has come (today's, or yesterday's while today's is still ahead)
+ * has had none since. One brief covers however many days were missed, and one made in the last 12 hours stands for
+ * the hour that follows it, so starting the program shortly before the hour does not make two.
+ */
+export function briefDue(last: number | null, at: string | undefined, now = Date.now()): boolean {
+  const today = todayAt(at, now);
+  if (last == null) return now >= today;
+  let slot = today;
+  if (today > now) { const d = new Date(today); d.setDate(d.getDate() - 1); slot = d.getTime(); }
+  return last < slot && now - last >= 12 * 3600_000;
+}
+
 /** daily_brief: once a day at the person's hour, the brief of what changed (daily/brief.ts). */
 export function dailyBrief(s: Services): WorkflowDef {
   return {
@@ -31,10 +44,9 @@ export function dailyBrief(s: Services): WorkflowDef {
     order: ["brief"],
     steps: {
       brief: async () => {
-        // today's hour has come and no brief since it (first start, or the computer was off): make it now
-        const slot = todayAt(s.config.brief?.at);
+        // the hour has come and no brief since it (first start, or the computer was off, for a day or for a week): make one now
         const last = s.domain.db.prepare("select max(at) at from brief_run").get() as { at: string | null };
-        if (Date.now() >= slot && (!last.at || Date.parse(last.at) < slot)) {
+        if (briefDue(last.at ? Date.parse(last.at) : null, s.config.brief?.at)) {
           // the week's shortlist comes with Monday's brief; a week whose Monday the computer slept through gets it the next morning
           const week = weekOf();
           const has = s.domain.db.prepare("select 1 from shortlist_run where week = ?").get(week);
