@@ -6,7 +6,7 @@ import { join } from "node:path";
 import { ulid } from "ulid";
 import { seedWorld } from "../eval/seed.js";
 import { latestBrief, makeBrief, runBrief } from "./brief.js";
-import { nextAt, normalizeAt } from "../workflows/daily.js";
+import { briefDue, nextAt, normalizeAt } from "../workflows/daily.js";
 
 const H = 3600_000, DAY = 24 * H;
 const world = () => seedWorld(mkdtempSync(join(tmpdir(), "zhiro-brief-daily-")));
@@ -141,5 +141,20 @@ describe("the daily brief", () => {
     expect(nextAt("08:00", at) - at).toBe(30 * 60_000);
     expect(nextAt("07:00", at) - at).toBe(23.5 * H);
     expect(new Date(nextAt("bad", at)).getHours()).toBe(8);
+  });
+
+  it("is made once on a start after missed days, and not again at the hour that follows", () => {
+    const t = (s: string) => new Date(s).getTime();
+    // the computer was off for five days and is opened before today's hour: one brief now
+    expect(briefDue(t("2026-11-04T08:00:00"), "08:00", t("2026-11-09T07:34:00"))).toBe(true);
+    // that one stands for 08:00 the same morning
+    expect(briefDue(t("2026-11-09T07:34:00"), "08:00", t("2026-11-09T08:00:00"))).toBe(false);
+    expect(briefDue(t("2026-11-09T07:34:00"), "08:00", t("2026-11-10T08:00:00"))).toBe(true);
+    // the ordinary day: yesterday's brief, today's hour
+    expect(briefDue(t("2026-11-08T08:00:01"), "08:00", t("2026-11-09T07:59:00"))).toBe(false);
+    expect(briefDue(t("2026-11-08T08:00:01"), "08:00", t("2026-11-09T08:00:00"))).toBe(true);
+    // the first start waits for the hour
+    expect(briefDue(null, "08:00", t("2026-11-09T07:34:00"))).toBe(false);
+    expect(briefDue(null, "08:00", t("2026-11-09T08:00:00"))).toBe(true);
   });
 });
