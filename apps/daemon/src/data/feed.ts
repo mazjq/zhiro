@@ -7,8 +7,9 @@
  *     than the last one applied, not over two weeks old and not from the future;
  *   - the bundle is the one the manifest names (sha256), unpacks to exactly the size it says, and every subscription in
  *     it is of a reader this build knows, with an id that cannot reach another subscription's files;
- *   - each subscription's read is newer than the one filed (same read again: skipped; same time, other content or
- *     another reader: refused; the same read now complete where it was stale: filed, so it may close what it dropped);
+ *   - each subscription's read is newer than the one filed (same read again: skipped; another reader: refused; the
+ *     same read now complete where it was stale, or given differently by a later package — the sender leaves out what
+ *     has expired by the day it packs — : filed again);
  *   - listings keep the fields a reader fills and nothing else; a row that does not pass (or whose identity is too
  *     long to keep whole) is left out — and then the read no longer counts as complete: it adds, it closes nothing;
  *   - rows the sender held back come as post ids only: still listed by the site, so kept open, never closed.
@@ -160,10 +161,9 @@ export function importFeed(store: { db: Db }, vault: string, cfg: FeedConfig, lo
     const at = new Date(ms(sub.observedAt)).toISOString(), before = applied.get(sub.id);
     if (before && before.source !== sub.source) throw new FeedError("FEED_CONFLICT", `订阅「${sub.id}」的读取器从 ${before.source} 变成了 ${sub.source}`);
     if (before && at < before.observed_at) { result.skipped++; continue; } // an older read than the one filed
-    if (before && at === before.observed_at) {
-      if (before.sha256 !== sub.sha256) throw new FeedError("FEED_CONFLICT", `订阅「${sub.id}」同一次读取内容不同`);
-      if (!(before.state === "stale" && sub.state === "complete")) { result.skipped++; continue; } // the same read, now known complete: filed again
-    }
+    // the same read sent again: skipped when it says the same; filed again when it is now known complete, or when the
+    // sender now gives it differently (what it holds back depends on the day it packs: a deadline that has passed since)
+    if (before && at === before.observed_at && before.sha256 === sub.sha256 && !(before.state === "stale" && sub.state === "complete")) { result.skipped++; continue; }
     // most subscriptions read the same as yesterday: nothing to file, only when they were read (the first full package
     // took 47 s to file; every one after it would have taken as long for the few that changed)
     if (before && before.sha256 === sub.sha256 && (before.state === sub.state || before.state === "complete")) { touched.push({ sub, at }); continue; }
