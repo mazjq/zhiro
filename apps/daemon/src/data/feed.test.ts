@@ -162,9 +162,20 @@ describe("a subscribed data source", () => {
     publish(w.out, 2, [{ id: "moka-a", at: T(4), rows: [post("1")] }]);
     expect(w.pull()).toMatchObject({ released: 1 });
     expect(w.db.prepare("select count(*) n from position_seen where config_id = ?").get(feedConfigId("f1", "moka-b"))).toEqual({ n: 0 });
-    // the same read time with other content: refused, and the good subscription before it is not filed either
-    publish(w.out, 3, [{ id: "moka-c", at: T(2), rows: [post("5", { company: "第三家" })] }, { id: "moka-a", at: T(4), rows: [post("1"), post("7")] }]);
+    // a subscription whose reader changed: refused, and the good subscription before it is not filed either
+    publish(w.out, 3, [{ id: "moka-c", at: T(2), rows: [post("5", { company: "第三家" })] }, { id: "moka-a", at: T(3), source: "beisen", rows: [post("1"), post("7")] }]);
     expect(() => w.pull()).toThrow(/FEED_CONFLICT/);
     expect(w.db.prepare("select count(*) n from company where name = '第三家'").get()).toEqual({ n: 0 });
+  });
+
+  it("the same read given differently by a later package is filed, not refused: what the sender now holds back stays open", () => {
+    const w = world();
+    publish(w.out, 1, [{ id: "moka-a", at: T(5), rows: [post("1"), post("2")] }, { id: "moka-b", at: T(5), rows: [post("9", { company: "另一家" })] }]);
+    w.pull();
+    const held = (w.db.prepare("select sl.external_id id from source_listing sl join position p on p.id = sl.position_id where p.title = '岗位2'").get() as any).id;
+    // days later the site was not read again, and 岗位2's deadline has passed: the sender packs the same read without it
+    publish(w.out, 2, [{ id: "moka-a", at: T(5), rows: [post("1")], held: [held] }, { id: "moka-b", at: T(1), rows: [post("9", { company: "另一家" }), post("10", { company: "另一家" })] }]);
+    expect(w.pull()).toMatchObject({ seq: 2, applied: 2, positionsNew: 1, positionsClosed: 0 });
+    expect(w.open()).toEqual(["岗位1", "岗位10", "岗位2", "岗位9"]);
   });
 });
