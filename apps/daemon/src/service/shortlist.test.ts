@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { pick, cityRank, weekOf, MAX_NEW } from "./shortlist.js";
+import { pick, cityRank, roleKey, weekOf, MAX_NEW } from "./shortlist.js";
 
 const me: any = { level: 3, concepts: new Set(["control_algorithm", "motor_control"]), stems: ["控制"], direction: ["动力定位"], user: { level: 3, majors: [], gaps: new Set(), evidence: [] } };
 const rules = (o: any = {}) => ({ tiers: [["武汉"], ["深圳", "上海"], ["北京"]], noCities: [], onePerGroup: [], excludes: [], blocked: new Set<string>(), ...o });
@@ -33,12 +33,27 @@ describe("每周短名单", () => {
   });
 
   it("at most two a company and MAX_NEW cards; the rest are skipped as 超出本周张数", () => {
-    const rows = [...Array(5)].map((_, i) => row(`a${i}`)).concat([...Array(5)].map((_, i) => row(`b${i}`, { cities: '["上海"]' })));
+    const KINDS = ["控制算法", "运动控制", "伺服控制", "飞行控制", "电机控制"]; // five roles, not one role five times
+    const rows = KINDS.map((k, i) => row(`a${i}`, { title: `${k}工程师` })).concat(KINDS.map((k, i) => row(`b${i}`, { title: `${k}工程师`, cities: '["上海"]' })));
     const { cards, skipped } = run(rows);
     expect(cards.filter((c) => c.slot === "new")).toHaveLength(Math.min(MAX_NEW, 4));
     expect(cards.filter((c) => c.companyId === "a")).toHaveLength(2);
     expect(skipped.every((s) => s.reason === "超出本周张数")).toBe(true);
     expect(skipped).toHaveLength(6);
+  });
+
+  it("one company's posts of the same role are one card: a copy per city, 助理 / 主管, a job number; a direction in brackets is another role", () => {
+    expect(roleKey("控制算法助理工程师(J33340)")).toBe(roleKey("控制算法主管工程师(J33341)"));
+    expect(roleKey("控制算法工程师（博士）")).toBe(roleKey("控制算法工程师（硕士）"));
+    expect(roleKey("嵌入式软件开发工程师（湖北武汉）", ["湖北省 武汉市 江夏区"])).toBe(roleKey("嵌入式软件开发工程师"));
+    expect(roleKey("软件算法工程师（运动控制方向） - 上海(J19729)", ["上海市"])).not.toBe(roleKey("软件算法工程师（嵌入式方向） - 上海(J19720)", ["上海市"]));
+    const rows = [row("a1", { title: "控制算法主管工程师(J33341)" }), row("a2", { title: "控制算法助理工程师(J33340)", cities: '["上海"]' }), row("a3", { title: "运动控制工程师" }), row("b1")];
+    const { cards, skipped } = run(rows);
+    expect(cards.map((c) => c.positionId)).toEqual(["a1", "a3", "b1"]);
+    expect(cards[0].variants).toEqual([{ positionId: "a2", title: "控制算法助理工程师(J33340)", cities: ["上海"] }]);
+    expect(cards[0].cities).toEqual(["武汉", "上海"]);
+    expect(cards[0].notes).toContain("同岗位还有 1 个");
+    expect(skipped).toHaveLength(0); // a2 is on a1's card, not left out
   });
 
   it("同集团: side by side with a note, kept out only when the person said that group takes one", () => {
@@ -52,7 +67,7 @@ describe("每周短名单", () => {
 
   it("可补: the open core skill that unlocks the most posts, with a date; a post 不投 before stays out", () => {
     const fill = (id: string, concept: string, S = 50) => row(id, { cities: '["上海"]', a: { tier: "可迁移", S, A: 35, judgements: [{ concepts: [concept], status: "unknown", importance: "core", modality: "required", depth: "used", quote: `熟悉${concept}` }] } });
-    const rows = [...Array(MAX_NEW)].map((_, i) => row(`n${i}`, { company_id: `n${i}` })).concat([fill("x1", "ros"), fill("x2", "ros"), fill("y1", "reinforcement_learning"), row("z1", { company_id: "z" })]);
+    const rows = [...Array(MAX_NEW)].map((_, i) => row(`n${i}`, { company_id: `n${i}` })).concat([fill("x1", "ros"), { ...fill("x2", "ros"), title: "运动控制工程师" }, fill("y1", "reinforcement_learning"), row("z1", { company_id: "z" })]);
     const { cards, skipped } = run(rows, { before: new Set(["z1"]) });
     const fills = cards.filter((c) => c.slot === "fill");
     expect(fills.map((c) => [c.positionId, c.unlocks])).toEqual([["x1", 2], ["y1", 1]]);
