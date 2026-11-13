@@ -87,13 +87,15 @@ export function assess(parsed: ParsedJd, ev: Evidence[], user: { level: number; 
     if (a.modality === "preferred") prefW += w; else reqW += w;
     judgements.push({ concepts: a.concepts, status: pick.status, importance: a.importance, modality: a.modality, depth: a.depth, quote: a.quote, via: pick.via });
   }
-  const prefCap = Math.min(prefW, reqW * 0.2);
+  // 「优先」 lines count for a fifth of what is required at most — unless nothing is required: then they are all the post
+  // asks, and count whole (capped at nothing, the coverage was 0 / 0 and the post fell to 低相关 with no score)
+  const prefCap = reqW ? Math.min(prefW, reqW * 0.2) : prefW;
   for (let i = 0; i < parsed.atoms.length; i++) {
     const a = parsed.atoms[i], j = judgements[i];
     const w = a.modality === "preferred" ? (prefW ? (W.preferred * prefCap) / prefW : 0) : W[a.importance];
     sumW += w; sumWM += w * M[j.status];
   }
-  const B = parsed.atoms.length ? Math.round((40 * sumWM) / sumW) : null;
+  const B = sumW ? Math.round((40 * sumWM) / sumW) : null;
   // C — similar work delivered
   // similar work counts for the job's main task, not for a task its duties mention in passing
   const delivered = ev.filter((e) => e.depth === "delivered" && directMain.includes(e.conceptId));
