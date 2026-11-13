@@ -806,7 +806,7 @@ export const tools = {
     name: "shortlist.current",
     description: "本周短名单：每周一随简报出的至多 10 张卡——新机会（岗位名对口、城市在名单里、重点公司的新岗）、要决定（放了两周的草稿、上周先放着的）、可补（差一项核心要求、有到期日）。每张卡两句话都引岗位原文。skipped 是本周被规则挡掉和超出张数的，可以放回。只读最近一份，不在读的时候生成。",
     input: Type.Object({}),
-    output: Type.Object({ shortlist: Type.Unknown({ description: "{ id, week, at, cards: [{ key, slot: new|decide|fill|company（重点公司卡：没有在招岗位，但有投递途径；positionId 为空，gap 写怎么投，links 是依据）, positionId, applicationId?, company, title, cities, closesAt, why, gap, notes[], group?, groupApplied[], gapConcept?, unlocks?, expiresAt?, decision, reason?, plan?（补一下时写的计划，几行大白话）, planNote?（没写计划的原因）, links?, variants?（同公司同一岗位的其他几条：{ positionId, title, cities }，并在这张卡上） }], skipped: [{ reason, rule?, positionId, company, title }], skippedTotal }，没有则 null" }) }),
+    output: Type.Object({ shortlist: Type.Unknown({ description: "{ id, week, at, notes?（写在卡片上面的话：第一档城市本周没有对口的 / 这周没细读）, cards: [{ key, slot: new|key（重点公司在招的岗位，最多 2 张）|decide|fill|company（重点公司卡：没有在招岗位，但有投递途径；positionId 为空，gap 写怎么投，links 是依据）, positionId, applicationId?, company, title, cities, closesAt, why, gap, notes[], group?, groupApplied[], gapConcept?, unlocks?, expiresAt?, decision, reason?, plan?（补一下时写的计划，几行大白话）, planNote?（没写计划的原因）, links?, read?（模型细读岗位描述的 { score, verdict }；新机会按它减去城市档排）, variants?（同公司同一岗位的其他几条：{ positionId, title, cities }，并在这张卡上） }], skipped: [{ reason, rule?, positionId, company, title }], skippedTotal }，没有则 null" }) }),
     effects: READ,
     execution: "sync",
     errors: [],
