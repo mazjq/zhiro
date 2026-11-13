@@ -46,6 +46,8 @@ export interface Card {
   plan?: string; planNote?: string;
   /** a 重点公司 card: the evidence of how to apply, each a link */
   links?: { text: string; url: string }[];
+  /** the same role this company posted again (a copy per city, 助理 / 主管, another job number): on this card, not on their own */
+  variants?: { positionId: string; title: string; cities: string[] }[];
 }
 export interface Skipped { reason: string; rule?: Rule; positionId: string; company: string; title: string }
 export interface Shortlist { id: string; week: string; at: string; cards: Card[]; skipped: Skipped[]; skippedTotal: number; skippedBy: Record<string, number> }
@@ -155,9 +157,23 @@ const TIER_RANK: Record<string, number> = { 优先考虑: 0, 可迁移: 1, 待�
 const daysLeft = (closesAt: string | null, today: string) => closesAt ? Math.round((Date.parse(closesAt.slice(0, 10)) - Date.parse(today)) / DAY) : null;
 const plusDays = (day: string, n: number) => new Date(Date.parse(day) + n * DAY).toISOString().slice(0, 10);
 
-function toCard(r: Row, a: Assessment | null, me: Me, rules: Rules, applied: Map<string, string[]>, today: string, slot: Slot = "new"): Card {
+const placesOf = (cities: string[]) => cities.flatMap((c) => c.split(/[\s,，/、]+/)).map((c) => c.replace(/(省|市|区|县|自治区|特别行政区)$/, "")).filter((c) => c.length >= 2);
+/**
+ * What makes two posts of one company the same role: the title without where it is (the post's own cities), which
+ * intake (2027届 / 校招), its job number, its grade (助理 / 主管 / 高级) and the degree it is for. A direction in brackets stays: 「（运动控制方向）」
+ * and 「（嵌入式方向）」 are two roles.
+ */
+export function roleKey(title: string, cities: string[] = []): string {
+  let t = title.normalize("NFKC").toLowerCase();
+  for (const c of placesOf(cities)) t = t.split(c.toLowerCase()).join("");
+  return t.replace(/20\d\d\s*届?|\d\d\s*届|校园招聘|校招|j\d{3,}/g, "").replace(/助理|主管|高级|资深|初级|中级|博士|硕士|本科|研究生/g, "").replace(/[^a-z0-9+#一-鿿]+/g, "");
+}
+
+function toCard(r: Row, a: Assessment | null, me: Me, rules: Rules, applied: Map<string, string[]>, today: string, slot: Slot = "new", same: Row[] = []): Card {
   const cities = json.parse(r.cities, [] as string[]);
-  const where = cities.length ? cities : json.parse(r.c_cities, [] as string[]);
+  const citiesOf = (x: Row) => { const own = json.parse(x.cities, [] as string[]); return own.length ? own : json.parse(x.c_cities, [] as string[]); };
+  const variants = same.map((x) => ({ positionId: x.id, title: x.title, cities: citiesOf(x) }));
+  const where = [...new Set([...(cities.length ? cities : json.parse(r.c_cities, [] as string[])), ...variants.flatMap((v) => v.cities)])];
   const closesAt = r.closes_at ?? r.c_closes ?? null;
   const group = groupOf(r.company) ?? undefined;
   const groupApplied = (group ? applied.get(group) ?? [] : []).filter((n) => n !== r.company);
@@ -166,9 +182,10 @@ function toCard(r: Row, a: Assessment | null, me: Me, rules: Rules, applied: Map
   if (r.key_company) notes.push("重点公司");
   if (groupApplied.length) notes.push(`同集团已投 ${groupApplied.slice(0, 2).join("、")}${groupApplied.length > 2 ? " 等" : ""}`);
   if (r.watch_priority) notes.push("关注中");
+  if (variants.length) notes.push(`同岗位还有 ${variants.length} 个`);
   const left = daysLeft(closesAt, today);
   if (left != null) notes.push(left < 0 ? "已过截止" : left === 0 ? "今天截止" : `还剩 ${left} 天`);
-  return { key: r.id, slot, positionId: r.id, companyId: r.company_id, company: r.company, title: r.title, cities: where, closesAt, cityRank: cityRank(where.map(low), rules.tiers), tier: a?.tier, why, gap, notes, group, groupApplied, decision: "pending" };
+  return { key: r.id, slot, positionId: r.id, companyId: r.company_id, company: r.company, title: r.title, cities: where, closesAt, cityRank: cityRank(where.map(low), rules.tiers), tier: a?.tier, why, gap, notes, group, groupApplied, decision: "pending", ...(variants.length ? { variants } : {}) };
 }
 
 /** Pure selection over rows the queries fetched; exported for the test. `applied` = group → companies applied to. */
@@ -209,12 +226,21 @@ export function pick(rows: Row[], me: Me, rules: Rules, applied: Map<string, str
     scored.push({ r, a, sort: [r.key_company ? 0 : 1, rank < 0 ? 99 : rank, like ? 0 : 1, TIER_RANK[a?.tier ?? ""] ?? 5, -(a?.S ?? 0), -Date.parse(r.created_at)] });
   }
   scored.sort((x, y) => { for (let i = 0; i < x.sort.length; i++) if (x.sort[i] !== y.sort[i]) return x.sort[i] - y.sort[i]; return 0; });
+  // one company's posts of the same role are one candidate: the best of them, the others listed on its card
+  const roles = new Map<string, Row[]>(), firsts: typeof scored = [];
+  for (const x of scored) {
+    const own = json.parse(x.r.cities, [] as string[]);
+    const k = `${x.r.company_id}|${roleKey(x.r.title, own.length ? own : json.parse(x.r.c_cities, [] as string[]))}`;
+    const same = roles.get(k);
+    if (same) same.push(x.r); else { roles.set(k, []); firsts.push(x); }
+  }
+  const sameAs = (x: (typeof scored)[number]) => { const own = json.parse(x.r.cities, [] as string[]); return roles.get(`${x.r.company_id}|${roleKey(x.r.title, own.length ? own : json.parse(x.r.c_cities, [] as string[]))}`) ?? []; };
   const cards: Card[] = [];
   const perCompany = new Map<string, number>();
   const rest: typeof scored = [];
-  for (const x of scored) {
+  for (const x of firsts) {
     const n = perCompany.get(x.r.company_id) ?? 0;
-    if (cards.length < MAX_NEW && n < PER_COMPANY) { cards.push(toCard(x.r, x.a, me, rules, applied, today)); perCompany.set(x.r.company_id, n + 1); }
+    if (cards.length < MAX_NEW && n < PER_COMPANY) { cards.push(toCard(x.r, x.a, me, rules, applied, today, "new", sameAs(x))); perCompany.set(x.r.company_id, n + 1); }
     else rest.push(x);
   }
   // 可补: one card per open skill, the skill that would unlock the most posts first
@@ -223,7 +249,7 @@ export function pick(rows: Row[], me: Me, rules: Rules, applied: Map<string, str
   const fills = [...byConcept].sort((a, b) => b[1].length - a[1].length).slice(0, MAX_FILL);
   for (const [concept, xs] of fills) {
     const x = xs[0];
-    const card = toCard(x.r, x.a, me, rules, applied, today, "fill");
+    const card = toCard(x.r, x.a, me, rules, applied, today, "fill", sameAs(x));
     card.gapConcept = label(concept); card.unlocks = xs.length;
     card.expiresAt = card.closesAt ? plusDays(card.closesAt.slice(0, 10), -14) : plusDays(today, 21);
     if (card.expiresAt < today) card.expiresAt = today;
