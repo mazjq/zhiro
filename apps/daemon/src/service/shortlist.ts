@@ -30,11 +30,11 @@ import { conceptsIn, concept } from "../recommenders/concepts.js";
 import { tagCompany } from "../recommenders/index.js";
 import { isAggregate } from "../data/index.js";
 import { deepFit, profileText } from "./fit.js";
-import { asBackground } from "../budget/index.js";
+import { asBackground, isLimitError } from "../budget/index.js";
 import { parseJsonWithRepair, contentText } from "@earendil-works/pi-ai";
 import { withPurpose } from "./usage.js";
 
-export type Slot = "new" | "decide" | "fill" | "company";
+export type Slot = "new" | "key" | "decide" | "fill" | "company";
 export type Decision = "pending" | "apply" | "skip" | "hold" | "fill" | "seen";
 export type RuleKind = "company" | "type" | "city" | "group";
 export interface Rule { kind: RuleKind; value: string }
@@ -48,9 +48,11 @@ export interface Card {
   links?: { text: string; url: string }[];
   /** the same role this company posted again (a copy per city, 助理 / 主管, another job number): on this card, not on their own */
   variants?: { positionId: string; title: string; cities: string[] }[];
+  /** what the model read in the post: its 0–100 and its one line */
+  read?: { score: number; verdict: string };
 }
 export interface Skipped { reason: string; rule?: Rule; positionId: string; company: string; title: string }
-export interface Shortlist { id: string; week: string; at: string; cards: Card[]; skipped: Skipped[]; skippedTotal: number; skippedBy: Record<string, number> }
+export interface Shortlist { id: string; week: string; at: string; cards: Card[]; skipped: Skipped[]; skippedTotal: number; skippedBy: Record<string, number>; /** said above the cards: no first-city post that fits, a week nobody read */ notes?: string[] }
 
 export const MAX_NEW = 6, MAX_DECIDE = 3, MAX_FILL = 2, PER_COMPANY = 2;
 const DAY = 86400_000;
@@ -153,10 +155,10 @@ export function wording(a: Assessment | null, title: string, hasJd: boolean, me:
 /** The one open core skill a post asks that the person could still pick up (unknown, never a confirmed gap). */
 const fillable = (a: Assessment | null) => a && a.A >= 30 ? a.judgements.find((j) => j.status === "unknown" && j.importance === "core")?.concepts[0] ?? null : null;
 
-const TIER_RANK: Record<string, number> = { 优先考虑: 0, 可迁移: 1, 待补资料: 2, 明显缺口: 3, 低相关: 4 };
 const daysLeft = (closesAt: string | null, today: string) => closesAt ? Math.round((Date.parse(closesAt.slice(0, 10)) - Date.parse(today)) / DAY) : null;
 const plusDays = (day: string, n: number) => new Date(Date.parse(day) + n * DAY).toISOString().slice(0, 10);
 
+const placeOf = (r: { cities: string; c_cities: string }) => { const own = json.parse(r.cities, [] as string[]); return own.length ? own : json.parse(r.c_cities, [] as string[]); };
 const placesOf = (cities: string[]) => cities.flatMap((c) => c.split(/[\s,，/、]+/)).map((c) => c.replace(/(省|市|区|县|自治区|特别行政区)$/, "")).filter((c) => c.length >= 2);
 /**
  * What makes two posts of one company the same role: the title without where it is (the post's own cities), which
@@ -188,12 +190,24 @@ function toCard(r: Row, a: Assessment | null, me: Me, rules: Rules, applied: Map
   return { key: r.id, slot, positionId: r.id, companyId: r.company_id, company: r.company, title: r.title, cities: where, closesAt, cityRank: cityRank(where.map(low), rules.tiers), tier: a?.tier, why, gap, notes, group, groupApplied, decision: "pending", ...(variants.length ? { variants } : {}) };
 }
 
-/** Pure selection over rows the queries fetched; exported for the test. `applied` = group → companies applied to. */
-export function pick(rows: Row[], me: Me, rules: Rules, applied: Map<string, string[]>, assessOf: (r: Row) => Assessment | null, today: string, skippedBefore: Set<string>): { cards: Card[]; skipped: Skipped[] } {
+/** What the model's reading of a post said (position_fit, made against the profile as it is now), and which posts the week's look over the titles chose to read. */
+export interface Reads { fit?: (positionId: string) => { score: number; verdict: string } | null; picked?: Set<string> }
+export type Cand = { r: Row; a: Assessment | null; rank: number; like: boolean; same: Row[] };
+
+/** Rule score → a coarse base for a week nobody read: the score is too rough to order within a band. */
+const band = (S: number) => (S >= 85 ? 80 : S >= 70 ? 65 : S >= 45 ? 50 : 30);
+/** One city tier down is worth this much match; a read under READ_FLOOR is not a 新机会. */
+export const CITY_STEP = 15, READ_FLOOR = 55, MAX_KEY = 2;
+
+/**
+ * Posts that pass the person's own rules, one per role of a company (roleKey), in no order yet: what the week reads and
+ * chooses from. Exported for the reading step and the test.
+ */
+export function candidates(rows: Row[], me: Me, rules: Rules, applied: Map<string, string[]>, assessOf: (r: Row) => Assessment | null, today: string, skippedBefore: Set<string>): { cands: Cand[]; skipped: Skipped[] } {
   const skipped: Skipped[] = [];
   const skip = (r: Row, reason: string, rule?: Rule) => skipped.push({ reason, rule, positionId: r.id, company: r.company, title: r.title });
   const appliedInstitutes = [...applied.values()].flat().some((n) => INSTITUTE.test(n));
-  const scored: { r: Row; a: Assessment | null; sort: number[] }[] = [];
+  const all: Cand[] = [];
   for (const r of rows) {
     if (r.app_state || skippedBefore.has(r.id)) continue; // held, sent, or 不投 already: decided
     const closesAt = r.closes_at ?? r.c_closes;
@@ -201,7 +215,7 @@ export function pick(rows: Row[], me: Me, rules: Rules, applied: Map<string, str
     if (me.level && minLevel(r.degree_req || r.c_degree || "") > me.level) continue;
     const title = low(r.title);
     const group = groupOf(r.company);
-    // 像你投过的: a company of a group the person applied to is in whatever it posts; an institute elsewhere only sorts higher
+    // 像你投过的: a company of a group the person applied to is in whatever it posts; an institute elsewhere only breaks a tie
     const sameGroup = !!(group && applied.has(group));
     const like = sameGroup || (appliedInstitutes && INSTITUTE.test(r.company));
     const hit = r.key_company || sameGroup || [...conceptsIn(r.title)].some((c) => me.concepts.has(c)) || me.stems.some((k) => title.includes(k)) || me.direction.some((k) => title.includes(k));
@@ -210,8 +224,7 @@ export function pick(rows: Row[], me: Me, rules: Rules, applied: Map<string, str
     if (rules.blocked.has(r.company_id)) { skip(r, "标了「不投」的公司", { kind: "company", value: r.company_id }); continue; }
     const ex = rules.excludes.find((x) => title.includes(x));
     if (ex) { skip(r, `岗位名含「${ex}」`, { kind: "type", value: ex }); continue; }
-    const cities = json.parse(r.cities, [] as string[]);
-    const where = (cities.length ? cities : json.parse(r.c_cities, [] as string[])).map(low);
+    const where = placeOf(r).map(low);
     const no = rules.noCities.find((c) => where.some((w) => w.includes(c)));
     if (no) { skip(r, `工作地「${no}」你说过不去`, { kind: "city", value: no }); continue; }
     const rank = cityRank(where, rules.tiers);
@@ -223,42 +236,93 @@ export function pick(rows: Row[], me: Me, rules: Rules, applied: Map<string, str
       const said = a.judgements.filter((j) => j.status === "gap" && j.importance === "core").map((j) => j.concepts.map(label).join("/"));
       skip(r, `核心要求是你说过没做过的（${[...new Set(said)].slice(0, 2).join("、")}）`); continue;
     }
-    scored.push({ r, a, sort: [r.key_company ? 0 : 1, rank < 0 ? 99 : rank, like ? 0 : 1, TIER_RANK[a?.tier ?? ""] ?? 5, -(a?.S ?? 0), -Date.parse(r.created_at)] });
+    all.push({ r, a, rank, like, same: [] });
   }
-  scored.sort((x, y) => { for (let i = 0; i < x.sort.length; i++) if (x.sort[i] !== y.sort[i]) return x.sort[i] - y.sort[i]; return 0; });
-  // one company's posts of the same role are one candidate: the best of them, the others listed on its card
-  const roles = new Map<string, Row[]>(), firsts: typeof scored = [];
-  for (const x of scored) {
-    const own = json.parse(x.r.cities, [] as string[]);
-    const k = `${x.r.company_id}|${roleKey(x.r.title, own.length ? own : json.parse(x.r.c_cities, [] as string[]))}`;
-    const same = roles.get(k);
-    if (same) same.push(x.r); else { roles.set(k, []); firsts.push(x); }
+  // one company's posts of the same role are one candidate: the one the rules rate highest, the others listed on its card
+  all.sort((x, y) => (y.a?.S ?? 0) - (x.a?.S ?? 0) || x.rank - y.rank || Date.parse(y.r.created_at) - Date.parse(x.r.created_at));
+  const roles = new Map<string, Cand>(), cands: Cand[] = [];
+  for (const x of all) {
+    const k = `${x.r.company_id}|${roleKey(x.r.title, placeOf(x.r))}`;
+    const first = roles.get(k);
+    if (first) first.same.push(x.r); else { roles.set(k, x); cands.push(x); }
   }
-  const sameAs = (x: (typeof scored)[number]) => { const own = json.parse(x.r.cities, [] as string[]); return roles.get(`${x.r.company_id}|${roleKey(x.r.title, own.length ? own : json.parse(x.r.c_cities, [] as string[]))}`) ?? []; };
-  const cards: Card[] = [];
-  const perCompany = new Map<string, number>();
-  const rest: typeof scored = [];
-  for (const x of firsts) {
+  return { cands, skipped };
+}
+
+/**
+ * Pure selection; exported for the test. `applied` = group → companies applied to.
+ * What a post is worth is what the model read in it (or, a week nobody read, the rule score in bands) less CITY_STEP a
+ * city tier — the rule score alone put 低相关 posts of the first city ahead of the best matches elsewhere, and rated a
+ * test-bench post above the design post beside it. Then by slot: 重点公司 has its own two cards whatever they lack; 新机会
+ * takes what was read and found to fit (a week nobody read: what the rules do not call 低相关), two a company at most, and
+ * always the best of the first city when it has one that fits — said plainly when it has none.
+ */
+export function pick(rows: Row[], me: Me, rules: Rules, applied: Map<string, string[]>, assessOf: (r: Row) => Assessment | null, today: string, skippedBefore: Set<string>, reads: Reads = {}): { cards: Card[]; skipped: Skipped[]; notes: string[] } {
+  const { cands, skipped } = candidates(rows, me, rules, applied, assessOf, today, skippedBefore);
+  const skip = (r: Row, reason: string) => skipped.push({ reason, positionId: r.id, company: r.company, title: r.title });
+  const fit = (x: Cand) => reads.fit?.(x.r.id) ?? null;
+  const wasRead = cands.some((x) => fit(x));
+  const base = (x: Cand) => fit(x)?.score ?? band(x.a?.S ?? 0);
+  // an unknown place counts one tier down; a 重点 company's post off the list, as far as the list goes
+  const steps = (x: Cand) => (x.rank < 0 ? rules.tiers.length : x.rank >= rules.tiers.length ? Math.min(1, rules.tiers.length) : x.rank);
+  const value = (x: Cand) => base(x) - CITY_STEP * steps(x);
+  const due = (x: Cand) => Date.parse((x.r.closes_at ?? x.r.c_closes ?? "9999-12-31").slice(0, 10));
+  const byValue = (x: Cand, y: Cand) => value(y) - value(x) || Number(y.like) - Number(x.like) || due(x) - due(y) || Date.parse(y.r.created_at) - Date.parse(x.r.created_at);
+  const card = (x: Cand, slot: Slot): Card => {
+    const c = toCard(x.r, x.a, me, rules, applied, today, slot, x.same);
+    const f = fit(x);
+    if (f) c.read = f;
+    else if (wasRead && !(x.r.jd_text ?? "").trim()) c.notes.push("没有岗位描述，没法细读");
+    return c;
+  };
+  const cards: Card[] = [], notes: string[] = [];
+  const rest: { x: Cand; why: string }[] = [];
+  // 重点公司: the person named them, so their posts are shown whatever the match — the card says what is missing
+  const keys = cands.filter((x) => x.r.key_company).sort(byValue);
+  for (const x of keys.slice(0, MAX_KEY)) cards.push(card(x, "key"));
+  for (const x of keys.slice(MAX_KEY)) rest.push({ x, why: "超出本周张数" });
+  // 新机会
+  const fits = (x: Cand): string | null => {
+    const f = fit(x);
+    if (f) return f.score >= READ_FLOOR ? null : `细读后不对口${f.verdict ? `（${f.verdict.slice(0, 30)}）` : ""}`;
+    if (wasRead) return reads.picked?.has(x.r.id) && !(x.r.jd_text ?? "").trim() ? null : "这周没有细读到它";
+    return x.a?.tier === "低相关" ? "规则判断相关度低" : null;
+  };
+  const open: Cand[] = [];
+  for (const x of cands.filter((x) => !x.r.key_company)) { const why = fits(x); if (why) rest.push({ x, why }); else open.push(x); }
+  open.sort(byValue);
+  const perCompany = new Map<string, number>(), news: Cand[] = [], over: Cand[] = [];
+  for (const x of open) {
     const n = perCompany.get(x.r.company_id) ?? 0;
-    if (cards.length < MAX_NEW && n < PER_COMPANY) { cards.push(toCard(x.r, x.a, me, rules, applied, today, "new", sameAs(x))); perCompany.set(x.r.company_id, n + 1); }
-    else rest.push(x);
+    if (news.length < MAX_NEW && n < PER_COMPANY) { news.push(x); perCompany.set(x.r.company_id, n + 1); } else over.push(x);
   }
+  // the first city: its best fitting post has a card every week; none that fits is said, not made up
+  const first = rules.tiers[0]?.[0];
+  let firstCity: Cand | null = null;
+  if (first && cands.length && !news.some((x) => x.rank === 0)) {
+    firstCity = over.find((x) => x.rank === 0 && base(x) >= READ_FLOOR) ?? null;
+    if (firstCity) { over.splice(over.indexOf(firstCity), 1); if (news.length >= MAX_NEW) over.unshift(news.pop()!); news.push(firstCity); }
+    else notes.push(`本周${first}没有对口的新岗位`);
+  }
+  for (const x of news) { const c = card(x, "new"); if (x === firstCity) c.notes.unshift(`${first}本周最对口的一个`); cards.push(c); }
+  for (const x of over) rest.push({ x, why: "超出本周张数" });
+  if (cands.length && !wasRead) notes.push("这周没能细读岗位描述，按规则粗排");
   // 可补: one card per open skill, the skill that would unlock the most posts first
   const byConcept = new Map<string, typeof rest>();
-  for (const x of rest) { const c = fillable(x.a); if (c) (byConcept.get(c) ?? byConcept.set(c, []).get(c)!).push(x); }
+  for (const y of rest) { const c = y.x.r.key_company ? null : fillable(y.x.a); if (c) (byConcept.get(c) ?? byConcept.set(c, []).get(c)!).push(y); }
   const fills = [...byConcept].sort((a, b) => b[1].length - a[1].length).slice(0, MAX_FILL);
-  for (const [concept, xs] of fills) {
-    const x = xs[0];
-    const card = toCard(x.r, x.a, me, rules, applied, today, "fill", sameAs(x));
-    card.gapConcept = label(concept); card.unlocks = xs.length;
-    card.expiresAt = card.closesAt ? plusDays(card.closesAt.slice(0, 10), -14) : plusDays(today, 21);
-    if (card.expiresAt < today) card.expiresAt = today;
-    card.notes.push(`补上「${label(concept)}」还能投 ${xs.length - 1} 个同类岗位`);
-    cards.push(card);
-    rest.splice(rest.indexOf(x), 1);
+  for (const [concept, ys] of fills) {
+    const y = ys[0];
+    const c = card(y.x, "fill");
+    c.gapConcept = label(concept); c.unlocks = ys.length;
+    c.expiresAt = c.closesAt ? plusDays(c.closesAt.slice(0, 10), -14) : plusDays(today, 21);
+    if (c.expiresAt < today) c.expiresAt = today;
+    c.notes.push(`补上「${label(concept)}」还能投 ${ys.length - 1} 个同类岗位`);
+    cards.push(c);
+    rest.splice(rest.indexOf(y), 1);
   }
-  for (const x of rest) skip(x.r, "超出本周张数");
-  return { cards, skipped };
+  for (const y of rest) skip(y.x.r, y.why);
+  return { cards, skipped, notes };
 }
 
 /** Companies applied to this season, by group, for 「同集团已投」 and 「像你投过的」. */
@@ -289,7 +353,7 @@ function decideCards(db: Db, me: Me, rules: Rules, applied: Map<string, string[]
     out.push(card);
   }
   for (const a of db.prepare(`select a.id app_id, a.updated_at, p.id, p.title, p.cities, p.jd_text, c.closes_at, co.id company_id, co.name company from application a join position p on p.id = a.position_id
-      join campaign c on c.id = a.campaign_id join company co on co.id = c.company_id where a.state = 'draft' and a.updated_at < ? order by a.updated_at`).all(new Date(now - 14 * DAY).toISOString()) as any[]) {
+      join campaign c on c.id = a.campaign_id join company co on co.id = c.company_id where a.state = 'draft' and a.updated_at < ? and trim(p.jd_text) != '' order by a.updated_at`).all(new Date(now - 14 * DAY).toISOString()) as any[]) {
     if (out.length >= MAX_DECIDE) break;
     const left = daysLeft(a.closes_at, today);
     const days = Math.floor((now - Date.parse(a.updated_at)) / DAY);
@@ -346,28 +410,99 @@ export function companyCard(db: Db, rules: Rules, today: string): Card | null {
 }
 
 /** Make this week's list and keep it. */
-export function runShortlist(s: Services, nowMs = Date.now()): Shortlist {
+/** What a week's list is chosen from: posts that came since the last list (two weeks at most), and the person's side. */
+function poolOf(s: Services, nowMs: number) {
   const db = s.domain.db;
-  const today = beijingDay(new Date(nowMs));
-  const me = loadMe(db), rules = loadRules(s), applied = appliedByGroup(db);
   const last = db.prepare("select at from shortlist_run order by at desc limit 1").get() as { at: string } | undefined;
   const since = new Date(Math.max(last ? Date.parse(last.at) : 0, nowMs - 14 * DAY)).toISOString();
-  const rows = db.prepare(`${ROWS} where p.status = 'open' and p.created_at >= ?`).all(since) as unknown as Row[];
-  const skippedBefore = new Set((db.prepare("select key from shortlist_item where decision = 'skip'").all() as { key: string }[]).map((r) => r.key));
-  const { cards, skipped } = pick(rows, me, rules, applied, (r) => assessed(db, r, me), today, skippedBefore);
+  return {
+    today: beijingDay(new Date(nowMs)), me: loadMe(db), rules: loadRules(s), applied: appliedByGroup(db),
+    rows: db.prepare(`${ROWS} where p.status = 'open' and p.created_at >= ?`).all(since) as unknown as Row[],
+    skippedBefore: new Set((db.prepare("select key from shortlist_item where decision = 'skip'").all() as { key: string }[]).map((r) => r.key)),
+  };
+}
+
+/** The model's readings on file, those made against the profile as it is now. */
+function readsOf(s: Services, picked?: Set<string>): Reads {
+  const hash = sha(profileText(s));
+  const q = s.domain.db.prepare("select score, verdict, profile_hash from position_fit where position_id = ?");
+  return { picked, fit: (id) => { const r = q.get(id) as { score: number; verdict: string; profile_hash: string } | undefined; return r && r.profile_hash === hash ? { score: r.score, verdict: r.verdict } : null; } };
+}
+
+export const READ_PER_WEEK = 40;
+const TRIAGE = `你在帮一位应届生从一批新岗位里挑出值得细读岗位描述的。给你他的画像和岗位清单，每行是：编号｜公司｜岗位名｜城市｜学历。
+挑出工作内容最可能与他的方向、研究和项目直接相关的；研发、算法、设计类优先，测试、销售、运维、行政靠后。
+岗位名只是沾了一个词的不要（例如对做控制工程的人：「风险控制」「物料控制」「财务控制」）。
+只输出一个 JSON 数组，元素是编号，按值得读的程度从高到低，例如 [3, 17, 42]。`;
+
+/**
+ * Before the week's list: read the posts worth reading, so the list is ordered by what they say and not by the rule
+ * score. 重点 companies' posts and posts for a 博士 are always read; of the rest, one look over the titles picks which
+ * (READ_PER_WEEK in all, counted with the week's other shortlist.fit calls). A post already read against this profile is
+ * not asked again, one with no description is not asked at all. Background work `shortlist_fit`: a refusal by the gate, a
+ * limit, or `maxMs` stops the reading and the list is made from what there is. Never throws.
+ */
+export async function readForShortlist(s: Services, nowMs = Date.now(), maxMs = 12 * 60_000): Promise<{ picked: Set<string>; read: number }> {
+  const picked = new Set<string>();
+  let read = 0;
+  try {
+    const to = s.llm?.route?.();
+    if (!s.llm || to?.kind === "waiting" || to?.kind === "unavailable") return { picked, read };
+    const db = s.domain.db;
+    const { rows, me, rules, applied, today, skippedBefore } = poolOf(s, nowMs);
+    const { cands } = candidates(rows, me, rules, applied, (r) => assessed(db, r, me), today, skippedBefore);
+    const must = cands.filter((x) => x.r.key_company || /博士/.test(x.r.title));
+    const others = cands.filter((x) => !must.includes(x)); // highest rule score first (candidates sorts them)
+    const room = Math.max(0, READ_PER_WEEK - must.length);
+    let chosen = others.slice(0, room);
+    if (others.length > room) {
+      const listed = others.slice(0, 400);
+      const lines = listed.map((x, i) => `${i + 1}｜${x.r.company.slice(0, 24)}｜${x.r.title.slice(0, 40)}｜${placeOf(x.r).slice(0, 3).join("/") || "未写"}｜${(x.r.degree_req || x.r.c_degree || "未写").slice(0, 12)}`).join("\n");
+      try {
+        const msg = await asBackground("shortlist_fit", () => withPurpose("shortlist.triage", "", () => s.llm!.models.completeSimple(s.llm!.model(), { systemPrompt: TRIAGE, messages: [{ role: "user", content: [{ type: "text", text: `最多挑 ${room} 个。\n\n## 画像\n${profileText(s)}\n\n## 岗位\n${lines}` }], timestamp: Date.now() }] }, { reasoning: "low" })));
+        const ns = parseJsonWithRepair<unknown>(contentText(msg.content).trim().replace(/^```(?:json)?\s*|\s*```$/g, ""));
+        const got = (Array.isArray(ns) ? ns : []).map((n) => listed[Number(n) - 1]).filter(Boolean);
+        if (got.length) chosen = [...new Set(got)].slice(0, room);
+      } catch (e: any) { if (e?.code === "BUDGET_DEFERRED" || e?.code === "MODEL_DELEGATED") return { picked, read }; } // nobody to read either
+    }
+    for (const x of [...must, ...chosen]) picked.add(x.r.id);
+    const since = new Date(`${weekOf(nowMs)}T00:00:00`).toISOString();
+    // a call that came back with nothing (a login that ran out) used none of the week's count
+    let left = READ_PER_WEEK - (db.prepare("select count(*) n from llm_usage where purpose = 'shortlist.fit' and at >= ? and total > 0").get(since) as { n: number }).n;
+    const fresh = readsOf(s).fit!, until = Date.now() + maxMs;
+    let failed = 0;
+    for (const x of [...must, ...chosen]) {
+      if (fresh(x.r.id) || !(x.r.jd_text ?? "").trim()) continue;
+      if (left <= 0 || Date.now() > until) break;
+      left--;
+      try { await asBackground("shortlist_fit", () => deepFit(s, x.r.id, "shortlist.fit")); read++; failed = 0; }
+      catch (e: any) {
+        if (e?.code === "BUDGET_DEFERRED" || e?.code === "MODEL_DELEGATED" || isLimitError(e)) break;
+        if (++failed >= 3) break; // three in a row is the model, not the posts: no point asking forty times
+      }
+    }
+  } catch { /* the list is made from what there is */ }
+  return { picked, read };
+}
+
+/** `picked`: what readForShortlist chose to read this week (a chosen post with no description still gets a card). */
+export function runShortlist(s: Services, nowMs = Date.now(), picked?: Set<string>): Shortlist {
+  const db = s.domain.db;
+  const { rows, me, rules, applied, today, skippedBefore } = poolOf(s, nowMs);
+  const { cards, skipped, notes } = pick(rows, me, rules, applied, (r) => assessed(db, r, me), today, skippedBefore, readsOf(s, picked));
   // a 可补 card that ran out: said once, as skipped
   for (const p of db.prepare(`select i.key, i.card_json from shortlist_item i where i.decision = 'fill' and i.run_id = (select id from shortlist_run order by at desc limit 1)`).all() as { key: string; card_json: string }[]) {
     const was = json.parse(p.card_json, {} as Partial<Card>);
     if (was.expiresAt && was.expiresAt < today && was.company && was.title) skipped.unshift({ reason: `可补到期没补（${was.gapConcept ?? ""}）`, positionId: p.key, company: was.company, title: was.title });
   }
   const co = companyCard(db, rules, today);
-  const all = [...cards.filter((c) => c.slot === "new"), ...decideCards(db, me, rules, applied, today, nowMs), ...cards.filter((c) => c.slot === "fill"), ...(co ? [co] : [])];
+  const all = [...cards.filter((c) => c.slot === "new"), ...cards.filter((c) => c.slot === "key"), ...decideCards(db, me, rules, applied, today, nowMs), ...cards.filter((c) => c.slot === "fill"), ...(co ? [co] : [])];
   // what a rule or the cap kept out is what the person may want back: those stay in the kept part; the rest is counted
-  const kind = (x: Skipped) => x.rule ? `规则：${x.rule.kind === "company" ? "不投的公司" : x.rule.kind === "type" ? "排除词" : x.rule.kind === "city" ? "不去的城市" : "集团只投一个"}` : x.reason.startsWith("超出") ? "超出张数" : x.reason.startsWith("可补") ? "可补到期" : x.reason.startsWith("核心") ? "你说过没做过" : "城市不在名单";
+  const kind = (x: Skipped) => x.rule ? `规则：${x.rule.kind === "company" ? "不投的公司" : x.rule.kind === "type" ? "排除词" : x.rule.kind === "city" ? "不去的城市" : "集团只投一个"}` : x.reason.startsWith("超出") ? "超出张数" : x.reason.startsWith("可补") ? "可补到期" : x.reason.startsWith("核心") ? "你说过没做过" : x.reason.startsWith("细读后") ? "细读后不对口" : x.reason.startsWith("这周没有细读") ? "没细读到" : x.reason.startsWith("规则判断") ? "相关度低" : "城市不在名单";
   const skippedBy: Record<string, number> = {};
   for (const x of skipped) skippedBy[kind(x)] = (skippedBy[kind(x)] ?? 0) + 1;
   skipped.sort((a, b) => Number(!(a.rule || !a.reason.startsWith("工作地不在"))) - Number(!(b.rule || !b.reason.startsWith("工作地不在"))));
-  const list: Shortlist = { id: ulid(), week: weekOf(nowMs), at: new Date(nowMs).toISOString(), cards: all, skipped: skipped.slice(0, SKIPPED_KEPT), skippedTotal: skipped.length, skippedBy };
+  const list: Shortlist = { id: ulid(), week: weekOf(nowMs), at: new Date(nowMs).toISOString(), cards: all, skipped: skipped.slice(0, SKIPPED_KEPT), skippedTotal: skipped.length, skippedBy, ...(notes.length ? { notes } : {}) };
   save(db, list, true);
   return list;
 }
@@ -625,7 +760,7 @@ export async function fillPlan(s: Services, runId: string, key: string, nowMs = 
 /** Lines for the Monday brief notice. */
 export function shortlistLines(list: Shortlist): string[] {
   if (!list.cards.length) return [];
-  const name = (c: Card) => `· ${c.slot === "decide" ? "要决定 · " : c.slot === "fill" ? "可补 · " : c.slot === "company" ? "重点公司 · " : ""}${c.company} · ${c.title}`;
+  const name = (c: Card) => `· ${c.slot === "decide" ? "要决定 · " : c.slot === "fill" ? "可补 · " : c.slot === "company" || c.slot === "key" ? "重点公司 · " : ""}${c.company} · ${c.title}`;
   const by = Object.entries(list.skippedBy ?? {}).map(([k, n]) => `${k} ${n}`).join("、");
-  return [`**本周短名单 · ${list.cards.length} 张**`, ...list.cards.slice(0, 10).map(name), ...(list.skippedTotal ? [`· 另有 ${list.skippedTotal} 个没上卡（${by}），在 Zhiro「今日」里看和放回`] : ["· 在 Zhiro「今日」里决定"])];
+  return [`**本周短名单 · ${list.cards.length} 张**`, ...(list.notes ?? []).map((n) => `· ${n}`), ...list.cards.slice(0, 12).map(name), ...(list.skippedTotal ? [`· 另有 ${list.skippedTotal} 个没上卡（${by}），在 Zhiro「今日」里看和放回`] : ["· 在 Zhiro「今日」里决定"])];
 }

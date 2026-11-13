@@ -1,12 +1,12 @@
 import { describe, it, expect } from "vitest";
-import { pick, cityRank, roleKey, weekOf, MAX_NEW } from "./shortlist.js";
+import { pick, cityRank, roleKey, weekOf, MAX_NEW, MAX_KEY, CITY_STEP, READ_FLOOR } from "./shortlist.js";
 
 const me: any = { level: 3, concepts: new Set(["control_algorithm", "motor_control"]), stems: ["控制"], direction: ["动力定位"], user: { level: 3, majors: [], gaps: new Set(), evidence: [] } };
 const rules = (o: any = {}) => ({ tiers: [["武汉"], ["深圳", "上海"], ["北京"]], noCities: [], onePerGroup: [], excludes: [], blocked: new Set<string>(), ...o });
 const row = (id: string, o: any = {}) => ({ id, title: "控制算法工程师", jd_text: "", cities: '["武汉"]', degree_req: "", major_req: "", closes_at: null, created_at: "2026-11-01T00:00:00Z", watch_priority: null,
   c_closes: null, c_degree: "", c_major: "", c_cities: "[]", source_kind: "moka", company_id: id.slice(0, 1), company: `公司${id.slice(0, 1)}`, company_type: "民企", app_state: null, assessment: null, key_company: 0, ...o }) as any;
 const assessOf = (r: any) => r.a ?? null;
-const run = (rows: any[], o: any = {}) => pick(rows, me, rules(o.rules), o.applied ?? new Map(), assessOf, "2026-11-02", o.before ?? new Set());
+const run = (rows: any[], o: any = {}) => pick(rows, me, rules(o.rules), o.applied ?? new Map(), assessOf, "2026-11-02", o.before ?? new Set(), o.reads);
 
 describe("每周短名单", () => {
   it("weekOf is the Monday; cityRank walks the tiers", () => {
@@ -27,7 +27,7 @@ describe("每周短名单", () => {
       row("f1", { app_state: "draft" }), row("g1", { cities: '["北京"]' }), row("h1", { cities: '["深圳"]', a: { tier: "优先考虑", S: 90, A: 40, judgements: [] } }),
     ];
     const { cards, skipped } = run(rows, { rules: { blocked: new Set(["d"]), excludes: ["销售"] } });
-    expect(cards.map((c) => c.positionId)).toEqual(["c1", "a1", "h1", "g1"]); // 重点 first, then city tier, then assessment
+    expect(cards.map((c) => [c.positionId, c.slot])).toEqual([["c1", "key"], ["h1", "new"], ["a1", "new"], ["g1", "new"]]); // 重点 in its own slot; then the match less the city tier: a strong match a tier down is ahead of a weak one at home
     expect(skipped.map((s) => [s.positionId, s.rule?.kind ?? null])).toEqual([["b1", null], ["d1", "company"], ["e1", "type"]]);
     expect(cards[0].notes).toContain("重点公司");
   });
@@ -56,6 +56,42 @@ describe("每周短名单", () => {
     expect(skipped).toHaveLength(0); // a2 is on a1's card, not left out
   });
 
+  it("a week the model read: ordered by its reading less CITY_STEP a city tier; under the floor, or not read, is left out and says why", () => {
+    const fits: Record<string, number> = { a1: 60, b1: 90, c1: 85, d1: 40 };
+    const reads = { fit: (id: string) => (id in fits ? { score: fits[id], verdict: "研发，方向对口" } : null), picked: new Set(["a1", "b1", "c1", "d1", "f1"]) };
+    const rows = [row("a1", { jd_text: "x" }), row("b1", { jd_text: "x", cities: '["上海"]' }), row("c1", { jd_text: "x", cities: '["北京"]' }), row("d1", { jd_text: "x" }),
+      row("e1", { jd_text: "x" }), row("f1", { cities: '["上海"]' })]; // e1 was not chosen to read; f1 was, but has no description to read
+    const { cards, skipped, notes } = run(rows, { reads });
+    expect(cards.map((c) => c.positionId)).toEqual(["b1", "a1", "c1", "f1"]); // 90−15, 60−0, 85−30, then the unread one on its rule band
+    expect(cards[0].read).toEqual({ score: 90, verdict: "研发，方向对口" });
+    expect(cards[3].notes).toContain("没有岗位描述，没法细读");
+    expect(skipped.map((x) => [x.positionId, x.reason])).toEqual([["d1", "细读后不对口（研发，方向对口）"], ["e1", "这周没有细读到它"]]);
+    expect(notes).toEqual([]);
+    expect(run(rows).notes).toEqual(["这周没能细读岗位描述，按规则粗排"]);
+    expect(CITY_STEP).toBe(15); expect(READ_FLOOR).toBe(55);
+  });
+
+  it("the first city always has its best fitting post on the list; none that fits is said, not made up", () => {
+    const sh = [...Array(MAX_NEW + 1)].map((_, i) => row(`s${i}`, { company_id: `s${i}`, jd_text: "x", cities: '["上海"]' }));
+    const wh = row("w1", { company_id: "w", jd_text: "x" });
+    const reads = (w: number) => ({ fit: (id: string) => ({ score: id === "w1" ? w : 95, verdict: "" }) });
+    const fitsHome = run([...sh, wh], { reads: reads(60) }); // 60 at home is worth less than 95 − 15 a tier down, and still gets the last card
+    expect(fitsHome.cards.filter((c) => c.slot === "new")).toHaveLength(MAX_NEW);
+    expect(fitsHome.cards.at(-1)).toMatchObject({ positionId: "w1", notes: expect.arrayContaining(["武汉本周最对口的一个"]) });
+    expect(fitsHome.skipped.filter((x) => x.reason === "超出本周张数")).toHaveLength(2);
+    const noneHome = run([...sh, wh], { reads: reads(40) });
+    expect(noneHome.cards.some((c) => c.positionId === "w1")).toBe(false);
+    expect(noneHome.notes).toEqual(["本周武汉没有对口的新岗位"]);
+  });
+
+  it("重点公司的岗位: two cards of their own, whatever they lack, and they take none of the 新机会", () => {
+    const rows = [...Array(3)].map((_, i) => row(`k${i}`, { company_id: `k${i}`, key_company: 1, a: { tier: "明显缺口", S: 10 * i, A: 0, judgements: [] } })).concat([row("a1")]);
+    const { cards, skipped } = run(rows);
+    expect(cards.map((c) => [c.positionId, c.slot])).toEqual([["k2", "key"], ["k1", "key"], ["a1", "new"]]);
+    expect(MAX_KEY).toBe(2);
+    expect(skipped.map((x) => [x.positionId, x.reason])).toEqual([["k0", "超出本周张数"]]);
+  });
+
   it("同集团: side by side with a note, kept out only when the person said that group takes one", () => {
     const applied = new Map([["中船", ["中国船舶集团有限公司第七〇九研究所"]]]);
     const rows = [row("a1", { company: "中国船舶集团有限公司第七二二研究所" })];
@@ -67,7 +103,7 @@ describe("每周短名单", () => {
 
   it("可补: the open core skill that unlocks the most posts, with a date; a post 不投 before stays out", () => {
     const fill = (id: string, concept: string, S = 50) => row(id, { cities: '["上海"]', a: { tier: "可迁移", S, A: 35, judgements: [{ concepts: [concept], status: "unknown", importance: "core", modality: "required", depth: "used", quote: `熟悉${concept}` }] } });
-    const rows = [...Array(MAX_NEW)].map((_, i) => row(`n${i}`, { company_id: `n${i}` })).concat([fill("x1", "ros"), { ...fill("x2", "ros"), title: "运动控制工程师" }, fill("y1", "reinforcement_learning"), row("z1", { company_id: "z" })]);
+    const rows = [...Array(MAX_NEW)].map((_, i) => row(`n${i}`, { company_id: `n${i}`, a: { tier: "优先考虑", S: 90, A: 40, judgements: [] } })).concat([fill("x1", "ros"), { ...fill("x2", "ros"), title: "运动控制工程师" }, fill("y1", "reinforcement_learning"), row("z1", { company_id: "z" })]);
     const { cards, skipped } = run(rows, { before: new Set(["z1"]) });
     const fills = cards.filter((c) => c.slot === "fill");
     expect(fills.map((c) => [c.positionId, c.unlocks])).toEqual([["x1", 2], ["y1", 1]]);
@@ -133,6 +169,25 @@ describe("短名单细评: the two lines from the model's deep match", async () 
     const again = runShortlist(s, Date.now() + 60_000);
     await deepenShortlist(s, again.id);
     expect(calls).toHaveLength(1);
+  });
+
+  it("before the list: the posts are read (重点 and 博士 always, no look over the titles when all fit in the week's count), once each; the list is then ordered by the reading", async () => {
+    const { readForShortlist, latestShortlist } = await import("./shortlist.js");
+    const { s, calls } = setup((n) => ({ ...good, score: n === 1 ? 62 : 88 }), 3);
+    const r = await readForShortlist(s);
+    expect(r).toMatchObject({ read: 3 });
+    expect(r.picked.size).toBe(3);
+    expect(calls.every((c) => c.kind === "shortlist_fit" && c.purpose === "shortlist.fit")).toBe(true);
+    const list = runShortlist(s, Date.now(), r.picked);
+    expect(list.cards.map((c) => c.read?.score)).toEqual([88, 88]); // the two best of the 重点 company; the third is over the count
+    expect(list.notes).toBeUndefined();
+    expect((await readForShortlist(s, Date.now() + 60_000)).read).toBe(0); // read already, against the same profile
+    expect(calls).toHaveLength(3);
+    // nobody to read: nothing asked, and the list says it was not read
+    const b = setup(() => new BudgetDeferred(new Date().toISOString(), "周额度已用 75%"));
+    expect((await readForShortlist(b.s)).read).toBe(0);
+    expect(runShortlist(b.s).notes).toEqual(["这周没能细读岗位描述，按规则粗排"]);
+    void latestShortlist;
   });
 
   it("a line whose quote is not in the post, a refusal of the gate, or a model error keeps the rule wording", async () => {
