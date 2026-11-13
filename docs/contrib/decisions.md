@@ -234,3 +234,14 @@ entries condense what still holds.
   a new value of shortlist.decide), after which the company comes back only with evidence newer than that; 不投这家, which
   is the existing 不投 company rule. No other decision is taken on it. A company is left out when the same brand (first 4 characters after a
   leading place) is followed under another legal name that does post (the first library had two such pairs).
+- **D-36 · 2026-11-13 · The weekly list is chosen by what the model read, not by the rule score.** D-32 ordered the
+  cards by 重点 company, city tier, then the rule score. Measured on the first library (371 candidates in one week): the
+  six 新机会 were four posts of two 重点 companies and two 低相关 posts of the first city, and none of the nine 优先考虑
+  posts; and the rule score itself was wrong both ways (a post naming the person's own methods at 20, a test-bench post
+  at 100 above the design post beside it). A weighted sum of five factors was drafted and dropped: perturbing its
+  weights hardly moved the result, so the weights were not what chose. Instead: before the list, the model reads up to
+  40 posts a week (重点 companies' and 博士 posts always, one look over the titles picks the rest; background work held
+  by the gate) and a post is worth its reading less 15 a city tier; under 55 it is not a 新机会. Posts of one role are
+  one candidate (#88). 重点 companies' posts get a slot of their own (`key`, two cards) whatever they lack. The first
+  city always has its best fitting post on the list; a week it has none is said on the list, as is a week nobody could
+  read, which falls back to the rule score in bands. A draft with no description is not asked about under 要决定.
