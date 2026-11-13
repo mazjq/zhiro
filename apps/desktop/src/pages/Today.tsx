@@ -34,7 +34,7 @@ function BriefCard({ go }: { go: (p: string) => void }) {
   );
 }
 
-const SLOT: Record<string, string> = { new: "新机会", decide: "要决定", fill: "可补", company: "重点公司" };
+const SLOT: Record<string, string> = { new: "新机会", key: "重点公司的岗位", decide: "要决定", fill: "可补", company: "重点公司" };
 const REASONS: [string, string][] = [["single", "只是这一个"], ["company", "这家公司不投"], ["type", "这类岗位不投"], ["city", "不去这个城市"], ["group", "这个集团只投一个"]];
 const DECIDED: Record<string, string> = { apply: "投：草稿建好了", skip: "不投", hold: "先放着", fill: "补一下", seen: "看过了" };
 
@@ -53,13 +53,14 @@ function ShortlistCard({ go }: { go: (p: string) => void }) {
   const decide = (c: any, decision: string, reason?: string, detail?: string) => run(() => call("shortlist.decide", { runId: l.id, key: c.key, decision, reason, detail }));
   const reasonFor = (c: any) => REASONS.filter(([k]) => k !== "group" || (c.group && c.groupApplied?.length));
   if (!l) return null;
-  const slots = ["new", "decide", "fill", "company"].map((s) => [s, l.cards.filter((c: any) => c.slot === s)] as const).filter(([, xs]) => xs.length);
+  const slots = ["new", "key", "decide", "fill", "company"].map((s) => [s, l.cards.filter((c: any) => c.slot === s)] as const).filter(([, xs]) => xs.length);
   return (
     <Card className="mb-6 px-4 py-3">
       <div className="flex items-center gap-2 mb-2"><div className="font-bold">本周短名单 · {l.cards.length} 张</div>
         <span className="text-xs text-ink-3">{l.week} 这周 · 每张卡定一下就行，一周 15 分钟</span>
         <button className="ml-auto text-xs text-accent disabled:opacity-40" disabled={busy} onClick={() => run(() => call("shortlist.make", {}))}>重出一份</button></div>
       {err && <div className="text-sm text-bad mb-2">{err}</div>}
+      {l.notes?.map((n: string) => <div key={n} className="text-sm text-ink-3 mb-1">{n}</div>)}
       {!l.cards.length && <div className="text-sm text-ink-3">这周没有够格的新机会；没上卡的在下面。</div>}
       {slots.map(([slot, xs]) => (
         <div key={slot} className="mb-2"><div className="text-xs text-ink-3 mb-1">{SLOT[slot]} · {xs.length}</div>
@@ -75,6 +76,7 @@ function ShortlistCard({ go }: { go: (p: string) => void }) {
                 <div className="text-sm text-ink-2">怎么投：{c.gap}</div>
                 {c.links?.length > 0 && <div className="text-xs mt-0.5 flex gap-3 flex-wrap">{c.links.map((x: any) => <a key={x.url} className="text-accent" href={x.url} target="_blank" rel="noreferrer">{x.text}</a>)}</div>}
               </> : <>
+                {c.read && <div className="text-sm text-ink-2 mt-0.5">细读：{c.read.score} 分{c.read.verdict ? ` · ${c.read.verdict}` : ""}</div>}
                 <div className="text-sm text-ink-2 mt-0.5">为什么是你：{c.why}</div>
                 <div className="text-sm text-ink-2">差什么：{c.gap}</div>
                 {c.plan && <div className="text-sm text-ink-2 mt-1 pl-2 border-l-2 border-line whitespace-pre-line">{c.plan}</div>}
