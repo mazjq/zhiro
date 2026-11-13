@@ -80,6 +80,7 @@ function ShortlistCard({ go }: { go: (p: string) => void }) {
                 {c.plan && <div className="text-sm text-ink-2 mt-1 pl-2 border-l-2 border-line whitespace-pre-line">{c.plan}</div>}
                 {c.planNote && <div className="text-xs text-ink-3 mt-0.5">{c.planNote}</div>}
               </>}
+              {c.variants?.length > 0 && <div className="text-xs text-ink-3 mt-0.5">同岗位还有：{c.variants.map((v: any) => `${v.title}${v.cities?.length ? `（${v.cities.slice(0, 2).join("/")}）` : ""}`).join("；")}</div>}
               <div className="flex items-center gap-2 mt-1.5 flex-wrap">
                 {c.decision !== "pending" ? <>
                   <Chip tone={c.decision === "apply" ? "good" : c.decision === "skip" ? "" : "amber"}>{DECIDED[c.decision]}{c.reason && c.reason !== "single" ? `（${REASONS.find(([k]) => k === c.reason)?.[1]}${c.detail ? "：" + c.detail : ""}）` : ""}{c.expiresAt && c.decision !== "apply" ? ` · 到 ${c.expiresAt}` : ""}</Chip>
