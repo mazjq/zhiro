@@ -1,7 +1,7 @@
 import { describe, it, expect } from "vitest";
 import { conceptsIn } from "./concepts.js";
 import { parseJd } from "./requirements.js";
-import { profileEvidence } from "./fit.js";
+import { assess, profileEvidence, userSide } from "./fit.js";
 
 describe("concepts", () => {
   it("reads spellings into concepts; Latin names need word boundaries; 规控 opens into planning + control", () => {
@@ -56,5 +56,15 @@ describe("JD → atoms", () => {
     const p = parseJd("科研岗;国能信控;专业:自动化类;硕士研究生;1人", "AI应用研发工程师");
     expect(p.hasRequirements).toBe(false);
     expect(p.atoms).toHaveLength(0);
+  });
+  it("a post whose every requirement is 「优先」 still gets a score: they are all it asks", () => {
+    const facts = [{ id: "s1", kind: "skill", data: { name: "ROS" } }, { id: "s2", kind: "skill", data: { name: "MPC" } }];
+    const me = userSide(facts, 3, []);
+    const p = parseJd("任职要求\n1. 熟悉 ROS 者优先；\n2. 有 MPC 经验优先", "控制算法工程师");
+    expect(p.atoms.length).toBeGreaterThan(0);
+    expect(p.atoms.every((x) => x.modality === "preferred")).toBe(true);
+    const a = assess(p, me.evidence, me, { degreeText: "", sourceKind: "", agg: false, majorText: "" });
+    expect(Number.isFinite(a.S)).toBe(true);
+    expect(a.B).toBeGreaterThan(0);
   });
 });
