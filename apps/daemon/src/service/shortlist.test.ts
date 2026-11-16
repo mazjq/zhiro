@@ -62,13 +62,15 @@ describe("每周短名单", () => {
     const rows = [row("a1", { jd_text: "x" }), row("b1", { jd_text: "x", cities: '["上海"]' }), row("c1", { jd_text: "x", cities: '["北京"]' }), row("d1", { jd_text: "x" }),
       row("e1", { jd_text: "x" }), row("f1", { cities: '["上海"]' })]; // e1 was not chosen to read; f1 was, but has no description to read
     const { cards, skipped, notes } = run(rows, { reads });
-    expect(cards.map((c) => c.positionId)).toEqual(["b1", "a1", "c1", "f1"]); // 90−15, 60−0, 85−30, then the unread one on its rule band
+    expect(cards.map((c) => c.positionId)).toEqual(["b1", "c1", "a1", "f1"]); // 90−10, 85−20, 60−0, then the unread one on its rule band
+    // the person's own figure for a tier: at 30 the city decides again
+    expect(run(rows, { reads, rules: { step: 30 } }).cards.map((c) => c.positionId).slice(0, 3)).toEqual(["a1", "b1", "c1"]); // 60−0, 90−30, 85−60
     expect(cards[0].read).toEqual({ score: 90, verdict: "研发，方向对口" });
     expect(cards[3].notes).toContain("没有岗位描述，没法细读");
     expect(skipped.map((x) => [x.positionId, x.reason])).toEqual([["d1", "细读后不对口（研发，方向对口）"], ["e1", "这周没有细读到它"]]);
     expect(notes).toEqual([]);
     expect(run(rows).notes).toEqual(["这周没能细读岗位描述，按规则粗排"]);
-    expect(CITY_STEP).toBe(15); expect(READ_FLOOR).toBe(55);
+    expect(CITY_STEP).toBe(10); expect(READ_FLOOR).toBe(55);
   });
 
   it("the first city always has its best fitting post on the list; none that fits is said, not made up", () => {

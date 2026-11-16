@@ -116,13 +116,14 @@ function loadMe(db: Db): Me {
   return { level, user, concepts, stems: titleStems(concepts), direction: terms(facts.filter((f) => f.kind === "direction").map((f) => f.data.keyword ?? "")) };
 }
 
-interface Rules { tiers: string[][]; noCities: string[]; onePerGroup: string[]; excludes: string[]; blocked: Set<string> }
+interface Rules { tiers: string[][]; noCities: string[]; onePerGroup: string[]; excludes: string[]; blocked: Set<string>; /** what one city tier down costs; CITY_STEP when unset */ step?: number }
 function loadRules(s: Services): Rules {
   const db = s.domain.db;
   const facts = listFacts(db).items;
   const pref = (field: string) => terms(facts.filter((f) => f.kind === "preference" && f.data.field === field).map((f) => f.data.value ?? ""));
   return {
     tiers: (s.config.shortlist?.cities ?? []).map((t) => t.map(low)),
+    step: s.config.shortlist?.cityStep,
     noCities: pref(NO_CITY_FIELD), onePerGroup: pref(ONE_PER_GROUP_FIELD),
     excludes: terms(facts.filter((f) => f.kind === "exclude").map((f) => f.data.keyword ?? "")),
     blocked: new Set((db.prepare("select company_id from recommendation where mode = 'manual' and tag = '不投'").all() as { company_id: string }[]).map((r) => r.company_id)),
@@ -197,7 +198,9 @@ export type Cand = { r: Row; a: Assessment | null; rank: number; like: boolean; 
 /** Rule score → a coarse base for a week nobody read: the score is too rough to order within a band. */
 const band = (S: number) => (S >= 85 ? 80 : S >= 70 ? 65 : S >= 45 ? 50 : 30);
 /** One city tier down is worth this much match; a read under READ_FLOOR is not a 新机会. */
-export const CITY_STEP = 15, READ_FLOOR = 55, MAX_KEY = 2;
+// 15 at first: on the first library that kept every post of the last city off the list, a 78 among them (the person:
+// 「不应该扣这么多」). `shortlist.cityStep` in the settings changes it for one person.
+export const CITY_STEP = 10, READ_FLOOR = 55, MAX_KEY = 2;
 
 /**
  * Posts that pass the person's own rules, one per role of a company (roleKey), in no order yet: what the week reads and
@@ -265,7 +268,8 @@ export function pick(rows: Row[], me: Me, rules: Rules, applied: Map<string, str
   const base = (x: Cand) => fit(x)?.score ?? band(x.a?.S ?? 0);
   // an unknown place counts one tier down; a 重点 company's post off the list, as far as the list goes
   const steps = (x: Cand) => (x.rank < 0 ? rules.tiers.length : x.rank >= rules.tiers.length ? Math.min(1, rules.tiers.length) : x.rank);
-  const value = (x: Cand) => base(x) - CITY_STEP * steps(x);
+  const step = Number.isFinite(rules.step) && rules.step! >= 0 ? rules.step! : CITY_STEP;
+  const value = (x: Cand) => base(x) - step * steps(x);
   const due = (x: Cand) => Date.parse((x.r.closes_at ?? x.r.c_closes ?? "9999-12-31").slice(0, 10));
   const byValue = (x: Cand, y: Cand) => value(y) - value(x) || Number(y.like) - Number(x.like) || due(x) - due(y) || Date.parse(y.r.created_at) - Date.parse(x.r.created_at);
   const card = (x: Cand, slot: Slot): Card => {

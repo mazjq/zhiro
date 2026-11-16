@@ -23,6 +23,7 @@ const RULES: Rule[] = [
   ["agent.backend", (v) => oneOf(v, ["builtin", "claude", "codex", "dsh"]), "只能是 builtin / claude / codex / dsh"],
   ["brief.at", (v) => str(v) && AT.test(v as string), "要是 0–23 点、0–59 分，如 8:00"],
   ["shortlist.cities", (v) => Array.isArray(v) && v.every((t) => Array.isArray(t) && t.every(str)), "要是按优先级分层的城市列表，如 [[南京], [深圳, 上海], [成都, 合肥], [北京]]"],
+  ["shortlist.cityStep", (v) => typeof v === "number" && v >= 0 && v <= 100, "要是 0 到 100 之间的数：城市每差一档，抵多少匹配分（默认 10）"],
   ["background.reserve", (v) => num(v, 0, 0.9), "要是 0–0.9（给你留的额度比例）"],
   ["background.apiDailyUsd", (v) => num(v, 0, 10000), "要是不小于 0 的数"],
   ["background.unknownDailyTokens", (v) => int(v, 0, 1e9), "要是不小于 0 的整数"],

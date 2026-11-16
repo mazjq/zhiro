@@ -241,7 +241,7 @@ entries condense what still holds.
   at 100 above the design post beside it). A weighted sum of five factors was drafted and dropped: perturbing its
   weights hardly moved the result, so the weights were not what chose. Instead: before the list, the model reads up to
   40 posts a week (重点 companies' and 博士 posts always, one look over the titles picks the rest; background work held
-  by the gate) and a post is worth its reading less 15 a city tier; under 55 it is not a 新机会. Posts of one role are
+  by the gate) and a post is worth its reading less 10 a city tier (15 at first: it kept a 78 in the last city off the list; `shortlist.cityStep` changes it); under 55 it is not a 新机会. Posts of one role are
   one candidate (#88). 重点 companies' posts get a slot of their own (`key`, two cards) whatever they lack. The first
   city always has its best fitting post on the list; a week it has none is said on the list, as is a week nobody could
   read, which falls back to the rule score in bands. A draft with no description is not asked about under 要决定.
