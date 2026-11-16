@@ -14,7 +14,7 @@ import { createHash } from "node:crypto";
 import { ulid } from "ulid";
 import { tx, type Db } from "../db.js";
 import { deadlineBoard } from "../service/pool.js";
-import { beijingDay } from "../service/deadlines.js";
+import { beijingDay, sayDate } from "../service/deadlines.js";
 import { enqueue } from "../notify/center.js";
 import { SYNC_REASONS, reasonOf } from "../data/index.js";
 
@@ -111,6 +111,16 @@ export function makeBrief(db: Db, now = Date.now()): Brief {
   // subscriptions that have not read for a week while still being tried: the posts of those companies may be missing
   // (2026-10-14…28: 106 failed every day and nobody knew). One line, by reason; it comes back when the count changes.
   const week = iso(now - 7 * DAY);
+  // The model behind the background work answering nothing: every call of two days came back empty (a login that ran
+  // out — 2026-10-30…11-13: 264 calls, mail not read for two weeks, the settings page still said 已登录). Said under
+  // 今天必须做 every day until one answers.
+  // ponytail: "answered" = the provider reported tokens; one that never reports usage would read as silent.
+  const calls = db.prepare("select count(*) n, coalesce(sum(total > 0), 0) ok from llm_usage where at >= ?").get(iso(now - 2 * DAY)) as { n: number; ok: number };
+  if (calls.n >= 5 && !calls.ok) {
+    const last = (db.prepare("select max(at) at from llm_usage where total > 0").get() as { at: string | null }).at;
+    const since = last ? `从 ${sayDate(beijingDay(new Date(Date.parse(last))))} 起` : "一直";
+    must.push({ key: "must:model", state: `silent:${last ?? ""}`, text: `后台用的模型${since}没有回答（这两天 ${calls.n} 次都落空）：招聘邮件没在识别，岗位也没在细读。到「配置 → 模型」重新登录`, link: { page: "settings" } });
+  }
   // A site that had posts and now answers with none is between seasons, not broken: it is left out.
   const lastError = db.prepare("select error from scan_run where config_id = ? order by started_at desc limit 1");
   const hadPosts = db.prepare("select 1 from scan_run where config_id = ? and error = '' and found > 0 limit 1");
