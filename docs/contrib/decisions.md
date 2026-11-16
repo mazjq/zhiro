@@ -245,3 +245,7 @@ entries condense what still holds.
   one candidate (#88). 重点 companies' posts get a slot of their own (`key`, two cards) whatever they lack. The first
   city always has its best fitting post on the list; a week it has none is said on the list, as is a week nobody could
   read, which falls back to the rule score in bands. A draft with no description is not asked about under 要决定.
+  Later (2026-11-16): a week with no new post in the first city left it off the list although fitting posts there had
+  been open for weeks. Up to eight first-city posts are read each week, this week's first, then older ones that are
+  still open, not applied to and not refused; the older ones that fit (55 or more) get a row of their own (`home`,
+  three cards, two a company) and take none of the 新机会.

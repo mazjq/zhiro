@@ -34,7 +34,7 @@ function BriefCard({ go }: { go: (p: string) => void }) {
   );
 }
 
-const SLOT: Record<string, string> = { new: "新机会", key: "重点公司的岗位", decide: "要决定", fill: "可补", company: "重点公司" };
+const SLOT: Record<string, string> = { new: "新机会", key: "重点公司的岗位", home: "首选城市一直在招的", decide: "要决定", fill: "可补", company: "重点公司" };
 const REASONS: [string, string][] = [["single", "只是这一个"], ["company", "这家公司不投"], ["type", "这类岗位不投"], ["city", "不去这个城市"], ["group", "这个集团只投一个"]];
 const DECIDED: Record<string, string> = { apply: "投：草稿建好了", skip: "不投", hold: "先放着", fill: "补一下", seen: "看过了" };
 
@@ -53,7 +53,7 @@ function ShortlistCard({ go }: { go: (p: string) => void }) {
   const decide = (c: any, decision: string, reason?: string, detail?: string) => run(() => call("shortlist.decide", { runId: l.id, key: c.key, decision, reason, detail }));
   const reasonFor = (c: any) => REASONS.filter(([k]) => k !== "group" || (c.group && c.groupApplied?.length));
   if (!l) return null;
-  const slots = ["new", "key", "decide", "fill", "company"].map((s) => [s, l.cards.filter((c: any) => c.slot === s)] as const).filter(([, xs]) => xs.length);
+  const slots = ["new", "key", "home", "decide", "fill", "company"].map((s) => [s, l.cards.filter((c: any) => c.slot === s)] as const).filter(([, xs]) => xs.length);
   return (
     <Card className="mb-6 px-4 py-3">
       <div className="flex items-center gap-2 mb-2"><div className="font-bold">本周短名单 · {l.cards.length} 张</div>

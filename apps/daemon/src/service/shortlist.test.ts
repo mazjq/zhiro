@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { pick, cityRank, roleKey, weekOf, MAX_NEW, MAX_KEY, CITY_STEP, READ_FLOOR } from "./shortlist.js";
+import { pick, cityRank, roleKey, weekOf, MAX_NEW, MAX_KEY, MAX_HOME, CITY_STEP, READ_FLOOR } from "./shortlist.js";
 
 const me: any = { level: 3, concepts: new Set(["control_algorithm", "motor_control"]), stems: ["控制"], direction: ["动力定位"], user: { level: 3, majors: [], gaps: new Set(), evidence: [] } };
 const rules = (o: any = {}) => ({ tiers: [["南京"], ["深圳", "上海"], ["北京"]], noCities: [], onePerGroup: [], excludes: [], blocked: new Set<string>(), ...o });
@@ -86,17 +86,22 @@ describe("每周短名单", () => {
     expect(noneHome.notes).toEqual(["本周南京没有对口的新岗位"]);
   });
 
-  it("no first-city post this week: the best of those open for longer, read and fitting, has the card; unread ones never", () => {
+  it("first-city posts open for longer: a row of their own, three at most, read and fitting only; they take none of the 新机会", () => {
     const sh = [...Array(MAX_NEW)].map((_, i) => row(`s${i}`, { company_id: `s${i}`, jd_text: "x", cities: '["上海"]' }));
     const old = (id: string) => row(id, { company_id: id, jd_text: "x", older: 1 });
     const reads = (o: Record<string, number>) => ({ fit: (id: string) => (id in o ? { score: o[id], verdict: "" } : id.startsWith("s") ? { score: 90, verdict: "" } : null) });
     const a = run([...sh, old("o1"), old("o2"), old("o3")], { reads: reads({ o1: 60, o2: 72 }) }); // o3 was not read
     expect(a.cards.filter((c) => c.slot === "new")).toHaveLength(MAX_NEW);
-    expect(a.cards.at(-1)).toMatchObject({ positionId: "o2", notes: expect.arrayContaining(["南京在招的里面最对口的一个（不是本周新出的）"]) });
-    expect(a.cards.some((c) => c.positionId === "o1" || c.positionId === "o3")).toBe(false); // one card, the best
+    expect(a.cards.filter((c) => c.slot === "home").map((c) => c.positionId)).toEqual(["o2", "o1"]); // best first; o3 was not read
+    expect(a.cards.find((c) => c.positionId === "o2")!.notes[0]).toBe("不是本周新出的，一直在招");
+    expect(a.notes).toEqual([]);
     expect(a.skipped.some((x) => /^o/.test(x.positionId))).toBe(false); // older posts are not listed as left out
     const b = run([...sh, old("o1")], { reads: reads({ o1: 40 }) });
     expect(b.notes).toEqual(["本周南京没有对口的新岗位"]);
+    // three at most, two a company; a new first-city post this week does not take the row away
+    const c = run([row("n1", { jd_text: "x" }), ...["p1", "p2", "p3"].map((id, i) => row(id, { company_id: "p", title: ["控制算法工程师", "控制算法工程师（伺服）", "控制算法工程师（导航）"][i], jd_text: "x", older: 1 })), old("o1"), old("o2")], { reads: { fit: (id: string) => ({ score: ({ p1: 95, p2: 94, p3: 93, o1: 70, o2: 60 } as Record<string, number>)[id] ?? 80, verdict: "" }) } });
+    expect(MAX_HOME).toBe(3);
+    expect(c.cards.map((x) => [x.positionId, x.slot])).toEqual([["n1", "new"], ["p1", "home"], ["p2", "home"], ["o1", "home"]]);
   });
 
   it("重点公司的岗位: two cards of their own, whatever they lack, and they take none of the 新机会", () => {
