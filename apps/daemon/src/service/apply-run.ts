@@ -8,9 +8,11 @@ import { openBrowser, browserOpen, activePage, readForm, mapFields, normLabel, r
 import { pickResume, resumeByLabel } from "./resumes.js";
 import { listFacts, upsertFact } from "./profile.js";
 import { choose } from "./apply-widgets.js";
-import { planBlocks, slotsOf, valueIn, addEntry, blockKind, partOf, planRecords, sameName, projectPart, isOngoingBox, studyEnd } from "./apply-blocks.js";
+import { planBlocks, slotsOf, valueIn, addEntry, blockKind, partOf, planRecords, sameName, projectPart, isOngoingBox, studyEnd, visitEntries } from "./apply-blocks.js";
 import { readReference } from "./apply-reference.js";
 const MAX_ENTRIES = 30;
+/** How long the form is watched after an upload (ms): between readings, before a form nothing came to counts as quiet, in all. A test shortens them. */
+export const PARSE_WAIT = { step: 2000, start: 20_000, most: 60_000 };
 /** Fields whose answer was cut to the box's length limit this run, and that limit. */
 const shortened = new Map<string, number>();
 import { checkResume } from "./resume-check.js";
@@ -262,13 +264,18 @@ async function tick(s: Services): Promise<void> {
       }
       if (uploaded) {
         // Moka parses for a while and fills fields one after another; filling alongside it raced it (and made its own
-        // work look like ours). Wait until two readings 1.5 s apart agree, at most 25 s; the next tick maps afresh.
+        // work look like ours). The form is quiet when three readings 2 s apart agree — counted only once something has
+        // come, or after 20 s of nothing: the parse may not have started yet, and a form that has not changed since the
+        // upload looked quiet at once (2026-11-16: a record was written into an entry the site was still filling).
         await banner(page, "Zhiro 已上传简历，等网站解析…", "#2563eb");
-        let last = "", same = 0;
-        for (let t = Date.now(); Date.now() - t < 25_000 && same < 2; ) {
-          await page.waitForTimeout(1500);
+        const before = form.fields.map((f) => f.value).join("|");
+        let last = before, same = 0, came = false;
+        for (let t = Date.now(); Date.now() - t < PARSE_WAIT.most; ) {
+          await page.waitForTimeout(PARSE_WAIT.step);
           const now = (await readForm().catch(() => form)).fields.map((f) => f.value).join("|");
+          if (now !== before) came = true;
           same = now === last ? same + 1 : 0; last = now;
+          if (same >= 3 && (came || Date.now() - t > PARSE_WAIT.start)) break;
         }
         return;
       }
@@ -292,7 +299,11 @@ async function tick(s: Services): Promise<void> {
     // Moka puts 1 into the 月 box once its 年 is chosen (毕业时间 came out 2027年1月, 2026-10-14): that 1 is not the site's answer
     const autoMonth = f.placeholder === "月" && wroteYear === `${f.section}|${f.label}`;
     if (cur && (cur.disabled || (!EMPTY.test(cur.value) && !autoMonth))) continue; // filled or locked by the site meanwhile: not ours
-    const why = await write(page, f).catch((e) => String(e?.message ?? e).split("\n")[0]);
+    let why = await write(page, f).catch((e) => String(e?.message ?? e).split("\n")[0]);
+    // 「最快可到岗时间」 on a calendar of days: the profile says the month, and its first day is what that means. No other
+    // date is guessed a day for.
+    const ym = /^(\d{4})\D{1,2}(\d{1,2})\D?$/.exec(f.proposed.trim());
+    if (why.startsWith("这里要选到具体哪一天") && /到岗|入职/.test(f.label) && ym) why = await write(page, { ...f, proposed: `${ym[1]}-${ym[2].padStart(2, "0")}-01` }).catch((e) => String(e?.message ?? e).split("\n")[0]);
     wroteYear = !why && f.placeholder === "年" ? `${f.section}|${f.label}` : "";
     if (why) { attention.push({ section: f.section, label: f.label, kind: "没填上", detail: why }); await keepDom(s, page, f, why); } else { filled++; ours.set(keyOf(f), f.proposed); }
     if (!why && shortened.has(keyOf(f))) attention.push({ section: f.section, label: f.label, kind: "和画像不同", detail: `这一栏最多 ${shortened.get(keyOf(f))} 字，已按句截短，请看一眼` });
@@ -375,6 +386,8 @@ async function fillBlocks(s: Services, page: Page, attention: Attention[]): Prom
   const need = new Map<string, number>();
   const ref = readReference(s.config.apply?.referenceDoc);
   for (const p of planBlocks(s.domain.db, (await readForm()).fields, ref)) if (!p.slot) need.set(p.section, (need.get(p.section) ?? 0) + 1);
+  // an entry the site made from the resume for a stay that gives no degree: not filled, not deleted for the person — said
+  for (const v of visitEntries(s.domain.db, (await readForm()).fields)) attention.push({ section: v.section, label: v.name, kind: "留给你", detail: "这一条是联合培养 / 访学，不授学位：按你的要求不填进教育背景，请手动删掉这一条" });
   await repairProjects(s, page, attention, ref);
   for (let round = 0; round < MAX_ENTRIES * 3 && run && !run.paused; round++) {
     const form = await readForm();

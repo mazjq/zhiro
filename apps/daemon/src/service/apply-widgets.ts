@@ -111,7 +111,10 @@ export async function choose(page: Page, el: Locator, value: string, opts: { mon
 export function searchTerms(value: string): string[] {
   const parts = value.split(/(?<=省|自治区|市|自治州|盟|区|县)|[\s/、,，-]+/).map((p) => p.trim()).filter(Boolean); // 杭州 / 广州 end in 州 but are one name
   const bare = (p: string) => p.replace(/(省|市|自治区|区|县)$/, "");
-  const out = [value, ...[...parts].reverse().flatMap((p) => [p, bare(p)])];
+  // a name with a bracket (「东海科技大学（南京）」): sites spell the bracket half-width and search by it literally, so
+  // that spelling too, and the name before the bracket (the list then shows both campuses and the pick decides)
+  const half = value.normalize("NFKC"), head = half.split("(")[0].trim();
+  const out = [value, ...(half !== value ? [half] : []), ...(head !== half ? [head] : []), ...[...parts].reverse().flatMap((p) => [p, bare(p)])];
   return [...new Set(out.filter((x) => x.length >= 2))];
 }
 
@@ -197,7 +200,17 @@ async function moka(page: Page, el: Locator, value: string, monthBox: boolean): 
   // long lists (years: 201 of them) may be virtualised: typing narrows them when the box accepts input
   let { root, sel } = await where();
   let r = await pick(page, root, sel, want, !monthBox && !/^\d{4}$/.test(value));
-  if (r === null && (await el.isEditable().catch(() => false))) { await el.pressSequentially(value, { delay: 40 }).catch(() => {}); await page.waitForTimeout(400); ({ root, sel } = await where()); r = await pick(page, root, sel, want, false); }
+  // typed as the site spells it (half-width brackets), then without the bracket: 「（南京）」 typed full-width narrowed the
+  // list to nothing on a site whose options say 「(南京)」 (2026-11-16)
+  const half = value.normalize("NFKC"), head = half.split("(")[0].trim();
+  for (const term of [...new Set([half, head])]) {
+    if (r !== null || !term || !(await el.isEditable().catch(() => false))) break;
+    await el.fill("").catch(() => {});
+    await el.pressSequentially(term, { delay: 40 }).catch(() => {});
+    await page.waitForTimeout(400);
+    ({ root, sel } = await where());
+    r = await pick(page, root, sel, want, false);
+  }
   if (r === null) { await close(); return `没有「${value}」这个选项`; }
   if (r) { await close(); return r; }
   return done();

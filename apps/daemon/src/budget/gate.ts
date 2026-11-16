@@ -29,11 +29,13 @@ export async function channelOf(d: GateDeps): Promise<Channel | null> {
   if (t.kind !== "model") return null;
   const p = d.config.llm.provider;
   if (p === "openai-codex") return "codex";
+  // 「OpenAI → Sign in with ChatGPT」 is the same subscription as the Codex entry: its allowance is asked the same way
+  if (p === "openai" && (await d.credentialType(p)) === "oauth") return "codex";
   if (p === "anthropic" && (await d.credentialType(p)) === "oauth") return "claude";
   return "api";
 }
 
-const OF: Record<"codex" | "claude", string[]> = { codex: ["codex", "openai-codex"], claude: ["claude", "anthropic"] };
+const OF: Record<"codex" | "claude", string[]> = { codex: ["codex", "openai-codex", "openai"], claude: ["claude", "anthropic"] };
 /** What Zhiro's own model calls used on a channel since midnight (llm_usage); on a key, the built-in model's provider. */
 export function spentToday(db: Db, channel: Channel, apiProvider = ""): { tokens: number; cost: number } {
   const d = new Date(); d.setHours(0, 0, 0, 0);

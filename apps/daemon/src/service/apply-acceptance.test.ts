@@ -6,8 +6,8 @@ import { pathToFileURL } from "node:url";
 import { openDb } from "../db.js";
 import { upsertFact } from "./profile.js";
 import { openBrowser, closeBrowser, activePage, readForm, mapFields, normLabel, type FormField } from "./apply.js";
-import { choose } from "./apply-widgets.js";
-import { planBlocks, valueIn, studyEnd, isOngoingBox } from "./apply-blocks.js";
+import { choose, searchTerms } from "./apply-widgets.js";
+import { planBlocks, valueIn, studyEnd, isOngoingBox, visitEntries } from "./apply-blocks.js";
 import { siteFilled } from "./apply-run.js";
 
 /** Regressions for the defects the independent acceptance found (docs/reports/2026-09-21-autofill-acceptance.md). */
@@ -91,6 +91,21 @@ describe("acceptance regressions: mapping", () => {
     expect(isOngoingBox(field({ label: "至今", type: "checkbox" }))).toBe(true); // a site that names the box itself
     expect(boxes.map((f, i) => valueIn("project", rec, f, i, boxes, until))).toEqual(["2024", "01", "2027", "06"]);
     expect(valueIn("project", rec, field({ section: "项目经历", label: "结束时间", entry: 0 }), 0, [], until)).toBe("2027-06");
+  });
+
+  it("教育背景: an entry the site made for a stay with no degree is named for the person to delete, and no record goes into it", () => {
+    const db = profile();
+    upsertFact(db, { kind: "education", data: { school: "海外示例大学（Example University）", degree: "联合培养博士（不授学位）", major: "电气工程", period: "2024.12—2026.11" } }, "本人确认");
+    const e = (entry: number, school: string, degree: string) => [field({ section: "教育背景", label: "学校名称", type: "dropdown", value: school, entry }), field({ section: "教育背景", label: "学历", type: "dropdown", value: degree, entry })];
+    // as the site parsed the resume: the doctorate, the visit under its English name, the bachelor's
+    const form = [...e(0, "示例大学", "博士研究生"), ...e(1, "Example University(某国)", ""), ...e(2, "示例学院", "本科")];
+    expect(visitEntries(db, form)).toEqual([{ section: "教育背景", name: "Example University(某国)" }]);
+    expect(planBlocks(db, form)).toEqual([]); // both degrees are on the form already; the visit's entry is nobody's slot
+  });
+
+  it("a name with a bracket is searched as the site spells it, then without the bracket", () => {
+    expect(searchTerms("示例大学（南京）").slice(0, 3)).toEqual(["示例大学（南京）", "示例大学(南京)", "示例大学"]);
+    expect(searchTerms("示例大学")).toEqual(["示例大学"]);
   });
 
   it("获奖: 颁发单位 is filled from the card's org or the document's issuer", () => {
