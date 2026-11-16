@@ -67,6 +67,26 @@ describe("acceptance regressions: mapping", () => {
     expect(plan).toHaveLength(2);
   });
 
+  it("教育背景: a stay that gives no degree is not an entry; 「从第一学历开始填起」 puts the earliest degree first; two degrees at one school are two entries", () => {
+    const db = profile();
+    upsertFact(db, { kind: "education", data: { school: "海外示例大学", degree: "联合培养博士（不授学位）", major: "电气工程", period: "2024.12—2026.11" } }, "本人确认");
+    const blank = (section: string) => [field({ section, label: "学校名称", entry: 0 }), field({ section, label: "学历", type: "select", entry: 0 })];
+    const names = (fields: FormField[]) => planBlocks(db, fields).map((p) => p.name);
+    expect(names(blank("教育背景"))).toEqual(["示例大学（博士）", "示例学院（本科）"]); // the highest degree first, as before; the visit is left out
+    expect(names(blank("教育背景 添加请从第一学历开始填起"))).toEqual(["示例学院（本科）", "示例大学（博士）"]);
+    // the 博士 entry already on the form does not stand for a 硕士 at the same school
+    upsertFact(db, { kind: "education", data: { school: "示例大学", degree: "硕士", major: "控制工程", period: "2019.09—2021.06" } }, "本人确认");
+    const filled = [field({ section: "教育背景", label: "学校名称", value: "示例大学", entry: 0 }), field({ section: "教育背景", label: "学历", type: "select", value: "博士", entry: 0 })];
+    expect(names(filled)).toEqual(["示例大学（硕士）", "示例学院（本科）"]);
+  });
+
+  it("教育背景: a 联合培养 stay is not the 最高学历 either", async () => {
+    const db = profile();
+    upsertFact(db, { kind: "education", data: { school: "海外示例大学", degree: "联合培养博士（不授学位）", major: "电气工程", period: "2024.12—2026.11" } }, "本人确认");
+    const m = await mapFields(db, undefined, [field({ index: 0, section: "博士教育", label: "学校名称" })]);
+    expect(m[0].proposed).toBe("示例大学");
+  });
+
   it("N11: a section that only says 研究生 takes the doctorate of a direct PhD; 硕士 stays empty", async () => {
     const m = await mapFields(profile(), undefined, [field({ index: 0, section: "研究生教育", label: "学校名称" }), field({ index: 1, section: "研究生阶段", label: "专业" }), field({ index: 2, section: "硕士教育", label: "学校名称" })]);
     expect(m.map((x) => x.proposed)).toEqual(["示例大学", "控制科学与工程", ""]);

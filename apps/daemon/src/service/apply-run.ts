@@ -5,7 +5,7 @@ import type { Services } from "../services.js";
 import type { Db } from "../db.js";
 import { DomainError, NotFound } from "./domain.js";
 import { openBrowser, browserOpen, activePage, readForm, mapFields, normLabel, reusableAnswer, SENSITIVE, peopleSection, type Mapped, type FormField } from "./apply.js";
-import { pickResume } from "./resumes.js";
+import { pickResume, resumeByLabel } from "./resumes.js";
 import { upsertFact } from "./profile.js";
 import { choose } from "./apply-widgets.js";
 import { planBlocks, slotsOf, valueIn, addEntry, blockKind, partOf, planRecords, sameName, projectPart } from "./apply-blocks.js";
@@ -236,7 +236,7 @@ async function tick(s: Services): Promise<void> {
   const attention: Attention[] = [...traces];
   if (foundAs) attention.push({ section: "岗位", label: foundAs, kind: "和画像不同", detail: "Zhiro 按岗位名在官网列表里找到的这一个，提交前请核对是不是你要投的岗位" });
   if (!uploaded) {
-    const r = s.domain.db.prepare("select file_path, file_name from resume where name = ?").get(run.resume) as any;
+    const r = resumeByLabel(s.domain.db, run.resume);
     const path = r?.file_path as string | undefined;
     if (path && existsSync(path)) {
       // named 姓名+简历 — the library's own name ("通用 v6 Codex …") is nobody's business
@@ -255,7 +255,7 @@ async function tick(s: Services): Promise<void> {
         }
       }
       if (uploaded) {
-        const id = (s.domain.db.prepare("select id from resume where name = ?").get(run.resume) as any)?.id;
+        const id = r?.id as string | undefined;
         traces = id ? (await checkResume(s.domain.db, id).catch(() => ({ items: [] }))).items.map((t) => ({ section: "上传", label: t.where, kind: "简历痕迹" as const, detail: `「${t.found}」${t.advice}` })) : [];
       }
       if (uploaded) {

@@ -6,7 +6,7 @@ import type { Db } from "../db.js";
 import type { Llm } from "../llm.js";
 import { DomainError } from "./domain.js";
 import { listFacts } from "./profile.js";
-import { blockKind } from "./apply-blocks.js";
+import { blockKind, notDegree } from "./apply-blocks.js";
 import { optionAliases } from "./apply-widgets.js";
 import type { Reference } from "./apply-reference.js";
 
@@ -288,7 +288,7 @@ function valueFor(facts: any[], key: string, section: string, ref?: Reference | 
     return { value: hits.map((h) => h.data.value).join("、"), source: hits.length ? `${hits[0].kind === "basic" ? "基本信息" : "意向"} · ${hits[0].grade}` : "" };
   }
   if (kind === "education") {
-    const edu = facts.filter((x) => x.kind === "education");
+    const edu = facts.filter((x) => x.kind === "education" && !notDegree(x.data)); // a 联合培养 / visit is not the 博士 院校 nor the 最高学历
     const rank = (d: string) => (d.includes("博士") ? 3 : d.includes("硕士") ? 2 : 1);
     const [sec, lab = ""] = section.split("|");
     const stagesIn = (s: string) => [/本科|学士/.test(s) && 1, /硕士/.test(s) && 2, /博士/.test(s) && 3].filter(Boolean) as number[];

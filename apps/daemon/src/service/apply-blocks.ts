@@ -59,6 +59,14 @@ const filledName = (kind: Kind, s: Slot) => s.fields.find((f) => ["school", "org
 /** Nothing typed in any free-text box; a select showing its default (D3) does not make an entry occupied. */
 const blank = (s: Slot) => s.fields.every((f) => ["select", "dropdown", "checkbox", "radio", "file"].includes(f.type) || empty(f.value));
 
+/** 学历 in one word: a bachelor's and a doctorate at the same school are two records, not one spelled twice. */
+const level = (s = "") => (/博士/.test(s) ? "博士" : /硕士/.test(s) ? "硕士" : /本科|学士/.test(s) ? "本科" : /专科|大专/.test(s) ? "专科" : s.trim());
+/** 联合培养 / 访问 / 交换: time spent at a school, not a degree programme of it — left out of an application's 教育背景 (user, 2026-11-16). */
+export const notDegree = (d: Record<string, string>) => /联合培养|访问|访学|交换|交流|不授学位|非学位/.test(d.degree ?? "");
+/** 「教育背景添加请从第一学历开始填起」 (Moka, 2026-11-16): the form wants the earliest degree in the first entry. 最高学历 first is the default. */
+export const earliestFirst = (section: string) => /第一学历|最低学历|最早|由远及近|从早到晚|(从|自)(高中|中专|大专|专科|本科)/.test(section.replace(/\s+/g, ""));
+const planName = (kind: Kind, d: Record<string, string>) => (kind === "education" && d.degree ? `${d.school ?? ""}（${level(d.degree)}）` : nameOf(kind, d));
+
 /**
  * For every block the form has and the profile has records for: which record goes into which entry, and which records
  * still need a new entry (slot = null). Records already present in a filled entry are dropped from the plan.
@@ -70,29 +78,33 @@ export function planBlocks(db: Db, fields: FormField[], ref?: Reference | null):
   for (const section of [...new Set(slots.map((s) => s.section))]) {
     const kind = blockKind(section)!;
     // experience cards: only those that are internships go to 实习经历 (a campus job is not one)
-    const records = recordsOf(facts, kind, ref);
+    const records = recordsOf(facts, kind, ref, section);
     const mine = slots.filter((s) => s.section === section).sort((a, b) => a.entry - b.entry);
     // N6: an entry the site already part-filled (专业 but no 学校) is taken, not a blank to put our record into
     const open = mine.filter((s) => !filledName(kind, s) && blank(s));
-    const taken = mine.filter((s) => !open.includes(s)).map((s) => filledName(kind, s));
+    const taken = mine.filter((s) => !open.includes(s)).map((s) => ({ name: filledName(kind, s), degree: kind === "education" ? s.fields.find((f) => partOf(kind, f.label) === "degree" && !empty(f.value))?.value ?? "" : "" }));
     for (const record of records) {
       const name = nameOf(kind, record);
-      if (taken.some((t) => same(t, name))) continue; // already on the form
-      plans.push({ kind, section, record, name, slot: open.shift() ?? null });
+      // already on the form. Education: one filled entry is one record — 本科 and 博士 at one school are two entries
+      const i = taken.findIndex((t) => same(t.name, name) && (kind !== "education" || !t.degree || !record.degree || level(t.degree) === level(record.degree)));
+      if (i >= 0) { if (kind === "education") taken.splice(i, 1); continue; }
+      plans.push({ kind, section, record, name: planName(kind, record), slot: open.shift() ?? null });
     }
   }
   return plans;
 }
 
 /** The records of one kind, newest first: the person's document when it has the list, else the profile without near-duplicates. */
-function recordsOf(facts: any[], kind: Kind, ref?: Reference | null): Record<string, string>[] {
-  let records = facts.filter((f) => f.kind === kind && (kind !== "experience" || /实习/.test(`${f.data.role ?? ""}${f.data.summary ?? ""}${f.data.type ?? ""}`)))
+function recordsOf(facts: any[], kind: Kind, ref?: Reference | null, section = ""): Record<string, string>[] {
+  let records = facts.filter((f) => f.kind === kind && (kind !== "experience" || /实习/.test(`${f.data.role ?? ""}${f.data.summary ?? ""}${f.data.type ?? ""}`)) && (kind !== "education" || !notDegree(f.data)))
     .map((f) => f.data as Record<string, string>);
   // the person's own document is the list when it has one (their curated awards, their projects)
   if (kind === "award" && ref?.awards.length) records = ref.awards as unknown as Record<string, string>[];
   if (kind === "project" && ref?.projects.length) records = ref.projects.map((p) => ({ ...(records.find((r) => same(r.title, p.title)) ?? {}), ...p }) as Record<string, string>);
-  // near-duplicates on the profile go once
-  return records.filter((r, i) => !records.slice(0, i).some((o) => core(nameOf(kind, o)) === core(nameOf(kind, r)))).sort((a, b) => startOf(b) - startOf(a));
+  // near-duplicates on the profile go once (education: the same school at the same 学历)
+  const key = (r: Record<string, string>) => core(nameOf(kind, r)) + (kind === "education" ? `|${level(r.degree)}` : "");
+  const list = records.filter((r, i) => !records.slice(0, i).some((o) => key(o) === key(r))).sort((a, b) => startOf(b) - startOf(a));
+  return kind === "education" && earliestFirst(section) ? list.reverse() : list;
 }
 export const planRecords = (db: Db, kind: Kind, ref?: Reference | null) => recordsOf(listFacts(db).items, kind, ref);
 
