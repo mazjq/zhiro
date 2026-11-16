@@ -453,7 +453,10 @@ export async function readForShortlist(s: Services, nowMs = Date.now(), maxMs = 
     const { cands } = candidates(rows, me, rules, applied, (r) => assessed(db, r, me), today, skippedBefore);
     const must = cands.filter((x) => x.r.key_company || /博士/.test(x.r.title));
     const others = cands.filter((x) => !must.includes(x)); // highest rule score first (candidates sorts them)
-    const room = Math.max(0, READ_PER_WEEK - must.length);
+    // a post with no description cannot be read and takes none of the week's readings, so the look over the titles may
+    // choose more than READ_PER_WEEK: on the first library half of what it chose had no description, and half the
+    // readings went unused
+    const room = Math.max(0, READ_PER_WEEK - must.length) + Math.min(READ_PER_WEEK, others.filter((x) => !(x.r.jd_text ?? "").trim()).length);
     let chosen = others.slice(0, room);
     if (others.length > room) {
       const listed = others.slice(0, 400);

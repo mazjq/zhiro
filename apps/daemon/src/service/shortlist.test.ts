@@ -77,11 +77,11 @@ describe("每周短名单", () => {
     const reads = (w: number) => ({ fit: (id: string) => ({ score: id === "w1" ? w : 95, verdict: "" }) });
     const fitsHome = run([...sh, wh], { reads: reads(60) }); // 60 at home is worth less than 95 − 15 a tier down, and still gets the last card
     expect(fitsHome.cards.filter((c) => c.slot === "new")).toHaveLength(MAX_NEW);
-    expect(fitsHome.cards.at(-1)).toMatchObject({ positionId: "w1", notes: expect.arrayContaining(["武汉本周最对口的一个"]) });
+    expect(fitsHome.cards.at(-1)).toMatchObject({ positionId: "w1", notes: expect.arrayContaining(["南京本周最对口的一个"]) });
     expect(fitsHome.skipped.filter((x) => x.reason === "超出本周张数")).toHaveLength(2);
     const noneHome = run([...sh, wh], { reads: reads(40) });
     expect(noneHome.cards.some((c) => c.positionId === "w1")).toBe(false);
-    expect(noneHome.notes).toEqual(["本周武汉没有对口的新岗位"]);
+    expect(noneHome.notes).toEqual(["本周南京没有对口的新岗位"]);
   });
 
   it("重点公司的岗位: two cards of their own, whatever they lack, and they take none of the 新机会", () => {
