@@ -93,6 +93,13 @@ describe("acceptance regressions: mapping", () => {
     expect(valueIn("project", rec, field({ section: "项目经历", label: "结束时间", entry: 0 }), 0, [], until)).toBe("2027-06");
   });
 
+  it("获奖: 颁发单位 is filled from the card's org or the document's issuer", () => {
+    const box = field({ section: "获奖情况", label: "颁发单位", entry: 0 });
+    expect(valueIn("award", { title: "示例奖", org: "示例学会" }, box, 0)).toBe("示例学会");
+    expect(valueIn("award", { title: "示例奖", issuer: "示例协会", org: "示例学会" }, box, 0)).toBe("示例协会");
+    expect(valueIn("award", { title: "示例奖" }, field({ section: "获奖情况", label: "奖项名称", entry: 0 }), 0)).toBe("示例奖");
+  });
+
   it("教育背景: a 联合培养 stay is not the 最高学历 either", async () => {
     const db = profile();
     upsertFact(db, { kind: "education", data: { school: "海外示例大学", degree: "联合培养博士（不授学位）", major: "电气工程", period: "2024.12—2026.11" } }, "本人确认");

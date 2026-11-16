@@ -131,6 +131,8 @@ export function valueIn(kind: Kind, record: Record<string, string>, f: FormField
     const what = (record.description ?? "").trim(), did = (record.summary ?? "").trim();
     return hasDuty || !did ? what : what ? `${what}${/[。！？.!?；;]$/.test(what) ? "" : "。"}${did}` : did;
   }
+  // who gave an award: `issuer` in the person's document, `org` on a profile card
+  if (kind === "award" && part === "issuer") return record.issuer ?? record.org ?? "";
   if (part !== "period") return part ? record[part] ?? "" : "";
   const p = periodParts(record.period ?? (record.year ? `${record.year}-${record.year}` : ""));
   if (!p) return "";
