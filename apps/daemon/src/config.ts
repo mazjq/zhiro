@@ -43,7 +43,7 @@ export interface JobosConfig {
   /** P4: when the daily brief is made (local time, "HH:MM"; default 08:00) */
   brief?: { at?: string };
   /** 每周短名单: the person's cities in order of preference, a tier per list (["南京"], ["深圳", "上海"], …); a post elsewhere is listed as skipped. Empty: no city rule. */
-  shortlist?: { cities?: string[][] };
+  shortlist?: { cities?: string[][]; /** how much match one city tier down is worth (default 10) */ cityStep?: number };
   /** P2b: recruiting mail is filed on its own (a stage added, an application moved) when it is clear; off = confirm cards as before */
   inbox?: { auto?: boolean };
   /** P1: how the notice center may press about an unread notice — sms on unless turned off, a phone call only when turned on */
