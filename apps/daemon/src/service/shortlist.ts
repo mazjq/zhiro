@@ -81,6 +81,8 @@ interface Row {
   id: string; title: string; jd_text: string; cities: string; degree_req: string; major_req: string; closes_at: string | null; created_at: string; watch_priority: number | null;
   c_closes: string | null; c_degree: string; c_major: string; c_cities: string; source_kind: string;
   company_id: string; company: string; company_type: string; app_state: string | null; assessment: string | null; key_company: number;
+  /** open since before this week's window: looked at for the first city's card only */
+  older?: number;
 }
 const ROWS = `select p.id, p.title, p.jd_text, p.cities, p.degree_req, p.major_req, p.closes_at, p.created_at, p.watch_priority,
     c.closes_at c_closes, c.degree_req c_degree, c.major_req c_major, c.cities c_cities, c.source_kind,
@@ -215,7 +217,8 @@ export const CITY_STEP = 10, READ_FLOOR = 55, MAX_KEY = 2;
  */
 export function candidates(rows: Row[], me: Me, rules: Rules, applied: Map<string, string[]>, assessOf: (r: Row) => Assessment | null, today: string, skippedBefore: Set<string>): { cands: Cand[]; skipped: Skipped[] } {
   const skipped: Skipped[] = [];
-  const skip = (r: Row, reason: string, rule?: Rule) => skipped.push({ reason, rule, positionId: r.id, company: r.company, title: r.title });
+  // a post open for longer that a rule keeps out is not news: only this week's are listed as left out
+  const skip = (r: Row, reason: string, rule?: Rule) => { if (!r.older) skipped.push({ reason, rule, positionId: r.id, company: r.company, title: r.title }); };
   const appliedInstitutes = [...applied.values()].flat().some((n) => INSTITUTE.test(n));
   const all: Cand[] = [];
   for (const r of rows) {
@@ -249,7 +252,8 @@ export function candidates(rows: Row[], me: Me, rules: Rules, applied: Map<strin
     all.push({ r, a, rank, like, same: [] });
   }
   // one company's posts of the same role are one candidate: the one the rules rate highest, the others listed on its card
-  all.sort((x, y) => (y.a?.S ?? 0) - (x.a?.S ?? 0) || x.rank - y.rank || Date.parse(y.r.created_at) - Date.parse(x.r.created_at));
+  // this week's post stands for a role it shares with an older one
+  all.sort((x, y) => Number(!!x.r.older) - Number(!!y.r.older) || (y.a?.S ?? 0) - (x.a?.S ?? 0) || x.rank - y.rank || Date.parse(y.r.created_at) - Date.parse(x.r.created_at));
   const roles = new Map<string, Cand>(), cands: Cand[] = [];
   for (const x of all) {
     const k = `${x.r.company_id}|${roleKey(x.r.title, placeOf(x.r))}`;
@@ -289,7 +293,7 @@ export function pick(rows: Row[], me: Me, rules: Rules, applied: Map<string, str
   const cards: Card[] = [], notes: string[] = [];
   const rest: { x: Cand; why: string }[] = [];
   // 重点公司: the person named them, so their posts are shown whatever the match — the card says what is missing
-  const keys = cands.filter((x) => x.r.key_company).sort(byValue);
+  const keys = cands.filter((x) => x.r.key_company && !x.r.older).sort(byValue);
   for (const x of keys.slice(0, MAX_KEY)) cards.push(card(x, "key"));
   for (const x of keys.slice(MAX_KEY)) rest.push({ x, why: "超出本周张数" });
   // 新机会
@@ -300,7 +304,7 @@ export function pick(rows: Row[], me: Me, rules: Rules, applied: Map<string, str
     return x.a?.tier === "低相关" ? "规则判断相关度低" : null;
   };
   const open: Cand[] = [];
-  for (const x of cands.filter((x) => !x.r.key_company)) { const why = fits(x); if (why) rest.push({ x, why }); else open.push(x); }
+  for (const x of cands.filter((x) => !x.r.key_company && !x.r.older)) { const why = fits(x); if (why) rest.push({ x, why }); else open.push(x); }
   open.sort(byValue);
   const perCompany = new Map<string, number>(), news: Cand[] = [], over: Cand[] = [];
   for (const x of open) {
@@ -312,10 +316,13 @@ export function pick(rows: Row[], me: Me, rules: Rules, applied: Map<string, str
   let firstCity: Cand | null = null;
   if (first && cands.length && !news.some((x) => x.rank === 0)) {
     firstCity = over.find((x) => x.rank === 0 && base(x) >= READ_FLOOR) ?? null;
-    if (firstCity) { over.splice(over.indexOf(firstCity), 1); if (news.length >= MAX_NEW) over.unshift(news.pop()!); news.push(firstCity); }
+    if (firstCity) over.splice(over.indexOf(firstCity), 1);
+    // none this week: the best of what has been open for longer — one that was read and fits (never on the rules alone)
+    else firstCity = cands.filter((x) => x.r.older && !x.r.key_company && x.rank === 0 && (fit(x)?.score ?? 0) >= READ_FLOOR).sort(byValue)[0] ?? null;
+    if (firstCity) { if (news.length >= MAX_NEW) over.unshift(news.pop()!); news.push(firstCity); }
     else notes.push(`本周${first}没有对口的新岗位`);
   }
-  for (const x of news) { const c = card(x, "new"); if (x === firstCity) c.notes.unshift(`${first}本周最对口的一个`); cards.push(c); }
+  for (const x of news) { const c = card(x, "new"); if (x === firstCity) c.notes.unshift(x.r.older ? `${first}在招的里面最对口的一个（不是本周新出的）` : `${first}本周最对口的一个`); cards.push(c); }
   for (const x of over) rest.push({ x, why: "超出本周张数" });
   if (cands.length && !wasRead) notes.push("这周没能细读岗位描述，按规则粗排");
   // 可补: one card per open skill, the skill that would unlock the most posts first
@@ -428,9 +435,23 @@ function poolOf(s: Services, nowMs: number) {
   const since = new Date(Math.max(last ? Date.parse(last.at) : 0, nowMs - 14 * DAY)).toISOString();
   return {
     today: beijingDay(new Date(nowMs)), me: loadMe(db), rules: loadRules(s), applied: appliedByGroup(db),
-    rows: db.prepare(`${ROWS} where p.status = 'open' and p.created_at >= ?`).all(since) as unknown as Row[],
+    rows: [...(db.prepare(`${ROWS} where p.status = 'open' and p.created_at >= ?`).all(since) as unknown as Row[]), ...olderHome(s, since)],
     skippedBefore: new Set((db.prepare("select key from shortlist_item where decision = 'skip'").all() as { key: string }[]).map((r) => r.key)),
   };
+}
+
+/**
+ * The first city's posts that were open before this week's window, have a description, and that the person neither
+ * applied to nor said no to: the first city's card may come from these when the week brought none that fits (the
+ * person: 「不一定全新的，之前开放、没申请、没说过不申的也找找」). Marked `older`; they compete for that one card only.
+ */
+function olderHome(s: Services, since: string): Row[] {
+  const home = (s.config.shortlist?.cities ?? [])[0] ?? [];
+  if (!home.length) return [];
+  const where = home.map(() => "(case when p.cities != '[]' then p.cities else c.cities end) like ?").join(" or ");
+  const rows = s.domain.db.prepare(`${ROWS} where p.status = 'open' and p.created_at < ? and length(p.jd_text) > 30
+      and not exists (select 1 from application a where a.position_id = p.id) and (${where}) limit 4000`).all(since, ...home.map((c) => `%${c}%`)) as unknown as Row[];
+  return rows.map((r) => ({ ...r, older: 1 }));
 }
 
 /** The model's readings on file, those made against the profile as it is now. */
@@ -465,9 +486,10 @@ export async function readForShortlist(s: Services, nowMs = Date.now(), maxMs = 
     // the first city's posts are always read too (FIRST_CITY_READS of them at most, the ones the rules rate highest):
     // the list promises its best fitting post a card, and a post nobody read cannot be found to fit — a week that
     // read none of them said 「没有对口的新岗位」 of a city it had not looked at
-    const home = cands.filter((x) => x.rank === 0 && (x.r.jd_text ?? "").trim()).slice(0, FIRST_CITY_READS);
+    const atHome = cands.filter((x) => x.rank === 0 && (x.r.jd_text ?? "").trim());
+    const home = [...atHome.filter((x) => !x.r.older), ...atHome.filter((x) => x.r.older)].slice(0, FIRST_CITY_READS);
     const must = cands.filter((x) => x.r.key_company || /博士/.test(x.r.title) || home.includes(x));
-    const others = cands.filter((x) => !must.includes(x)); // highest rule score first (candidates sorts them)
+    const others = cands.filter((x) => !must.includes(x) && !x.r.older); // highest rule score first (candidates sorts them)
     // a post with no description cannot be read and takes none of the week's readings, so the look over the titles may
     // choose more than READ_PER_WEEK: on the first library half of what it chose had no description, and half the
     // readings went unused

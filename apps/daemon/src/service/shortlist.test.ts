@@ -86,6 +86,19 @@ describe("每周短名单", () => {
     expect(noneHome.notes).toEqual(["本周南京没有对口的新岗位"]);
   });
 
+  it("no first-city post this week: the best of those open for longer, read and fitting, has the card; unread ones never", () => {
+    const sh = [...Array(MAX_NEW)].map((_, i) => row(`s${i}`, { company_id: `s${i}`, jd_text: "x", cities: '["上海"]' }));
+    const old = (id: string) => row(id, { company_id: id, jd_text: "x", older: 1 });
+    const reads = (o: Record<string, number>) => ({ fit: (id: string) => (id in o ? { score: o[id], verdict: "" } : id.startsWith("s") ? { score: 90, verdict: "" } : null) });
+    const a = run([...sh, old("o1"), old("o2"), old("o3")], { reads: reads({ o1: 60, o2: 72 }) }); // o3 was not read
+    expect(a.cards.filter((c) => c.slot === "new")).toHaveLength(MAX_NEW);
+    expect(a.cards.at(-1)).toMatchObject({ positionId: "o2", notes: expect.arrayContaining(["南京在招的里面最对口的一个（不是本周新出的）"]) });
+    expect(a.cards.some((c) => c.positionId === "o1" || c.positionId === "o3")).toBe(false); // one card, the best
+    expect(a.skipped.some((x) => /^o/.test(x.positionId))).toBe(false); // older posts are not listed as left out
+    const b = run([...sh, old("o1")], { reads: reads({ o1: 40 }) });
+    expect(b.notes).toEqual(["本周南京没有对口的新岗位"]);
+  });
+
   it("重点公司的岗位: two cards of their own, whatever they lack, and they take none of the 新机会", () => {
     const rows = [...Array(3)].map((_, i) => row(`k${i}`, { company_id: `k${i}`, key_company: 1, a: { tier: "明显缺口", S: 10 * i, A: 0, judgements: [] } })).concat([row("a1")]);
     const { cards, skipped } = run(rows);
