@@ -36,7 +36,9 @@ async function launchNew(vault: string, headless: boolean): Promise<BrowserConte
     const { chromium } = await import("playwright-core");
     // chromiumSandbox: Playwright turns Chrome's sandbox OFF by default (the "--no-sandbox" warning bar); this is the
     // user's real browser on real sites, so keep the sandbox on.
-    try { ctx = await chromium.launchPersistentContext(dir, { channel: "chrome", headless, viewport: null, chromiumSandbox: true, args: ["--no-first-run", "--no-default-browser-check"] }); }
+    try { ctx = await chromium.launchPersistentContext(dir, { channel: "chrome", headless, viewport: null, chromiumSandbox: true, args: ["--no-first-run", "--no-default-browser-check"],
+      // Playwright starts Chrome with extensions off; this is the person's own window, and they may want theirs in it
+      ignoreDefaultArgs: ["--disable-extensions"] }); }
     catch (e: any) { throw new DomainError("BROWSER_FAILED", `启动 Chrome 失败：${String(e?.message ?? e).split("\n")[0]}（需要本机装有 Chrome；同一个专用 profile 不能被两个 Chrome 同时打开）`); }
     ctxHeadless = headless;
     ctx.on("close", () => { ctx = null; ctxHeadless = false; });

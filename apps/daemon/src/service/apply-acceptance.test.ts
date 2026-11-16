@@ -7,7 +7,7 @@ import { openDb } from "../db.js";
 import { upsertFact } from "./profile.js";
 import { openBrowser, closeBrowser, activePage, readForm, mapFields, normLabel, type FormField } from "./apply.js";
 import { choose } from "./apply-widgets.js";
-import { planBlocks } from "./apply-blocks.js";
+import { planBlocks, valueIn, studyEnd, isOngoingBox } from "./apply-blocks.js";
 import { siteFilled } from "./apply-run.js";
 
 /** Regressions for the defects the independent acceptance found (docs/reports/2026-09-21-autofill-acceptance.md). */
@@ -67,17 +67,30 @@ describe("acceptance regressions: mapping", () => {
     expect(plan).toHaveLength(2);
   });
 
-  it("教育背景: a stay that gives no degree is not an entry; 「从第一学历开始填起」 puts the earliest degree first; two degrees at one school are two entries", () => {
+  it("教育背景: a stay that gives no degree is not an entry; two degrees at one school are two entries", () => {
     const db = profile();
     upsertFact(db, { kind: "education", data: { school: "海外示例大学", degree: "联合培养博士（不授学位）", major: "电气工程", period: "2024.12—2026.11" } }, "本人确认");
     const blank = (section: string) => [field({ section, label: "学校名称", entry: 0 }), field({ section, label: "学历", type: "select", entry: 0 })];
     const names = (fields: FormField[]) => planBlocks(db, fields).map((p) => p.name);
     expect(names(blank("教育背景"))).toEqual(["示例大学（博士）", "示例学院（本科）"]); // the highest degree first, as before; the visit is left out
-    expect(names(blank("教育背景 添加请从第一学历开始填起"))).toEqual(["示例学院（本科）", "示例大学（博士）"]);
     // the 博士 entry already on the form does not stand for a 硕士 at the same school
     upsertFact(db, { kind: "education", data: { school: "示例大学", degree: "硕士", major: "控制工程", period: "2019.09—2021.06" } }, "本人确认");
     const filled = [field({ section: "教育背景", label: "学校名称", value: "示例大学", entry: 0 }), field({ section: "教育背景", label: "学历", type: "select", value: "博士", entry: 0 })];
     expect(names(filled)).toEqual(["示例大学（硕士）", "示例学院（本科）"]);
+  });
+
+  it("a period that runs on: the entry's 「至今」 box is ticked and the end left empty; with no such box the end is when the person's studies end", () => {
+    const rec = { title: "示例项目", period: "2024.01-至今" };
+    const year = (label: string) => field({ section: "项目经历", label, placeholder: "年", entry: 0 }), month = (label: string) => field({ section: "项目经历", label, placeholder: "月", entry: 0 });
+    const boxes = [year("起止时间"), month("起止时间"), year("起止时间"), month("起止时间")];
+    const tick = field({ section: "项目经历", label: "起止时间", type: "checkbox", options: ["至今"], entry: 0 });
+    const until = studyEnd([{ kind: "education", data: { degree: "博士", period: "2021.09—2027.06" } }, { kind: "education", data: { degree: "联合培养博士（不授学位）", period: "2024.12—2028.11" } }]);
+    expect(until).toEqual(["2027", "06"]); // the degree programme, not the visit
+    expect(boxes.map((f, i) => valueIn("project", rec, f, i, [...boxes, tick], until))).toEqual(["2024", "01", "", ""]);
+    expect(isOngoingBox(tick)).toBe(true);
+    expect(isOngoingBox(field({ label: "至今", type: "checkbox" }))).toBe(true); // a site that names the box itself
+    expect(boxes.map((f, i) => valueIn("project", rec, f, i, boxes, until))).toEqual(["2024", "01", "2027", "06"]);
+    expect(valueIn("project", rec, field({ section: "项目经历", label: "结束时间", entry: 0 }), 0, [], until)).toBe("2027-06");
   });
 
   it("教育背景: a 联合培养 stay is not the 最高学历 either", async () => {

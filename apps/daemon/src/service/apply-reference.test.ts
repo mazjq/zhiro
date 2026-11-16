@@ -51,6 +51,9 @@ describe("the 系统填写 document", () => {
     expect(r.fields.has("说明")).toBe(false);
     expect(r.projects).toEqual([{ title: "仓储机器人调度系统开发项目", description: "校企合作横向项目。", role: "技术负责人", summary: "组织完成上位机系统。" }]);
     expect(parseAward("不是一条奖")).toEqual([]);
+    // the date to the month, and who gave it after a 「｜」
+    expect(parseAward("3. 2019.12 全国大学生数学建模竞赛二等奖（国家级）｜示例学会")).toEqual([{ title: "全国大学生数学建模竞赛二等奖", year: "2019", period: "2019.12-2019.12", issuer: "示例学会", level: "国家级" }]);
+    expect(parseAward("4. 2020年6月 校级优秀学生")).toEqual([{ title: "校级优秀学生", year: "2020", period: "2020.06-2020.06" }]);
     expect(refAnswer(r, "个人特长")?.key).toBe("个人特长");
     expect(refAnswer(r, "身高/cm")?.value).toBe("178");
   });
@@ -122,7 +125,7 @@ describe("what the first real Moka form got wrong", () => {
     expect(valueIn("project", record, slot[1], 0, slot)).toBe("校企合作横向项目。");
     expect(valueIn("project", record, slot[2], 0, slot)).toBe("技术负责人：组织完成上位机系统。");
     const alone = entry(["项目名称", "项目描述"], "项目经验");
-    expect(valueIn("project", record, alone[1], 0, alone)).toBe("校企合作横向项目。\n本人职责：技术负责人：组织完成上位机系统。");
+    expect(valueIn("project", record, alone[1], 0, alone)).toBe("校企合作横向项目。组织完成上位机系统。");
     // a real Moka form: a one-line 「职责」 beside the 「项目中职责」 paragraph is the role
     const both = entry(["项目名称", "职责", "项目描述", "项目中职责"], "项目经验").map((f, i) => (i === 1 ? { ...f, type: "text" } : f));
     expect(valueIn("project", record, both[1], 0, both)).toBe("技术负责人");

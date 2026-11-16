@@ -10,7 +10,7 @@
 import { readFileSync, statSync } from "node:fs";
 import { zipRead } from "./zip.js";
 
-export interface ReferenceRecord { title: string; year?: string; level?: string; note?: string; period?: string; description?: string; role?: string; summary?: string }
+export interface ReferenceRecord { title: string; year?: string; level?: string; note?: string; period?: string; issuer?: string; description?: string; role?: string; summary?: string }
 export interface Reference { path: string; fields: Map<string, string>; awards: ReferenceRecord[]; projects: ReferenceRecord[] }
 
 /** 「待填」, 「待填（省份，如 湖南省）」, 空, —: not answered yet */
@@ -25,9 +25,13 @@ export function docxParagraphs(buf: Buffer): string[] {
 
 /** 「2026年 江苏省…一等奖（省级，团队项目《…》）」 → title, year, level, note. Two awards in one line (「物理竞赛三等奖、数学竞赛三等奖」) are two. */
 export function parseAward(line: string): ReferenceRecord[] {
-  const m = line.match(/^\s*\d+[.、．]\s*(\d{4})\s*年\s*(.+)$/);
+  // the date as 「2026年」, 「2019年12月」 or 「2019.12」; who gave it after a 「｜」 at the end
+  const m = line.match(/^\s*\d+[.、．]\s*(\d{4})\s*(?:年\s*(\d{1,2})\s*月|[.\-\/]\s*(\d{1,2})(?!\d)|年)\s*(.+)$/);
   if (!m) return [];
-  let rest = m[2].trim(), level = "", note = "";
+  const month = m[2] ?? m[3], when = month ? `${m[1]}.${month.padStart(2, "0")}` : "";
+  const [body, ...by] = m[4].split(/[｜|]/).map((x) => x.trim());
+  const issuer = by.join(" ").trim();
+  let rest = body, level = "", note = "";
   const tail = rest.match(/（([^（）]*)）\s*$/);
   if (tail && /级|国际|国家|省|校|院|团队/.test(tail[1])) {
     rest = rest.slice(0, tail.index).trim();
@@ -39,7 +43,7 @@ export function parseAward(line: string): ReferenceRecord[] {
   const titles = pieces.length > 1 && pieces.every((p) => /奖|员|生|题/.test(p)) ? pieces : [rest];
   // 「东海科技大学（南京）物理竞赛三等奖、数学竞赛三等奖」: the second one keeps the first one's institution
   const org = titles.length > 1 ? (titles[0].match(/^(.*?(大学|学院)(（[^）]*）)?)/)?.[1] ?? "") : "";
-  return titles.map((t, i) => ({ title: i > 0 && org && !t.startsWith(org) ? org + t : t, year: m[1], ...(level ? { level } : {}), ...(note ? { note } : {}) }));
+  return titles.map((t, i) => ({ title: i > 0 && org && !t.startsWith(org) ? org + t : t, year: m[1], ...(when ? { period: `${when}-${when}` } : {}), ...(issuer ? { issuer } : {}), ...(level ? { level } : {}), ...(note ? { note } : {}) }));
 }
 
 const KEY = /^\s*([^：:]{1,24})[：:]\s*(.*)$/;

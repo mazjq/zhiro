@@ -26,7 +26,7 @@ export function partOf(kind: Kind, label: string): string {
   if (kind === "experience") return /公司|单位|企业|机构/.test(l) ? "org" : /职位|岗位|职务/.test(l) ? "role" : /职责|内容|描述/.test(l) ? "summary" : "";
   // 项目描述 is the project itself (what, at which level, why); 职责 / 角色 is what the person did in it (user, 2026-10-14)
   if (kind === "project") return /名称/.test(l) ? "title" : /职责|角色|职务|担任|负责|个人工作|本人工作/.test(l) ? "duty" : /描述|简介|介绍|内容|背景/.test(l) ? "description" : "";
-  return /名称|奖项/.test(l) ? "title" : /级别/.test(l) ? "level" : "";
+  return /颁发|授予|主办|发证/.test(l) ? "issuer" : /名称|奖项/.test(l) ? "title" : /级别/.test(l) ? "level" : "";
 }
 
 /** 「职责」 one line beside 「项目中职责」 a paragraph (a real Moka form, 2026-10-14): the line is the role, the paragraph what was done. */
@@ -63,8 +63,6 @@ const blank = (s: Slot) => s.fields.every((f) => ["select", "dropdown", "checkbo
 const level = (s = "") => (/博士/.test(s) ? "博士" : /硕士/.test(s) ? "硕士" : /本科|学士/.test(s) ? "本科" : /专科|大专/.test(s) ? "专科" : s.trim());
 /** 联合培养 / 访问 / 交换: time spent at a school, not a degree programme of it — left out of an application's 教育背景 (user, 2026-11-16). */
 export const notDegree = (d: Record<string, string>) => /联合培养|访问|访学|交换|交流|不授学位|非学位/.test(d.degree ?? "");
-/** 「教育背景添加请从第一学历开始填起」 (Moka, 2026-11-16): the form wants the earliest degree in the first entry. 最高学历 first is the default. */
-export const earliestFirst = (section: string) => /第一学历|最低学历|最早|由远及近|从早到晚|(从|自)(高中|中专|大专|专科|本科)/.test(section.replace(/\s+/g, ""));
 const planName = (kind: Kind, d: Record<string, string>) => (kind === "education" && d.degree ? `${d.school ?? ""}（${level(d.degree)}）` : nameOf(kind, d));
 
 /**
@@ -78,7 +76,7 @@ export function planBlocks(db: Db, fields: FormField[], ref?: Reference | null):
   for (const section of [...new Set(slots.map((s) => s.section))]) {
     const kind = blockKind(section)!;
     // experience cards: only those that are internships go to 实习经历 (a campus job is not one)
-    const records = recordsOf(facts, kind, ref, section);
+    const records = recordsOf(facts, kind, ref);
     const mine = slots.filter((s) => s.section === section).sort((a, b) => a.entry - b.entry);
     // N6: an entry the site already part-filled (专业 but no 学校) is taken, not a blank to put our record into
     const open = mine.filter((s) => !filledName(kind, s) && blank(s));
@@ -95,7 +93,7 @@ export function planBlocks(db: Db, fields: FormField[], ref?: Reference | null):
 }
 
 /** The records of one kind, newest first: the person's document when it has the list, else the profile without near-duplicates. */
-function recordsOf(facts: any[], kind: Kind, ref?: Reference | null, section = ""): Record<string, string>[] {
+function recordsOf(facts: any[], kind: Kind, ref?: Reference | null): Record<string, string>[] {
   let records = facts.filter((f) => f.kind === kind && (kind !== "experience" || /实习/.test(`${f.data.role ?? ""}${f.data.summary ?? ""}${f.data.type ?? ""}`)) && (kind !== "education" || !notDegree(f.data)))
     .map((f) => f.data as Record<string, string>);
   // the person's own document is the list when it has one (their curated awards, their projects)
@@ -103,30 +101,45 @@ function recordsOf(facts: any[], kind: Kind, ref?: Reference | null, section = "
   if (kind === "project" && ref?.projects.length) records = ref.projects.map((p) => ({ ...(records.find((r) => same(r.title, p.title)) ?? {}), ...p }) as Record<string, string>);
   // near-duplicates on the profile go once (education: the same school at the same 学历)
   const key = (r: Record<string, string>) => core(nameOf(kind, r)) + (kind === "education" ? `|${level(r.degree)}` : "");
-  const list = records.filter((r, i) => !records.slice(0, i).some((o) => key(o) === key(r))).sort((a, b) => startOf(b) - startOf(a));
-  return kind === "education" && earliestFirst(section) ? list.reverse() : list;
+  return records.filter((r, i) => !records.slice(0, i).some((o) => key(o) === key(r))).sort((a, b) => startOf(b) - startOf(a));
 }
 export const planRecords = (db: Db, kind: Kind, ref?: Reference | null) => recordsOf(listFacts(db).items, kind, ref);
 
 /** The value one field of an entry should get from a record; for a 年/月 range, the n-th box of it. */
-export function valueIn(kind: Kind, record: Record<string, string>, f: FormField, nth: number, siblings: FormField[] = []): string {
+/** A 「至今」 box of an entry, however the site names it (the option, or the box itself). */
+export const isOngoingBox = (f: FormField) => f.type === "checkbox" && /至今/.test(f.label + f.options.join(""));
+/**
+ * When the person's own degree programme ends: what 「至今」 becomes on a form with no 「至今」 box — a project that runs
+ * on is theirs until they leave (user, 2026-11-16).
+ */
+export function studyEnd(facts: any[]): [string, string] | undefined {
+  const ends = facts.filter((x) => x.kind === "education" && !notDegree(x.data)).map((x) => periodParts(x.data.period ?? "")?.end)
+    .filter((e): e is [string, string] => !!e && /^\d{4}$/.test(e[0]));
+  return ends.sort((a, b) => (b[0] + b[1]).localeCompare(a[0] + a[1]))[0];
+}
+
+/** `until`: the end a period that runs on (「2024.01-至今」) takes where the entry has no 「至今」 box (studyEnd). */
+export function valueIn(kind: Kind, record: Record<string, string>, f: FormField, nth: number, siblings: FormField[] = [], until?: [string, string]): string {
   const part = kind === "project" ? projectPart(f, siblings) : partOf(kind, f.label);
   if (kind === "project" && part === "role") return record.role ?? "";
   // with a role box of its own, the duty box is what was done; otherwise role and what was done together
   if (kind === "project" && part === "duty") return siblings.some((x) => projectPart(x, siblings) === "role") && record.summary ? record.summary : [record.role, record.summary].filter(Boolean).join("：");
   if (kind === "project" && part === "description") {
-    // no separate 职责 box in this entry: the project and what the person did, both here
+    // no separate 职责 box in this entry: one paragraph — what the project is, then what the person did in it. No
+    // 「本人职责：」 and no role in front (user, 2026-11-16: it read like a form, not like a description)
     const hasDuty = siblings.some((x) => partOf(kind, x.label) === "duty");
-    const duty = [record.role, record.summary].filter(Boolean).join("：");
-    return hasDuty ? record.description ?? "" : [record.description, duty && `本人职责：${duty}`].filter(Boolean).join("\n");
+    const what = (record.description ?? "").trim(), did = (record.summary ?? "").trim();
+    return hasDuty || !did ? what : what ? `${what}${/[。！？.!?；;]$/.test(what) ? "" : "。"}${did}` : did;
   }
   if (part !== "period") return part ? record[part] ?? "" : "";
   const p = periodParts(record.period ?? (record.year ? `${record.year}-${record.year}` : ""));
   if (!p) return "";
-  const boxes = [...p.start, ...p.end];
+  // runs on: the entry's own 「至今」 box says it (the end stays empty); with no such box, the end of the person's studies
+  const end: [string, string] = p.end[0] === "至今" ? (siblings.some(isOngoingBox) ? ["", ""] : until ?? ["", ""]) : p.end;
+  const boxes = [...p.start, ...end];
   if (/^(年|月)$/.test(f.placeholder)) return boxes[nth] ?? "";
   // 开始时间 / 结束时间 as one box each (北森)
-  return /结束|毕业|离校|离职|截止/.test(f.label) ? p.end.filter(Boolean).join("-") : p.start.filter(Boolean).join("-");
+  return /结束|毕业|离校|离职|截止/.test(f.label) ? end.filter(Boolean).join("-") : p.start.filter(Boolean).join("-");
 }
 
 /** Click the block's 「添加」 once and wait until one more entry exists. False if nothing appeared. */
