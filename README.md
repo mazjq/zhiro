@@ -115,9 +115,11 @@ interview, Zhiro sends a Feishu urgent message if you have not looked, and then 
 
 Connecting Feishu takes about ten minutes, once: [follow these steps](docs/feishu.md) (in Chinese).
 
-<img src="docs/assets/feishu-reminders.png" alt="A test reminder, a deadline reminder and an interview invitation in Feishu on a phone" width="320">
+| The morning brief | A test, a deadline, an interview invitation |
+|---|---|
+| <img src="docs/assets/feishu-brief.png" alt="The daily brief in Feishu on a phone" width="300"> | <img src="docs/assets/feishu-reminders.png" alt="A test reminder, a deadline reminder and an interview invitation in Feishu on a phone" width="300"> |
 
-<sub>The companies, jobs and times in the screenshot are made up.</sub>
+<sub>The brief on the left is a real one; the companies, jobs and times in the three reminders on the right are made up.</sub>
 
 ### 6. Your data stays safe
 

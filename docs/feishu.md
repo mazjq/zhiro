@@ -4,9 +4,11 @@
 
 照下面两步做，大概花十分钟，只用做一次。
 
-<img src="assets/feishu-reminders.png" alt="手机飞书里收到的笔试提醒、截止提醒和面试邀请" width="320">
+| 每天早上的简报 | 笔试、截止、面试邀请 |
+|---|---|
+| <img src="assets/feishu-brief.png" alt="手机飞书里收到的每日简报" width="300"> | <img src="assets/feishu-reminders.png" alt="手机飞书里收到的笔试提醒、截止提醒和面试邀请" width="300"> |
 
-<sub>截图里的公司、岗位和时间都是虚构的。</sub>
+<sub>左边是一份真实的简报；右边三条提醒里的公司、岗位和时间是虚构的。</sub>
 
 ## 会收到哪些消息
 
