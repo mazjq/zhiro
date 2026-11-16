@@ -63,20 +63,16 @@ public institutions post). It can also read spreadsheets you keep yourself (Feis
 The same job sometimes shows different deadlines on different sites. Zhiro compares them and notes which site each
 date came from and whether it has been verified.
 
-**A brief every morning.** Zhiro tells you what is new since yesterday: what has to be done today (a job closing today,
-a test tomorrow), which new jobs fit you, and what has been left waiting. What it told you yesterday and has not
-changed is not repeated.
+**A brief every morning.** Jobs that close today or soon and that you have not applied to, and the tests and
+interviews you have been given, all in one place. It also tells you which new jobs fit you.
 
-**A shortlist every Monday.** A week can bring hundreds of new jobs, more than anyone can read. Zhiro picks about ten
-worth your time and says, for each, where it fits you and what you are missing. You answer with one click: apply, skip,
-or hold. If you skip, you can say why (“not this city”, “not this company”) and jobs like it stop
-coming up.
+**A list every Monday.** From the week's new jobs Zhiro picks about ten worth a look; you click apply, skip or hold.
+When you skip you can say why, for example “not this city”, and jobs like it stop appearing.
 
-**Mark the companies you want most.** You can do this before a company has started hiring. The moment it posts a job,
-Zhiro tells you.
+**Mark the companies you want.** You can mark one before it starts hiring, and Zhiro tells you as soon as it posts a
+job.
 
-**Internships have their own page.** Every open internship in one list, the ones closest to your field first, each
-with how well it fits.
+**Internships too.** Zhiro collects internship postings by itself and recommends the ones that suit you first.
 
 Your education, skills, projects and preferred cities are kept in your profile. Job recommendations, choosing a
 resume and filling in forms all take their information from there.
@@ -102,16 +98,15 @@ right resume, and then stops so you can check it and press *Submit* yourself.
 
 ### 5. The important things reach your phone
 
-You will not have your computer open all day. Once Feishu (Lark) is connected, Zhiro sends these straight to your
-phone:
+Connect Feishu (Lark) and these come straight to your phone:
 
-- the brief each morning;
-- written tests and interviews: once the day before, and again shortly before they start;
-- a job you meant to apply to is about to close and you have not applied;
-- an interview invitation, an assessment, an offer or a rejection has arrived in your mailbox.
+- the brief each morning
+- the times of tests and interviews (once the day before, once shortly before they start)
+- a job you meant to apply to that is about to close
+- interview invitations, assessments, offers and rejections that arrive in your mailbox
 
-A message counts as delivered only once you have opened it. For things you cannot miss, such as a test or an
-interview, Zhiro sends a Feishu urgent message if you have not looked, and then a text message.
+A message counts as delivered once you have opened it. If a test or interview reminder stays unopened, Zhiro sends it
+again as a Feishu urgent message, and then as a text message.
 
 Connecting Feishu takes about ten minutes, once: [follow these steps](docs/feishu.md) (in Chinese).
 
@@ -137,11 +132,11 @@ wrong, one command restores it.
 |---|---|---|
 | **Finding jobs** | Reads the recruiting sites you subscribe to every day: Moka, Beisen, Feishu Jobs, 51job, Zhaopin, iGuopin, Dayee, 高校人才网 and more | ✅ |
 | | Ranks jobs against your degree, major and experience | ✅ |
-| | A brief every morning, a shortlist every Monday | ✅ |
-| | Internships on their own page, the closest to your field first | ✅ |
-| | Key companies: follow one before it starts hiring and hear the moment it posts | ✅ |
+| | A brief every morning, a list every Monday | ✅ |
+| | Internships: collected automatically, the ones that suit you recommended first | ✅ |
+| | Companies you want: mark one before it starts hiring and hear as soon as it posts | ✅ |
 | | Reads spreadsheets you keep yourself (Feishu Base, CSV) | ✅ |
-| | The shortlist is chosen after an AI has read each job description, so it picks better | 🚧 |
+| | The Monday list is chosen after an AI has read each job description, so it picks better | 🚧 |
 | | Jobs posted without a description get it filled in from the original page | 📌 |
 | | More sources: small companies' own sites, university career sites, WeChat official accounts | 📌 |
 | | A shared set of job data out of the box, so you need not subscribe site by site | 📌 |
