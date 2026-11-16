@@ -64,10 +64,10 @@ describe.skipIf(!CHROME)("generic driver on an Element UI site", () => {
     const form = await readForm();
     expect(form.fields.map((f) => [f.label, f.type, f.required])).toEqual([["性别", "dropdown", true], ["出生年月", "date", false], ["籍贯", "cascader", false], ["入学年月", "month", false], ["是否服从调剂", "radio", false]]);
     expect(await choose(page, await box("性别"), "男")).toBe("");
-    expect(await choose(page, await box("出生年月"), "2000.01")).toBe("");
+    expect(await choose(page, await box("出生年月"), "2001.03")).toBe("");
     expect(await choose(page, await box("籍贯"), "浙江省嘉兴市南湖区")).toBe("");
     expect(await choose(page, await box("入学年月"), "2021.09")).toBe("");
     const values = await page.evaluate(() => Array.from(document.querySelectorAll("form input:not([type=radio])")).map((i) => (i as HTMLInputElement).value));
-    expect(values).toEqual(["男", "2000-01", "浙江省 / 嘉兴市 / 南湖区", "2021-09"]);
+    expect(values).toEqual(["男", "2001-03", "浙江省 / 嘉兴市 / 南湖区", "2021-09"]);
   }, 60_000);
 });

@@ -120,15 +120,15 @@ describe.skipIf(!CHROME)("widget drivers (Moka sd-*, 北森 phoenix-*)", () => {
     expect(await choose(page, await box("户口所在地"), "浙江省嘉兴市")).toMatch(/要选到区\/县/); // one level short: says so, does not hang
     await page.keyboard.press("Escape");
     expect(await choose(page, await box("户口所在地"), "浙江省嘉兴市南湖区")).toBe("");
-    expect(await choose(page, await box("出生日期"), "2000.01")).toBe("");
+    expect(await choose(page, await box("出生日期"), "2001.03")).toBe("");
     expect(await choose(page, await box("学历"), "博士")).toBe("");
     expect(await choose(page, await box("开始时间"), "2021-09")).toBe("");
 
     const shown = await page.evaluate(() => [
       ...Array.from(document.querySelectorAll("[class*=display-value]")).map((e) => e.textContent), (document.querySelector("#birth input") as HTMLInputElement).value,
       ...Array.from(document.querySelectorAll(".phoenix-select__tipEle")).map((e) => e.textContent)]);
-    expect(shown).toEqual(["男", "2021", "9", "东海科技大学(南京)", "控制科学与工程", "浙江-嘉兴", "江苏省 / 南京市", "2000-01", "博士", "2021-09"]);
-    expect((await readForm()).fields.map((f) => f.value)).toEqual(["男", "2021", "9", "东海科技大学(南京)", "控制科学与工程", "浙江-嘉兴", "江苏省 / 南京市", "浙江 嘉兴市 南湖区", "2000-01", "博士", "2021-09"]);
+    expect(shown).toEqual(["男", "2021", "9", "东海科技大学(南京)", "控制科学与工程", "浙江-嘉兴", "江苏省 / 南京市", "2001-03", "博士", "2021-09"]);
+    expect((await readForm()).fields.map((f) => f.value)).toEqual(["男", "2021", "9", "东海科技大学(南京)", "控制科学与工程", "浙江-嘉兴", "江苏省 / 南京市", "浙江 嘉兴市 南湖区", "2001-03", "博士", "2021-09"]);
   }, 60_000);
 
   it("never picks among several near matches, and says when an option does not exist", async () => {

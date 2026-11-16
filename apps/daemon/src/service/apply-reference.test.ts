@@ -11,7 +11,7 @@ import { planBlocks, valueIn } from "./apply-blocks.js";
 import { optionAliases } from "./apply-widgets.js";
 
 const DOC = [
-  "主要专业成果", "一、第一作者论文", "1. Z. Ma, … ISA Transactions, 2024.（第一作者，SCI，JCR Q1）",
+  "主要专业成果", "一、第一作者论文", "1. A. Author, … Journal of Examples, 2023.（第一作者，SCI，JCR Q1）",
   "奖惩信息", "一、奖励（按时间倒序）",
   "1. 2026年 江苏省第九届“挑战杯”大学生创业计划竞赛一等奖（省级，团队项目《海上灯塔》）",
   "2. 2018年 东海科技大学（南京）物理竞赛三等奖、数学竞赛三等奖（校级）",

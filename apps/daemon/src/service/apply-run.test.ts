@@ -61,7 +61,7 @@ describe.skipIf(!CHROME)("开始网申 (ADR-024)", () => {
 
     // the user completes the form and submits
     await page.locator("input").nth(3).fill("中共党员");
-    await page.locator("input").nth(4).fill("420100200001010000");
+    await page.locator("input").nth(4).fill("110101199001010000");
     await page.locator("input").nth(5).fill("看好示例汽车的方向");
     await new Promise((r) => setTimeout(r, 500));
     await page.locator("button").click();
