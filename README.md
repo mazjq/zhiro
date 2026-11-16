@@ -63,6 +63,14 @@ public institutions post). It can also read spreadsheets you keep yourself (Feis
 The same job sometimes shows different deadlines on different sites. Zhiro compares them and notes which site each
 date came from and whether it has been verified.
 
+Each morning Zhiro writes a brief that covers only what changed since the last one: what you must do today, new jobs
+that fit you, and anything that needs your attention.
+
+Monday's brief also carries a shortlist: about ten of the week's new jobs, one card each, saying where the job fits you
+and what you are missing. For each card you choose apply, skip or hold. When you skip, you can say why (not this city,
+not this company) and jobs like it stop appearing. Companies you especially want can be marked as key companies, and
+Zhiro tells you first when they post something new.
+
 Your education, skills, projects and preferred cities are kept in your profile. Job recommendations, choosing a
 resume and filling in forms all take their information from there.
 
@@ -85,7 +93,25 @@ right resume, and then stops so you can check it and press *Submit* yourself.
 |---|---|
 | ![Applications](docs/assets/pipeline.png) | ![Inbox](docs/assets/inbox.png) |
 
-### 5. Your data stays safe
+### 5. Reminders on your phone
+
+Once Feishu (Lark) is connected, Zhiro sends these to you as private messages:
+
+- the daily brief, with the shortlist on Mondays;
+- written tests and interviews: once the day before, and again shortly before they start;
+- jobs you follow or are preparing to apply to that are about to close;
+- interview invitations, assessments, offers and rejections found in recruiting emails.
+
+A message counts as delivered only when you have read it in Feishu. If a test or interview reminder stays unread,
+Zhiro repeats it as a Feishu urgent message, and then by SMS.
+
+Connecting takes about ten minutes, once: [step by step](docs/feishu.md) (in Chinese).
+
+| The daily brief | Test and deadline reminders |
+|---|---|
+| ![The daily brief in Feishu](docs/assets/feishu-brief.png) | ![Test and deadline reminders in Feishu](docs/assets/feishu-reminders.png) |
+
+### 6. Your data stays safe
 
 An AI assistant can only directly do things that can be undone. Anything else waits until you click to confirm. It
 never gets your logins for any site.
@@ -211,6 +237,7 @@ More: [docs/data.md](docs/data.md) · Bring your own spreadsheet: [docs/data-sou
 |---|---|
 | [docs/data.md](docs/data.md) | Where your data is; backup, upgrade, rollback, moving to another disk |
 | [docs/data-sources.md](docs/data-sources.md) | Subscribe to your own sheet (Feishu Base, CSV) |
+| [docs/feishu.md](docs/feishu.md) | Send the brief and reminders to Feishu on your phone |
 | [docs/harness/](docs/harness/) | Claude Code, Codex, WorkBuddy, DeepSeek (dsh), other MCP clients |
 | [docs/contrib/](docs/contrib/) | Architecture and design decisions, for contributors |
 
