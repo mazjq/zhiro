@@ -63,13 +63,20 @@ public institutions post). It can also read spreadsheets you keep yourself (Feis
 The same job sometimes shows different deadlines on different sites. Zhiro compares them and notes which site each
 date came from and whether it has been verified.
 
-Each morning Zhiro writes a brief that covers only what changed since the last one: what you must do today, new jobs
-that fit you, and anything that needs your attention.
+**A brief every morning.** Zhiro tells you what is new since yesterday: what has to be done today (a job closing today,
+a test tomorrow), which new jobs fit you, and what has been left waiting. What it told you yesterday and has not
+changed is not repeated.
 
-Monday's brief also carries a shortlist: about ten of the week's new jobs, one card each, saying where the job fits you
-and what you are missing. For each card you choose apply, skip or hold. When you skip, you can say why (not this city,
-not this company) and jobs like it stop appearing. Companies you especially want can be marked as key companies, and
-Zhiro tells you first when they post something new.
+**A shortlist every Monday.** A week can bring hundreds of new jobs, more than anyone can read. Zhiro picks about ten
+worth your time and says, for each, where it fits you and what you are missing. You answer with one click: apply, skip,
+or hold. If you skip, you can say why (“not this city”, “not this company”) and jobs like it stop
+coming up.
+
+**Mark the companies you want most.** You can do this before a company has started hiring. The moment it posts a job,
+Zhiro tells you.
+
+**Internships have their own page.** Every open internship in one list, the ones closest to your field first, each
+with how well it fits.
 
 Your education, skills, projects and preferred cities are kept in your profile. Job recommendations, choosing a
 resume and filling in forms all take their information from there.
@@ -93,23 +100,24 @@ right resume, and then stops so you can check it and press *Submit* yourself.
 |---|---|
 | ![Applications](docs/assets/pipeline.png) | ![Inbox](docs/assets/inbox.png) |
 
-### 5. Reminders on your phone
+### 5. The important things reach your phone
 
-Once Feishu (Lark) is connected, Zhiro sends these to you as private messages:
+You will not have your computer open all day. Once Feishu (Lark) is connected, Zhiro sends these straight to your
+phone:
 
-- the daily brief, with the shortlist on Mondays;
+- the brief each morning;
 - written tests and interviews: once the day before, and again shortly before they start;
-- jobs you follow or are preparing to apply to that are about to close;
-- interview invitations, assessments, offers and rejections found in recruiting emails.
+- a job you meant to apply to is about to close and you have not applied;
+- an interview invitation, an assessment, an offer or a rejection has arrived in your mailbox.
 
-A message counts as delivered only when you have read it in Feishu. If a test or interview reminder stays unread,
-Zhiro repeats it as a Feishu urgent message, and then by SMS.
+A message counts as delivered only once you have opened it. For things you cannot miss, such as a test or an
+interview, Zhiro sends a Feishu urgent message if you have not looked, and then a text message.
 
-Connecting takes about ten minutes, once: [step by step](docs/feishu.md) (in Chinese).
+Connecting Feishu takes about ten minutes, once: [follow these steps](docs/feishu.md) (in Chinese).
 
-| The daily brief | Test and deadline reminders |
-|---|---|
-| ![The daily brief in Feishu](docs/assets/feishu-brief.png) | ![Test and deadline reminders in Feishu](docs/assets/feishu-reminders.png) |
+<img src="docs/assets/feishu-reminders.png" alt="A test reminder, a deadline reminder and an interview invitation in Feishu on a phone" width="320">
+
+<sub>The companies, jobs and times in the screenshot are made up.</sub>
 
 ### 6. Your data stays safe
 
@@ -118,6 +126,39 @@ never gets your logins for any site.
 
 All your data is kept in one folder on your computer. Zhiro backs it up before every upgrade, and if an upgrade goes
 wrong, one command restores it.
+
+## What it does
+
+✅ works today　🚧 being built　📌 planned (the order may change)
+
+| | Feature | |
+|---|---|---|
+| **Finding jobs** | Reads the recruiting sites you subscribe to every day: Moka, Beisen, Feishu Jobs, 51job, Zhaopin, iGuopin, Dayee, 高校人才网 and more | ✅ |
+| | Ranks jobs against your degree, major and experience | ✅ |
+| | A brief every morning, a shortlist every Monday | ✅ |
+| | Internships on their own page, the closest to your field first | ✅ |
+| | Key companies: follow one before it starts hiring and hear the moment it posts | ✅ |
+| | Reads spreadsheets you keep yourself (Feishu Base, CSV) | ✅ |
+| | The shortlist is chosen after an AI has read each job description, so it picks better | 🚧 |
+| | Jobs posted without a description get it filled in from the original page | 📌 |
+| | More sources: small companies' own sites, university career sites, WeChat official accounts | 📌 |
+| | A shared set of job data out of the box, so you need not subscribe site by site | 📌 |
+| **Seeing the gap** | Collects what jobs ask for and lists the skills you lack, with how many jobs ask for each | ✅ |
+| | Tells you which skill would open the most jobs and how you could pick it up | 📌 |
+| **Knowing a company** | Listed companies: three years of financials, headcount and pay, a year of announcements | ✅ |
+| | Industry research reports with a source for every conclusion | ✅ |
+| | Several companies side by side | ✅ |
+| **Deadlines** | The deadlines different sites give for the same job, compared | ✅ |
+| | Reads the official announcement to check that a deadline is real | ✅ |
+| **After you apply** | Keeps track of where each application stands | ✅ |
+| | Fills in application forms, then stops for you to check and submit | ✅ |
+| | Reads recruiting email, recognises tests, interviews, offers and rejections, and updates the application | ✅ |
+| | Reminders on your phone through Feishu; the important ones are repeated until you have seen them | ✅ |
+| **AI assistants** | Works with Claude Code, Codex, WorkBuddy and other assistants, by chatting | ✅ |
+| | Chat with an AI inside Zhiro | ✅ |
+| | Before using AI in the background it checks your allowance, and waits when it is running low | ✅ |
+| **Your data** | Everything stays on your computer; backed up before each upgrade, restored with one command | ✅ |
+| | A tray icon: start and stop with one click, see how it is running | 📌 |
 
 ## Install
 
