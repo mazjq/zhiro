@@ -42,6 +42,13 @@ function campaignRow(r: any): CampaignT {
 /** the profile matcher's relevance (0–100) of a post, for ordering the internship list (ADR-035) */
 const FIT_A = "(select json_extract(a.json, '$.A') from position_assessment a where a.position_id = p.id)";
 
+/**
+ * Where to apply for one post: its own page on the employer's site when an official reader listed it, else its batch's
+ * link. A batch has one link for all its posts — the first post's — so every post of a company on 大易 pointed at one
+ * post's page (2026-11-16: 82 posts of one company, four links).
+ */
+export const APPLY_URL = "coalesce((select sl.url from source_listing sl where sl.position_id = p.id and sl.url != '' and sl.is_original = 1 order by sl.fetched_at desc limit 1), c.apply_url)";
+
 function positionRow(r: any): PositionT & { companyName: string; closesAt: string | null; deadlineKind: any; applyUrl: string; noticeUrl: string; applicationState: string | null } {
   return {
     id: r.id, campaignId: r.campaign_id, title: r.title, jdText: r.jd_text, cities: json.parse(r.cities, []), degreeReq: r.degree_req, majorReq: r.major_req || r.campaign_major_req || "",
@@ -170,7 +177,7 @@ export class Domain {
     if (q.city) { where.push("((case when p.cities != '[]' then p.cities else c.cities end) like ?)"); args.push(`%${q.city}%`); }
     where.push("p.status != 'closed'");
     const from = `from position p join campaign c on c.id = p.campaign_id join company co on co.id = c.company_id ${where.length ? "where " + where.join(" and ") : ""} order by ${q.internship ? `coalesce(${FIT_A}, -1) desc, ` : ""}c.closes_at is null, c.closes_at asc, co.name`;
-    const full = `select p.*, co.name as company_name, c.closes_at, c.deadline_kind, c.apply_url, c.notice_url, c.major_req as campaign_major_req, (select a.state from application a where a.position_id = p.id and a.state != 'cancelled') as app_state${q.internship ? `, ${FIT_A} as fit_a, (select json_extract(a.json, '$.tier') from position_assessment a where a.position_id = p.id) as fit_tier` : ""}`;
+    const full = `select p.*, co.name as company_name, c.closes_at, c.deadline_kind, ${APPLY_URL} as apply_url, c.notice_url, c.major_req as campaign_major_req, (select a.state from application a where a.position_id = p.id and a.state != 'cancelled') as app_state${q.internship ? `, ${FIT_A} as fit_a, (select json_extract(a.json, '$.tier') from position_assessment a where a.position_id = p.id) as fit_tier` : ""}`;
     const limit = q.limit ?? 100;
     if (q.includeExpired) return { items: (this.db.prepare(`${full} ${from} limit ?`).all(...(args as any[]), limit) as any[]).map(positionRow) };
     // 在招 = the resolver says it has not passed (ADR-041): the person's word, the post's own day, its batch's, and what
@@ -218,7 +225,7 @@ export class Domain {
   }
 
   listApplications(state?: string) {
-    const rows = this.db.prepare(`select a.*, p.title, p.cities, p.jd_text, co.name as company_name, c.closes_at, c.apply_url, c.notice_url from application a
+    const rows = this.db.prepare(`select a.*, p.title, p.cities, p.jd_text, co.name as company_name, c.closes_at, ${APPLY_URL} as apply_url, c.notice_url from application a
       join position p on p.id = a.position_id join campaign c on c.id = a.campaign_id join company co on co.id = c.company_id
       where ${state ? "a.state = ?" : "a.state != 'cancelled'"} order by a.updated_at desc`).all(...(state ? [state] : [])) as any[];
     return {
