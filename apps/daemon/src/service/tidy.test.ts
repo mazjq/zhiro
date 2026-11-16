@@ -18,7 +18,7 @@ function setup(sourceIds: { id: string; source: string }[]) {
   const s: Services = createServices({ db: db, domain, config: testConfig(dir, { sources: sourceIds }) });
   return { dir, domain, s };
 }
-const listing = (o: Partial<Listing>): Listing => ({ externalId: o.title ?? "x", url: "https://example.com/j", title: "控制算法工程师", company: "示例", locations: ["武汉"], publisher: "示例", grade: "官方", isOriginal: true, confidence: 1, cohort: "2027届", batch: "秋招", ...o });
+const listing = (o: Partial<Listing>): Listing => ({ externalId: o.title ?? "x", url: "https://example.com/j", title: "控制算法工程师", company: "示例", locations: ["南京"], publisher: "示例", grade: "官方", isOriginal: true, confidence: 1, cohort: "2027届", batch: "秋招", ...o });
 
 describe("evidence-based tidy (2026-10-01)", () => {
   it("campaigns left by a pruned pull subscription are dropped, unless a person holds one of their posts", async () => {

@@ -2,8 +2,8 @@ import { describe, it, expect } from "vitest";
 import { pick, cityRank, roleKey, weekOf, MAX_NEW } from "./shortlist.js";
 
 const me: any = { level: 3, concepts: new Set(["control_algorithm", "motor_control"]), stems: ["控制"], direction: ["动力定位"], user: { level: 3, majors: [], gaps: new Set(), evidence: [] } };
-const rules = (o: any = {}) => ({ tiers: [["武汉"], ["深圳", "上海"], ["北京"]], noCities: [], onePerGroup: [], excludes: [], blocked: new Set<string>(), ...o });
-const row = (id: string, o: any = {}) => ({ id, title: "控制算法工程师", jd_text: "", cities: '["武汉"]', degree_req: "", major_req: "", closes_at: null, created_at: "2026-11-01T00:00:00Z", watch_priority: null,
+const rules = (o: any = {}) => ({ tiers: [["南京"], ["深圳", "上海"], ["北京"]], noCities: [], onePerGroup: [], excludes: [], blocked: new Set<string>(), ...o });
+const row = (id: string, o: any = {}) => ({ id, title: "控制算法工程师", jd_text: "", cities: '["南京"]', degree_req: "", major_req: "", closes_at: null, created_at: "2026-11-01T00:00:00Z", watch_priority: null,
   c_closes: null, c_degree: "", c_major: "", c_cities: "[]", source_kind: "moka", company_id: id.slice(0, 1), company: `公司${id.slice(0, 1)}`, company_type: "民企", app_state: null, assessment: null, key_company: 0, ...o }) as any;
 const assessOf = (r: any) => r.a ?? null;
 const run = (rows: any[], o: any = {}) => pick(rows, me, rules(o.rules), o.applied ?? new Map(), assessOf, "2026-11-02", o.before ?? new Set());
@@ -12,9 +12,9 @@ describe("每周短名单", () => {
   it("weekOf is the Monday; cityRank walks the tiers", () => {
     expect(weekOf(Date.parse("2026-11-05T10:00:00"))).toBe("2026-11-02");
     expect(weekOf(Date.parse("2026-11-02T00:30:00"))).toBe("2026-11-02");
-    expect(cityRank(["深圳"], [["武汉"], ["深圳", "上海"]])).toBe(1);
-    expect(cityRank(["长春"], [["武汉"]])).toBe(-1);
-    expect(cityRank(["全国"], [["武汉"]])).toBe(1); // unknown: after every tier, never out
+    expect(cityRank(["深圳"], [["南京"], ["深圳", "上海"]])).toBe(1);
+    expect(cityRank(["长春"], [["南京"]])).toBe(-1);
+    expect(cityRank(["全国"], [["南京"]])).toBe(1); // unknown: after every tier, never out
     expect(cityRank(["长春"], [])).toBe(0); // no list, no rule
   });
 
@@ -45,13 +45,13 @@ describe("每周短名单", () => {
   it("one company's posts of the same role are one card: a copy per city, 助理 / 主管, a job number; a direction in brackets is another role", () => {
     expect(roleKey("控制算法助理工程师(J33340)")).toBe(roleKey("控制算法主管工程师(J33341)"));
     expect(roleKey("控制算法工程师（博士）")).toBe(roleKey("控制算法工程师（硕士）"));
-    expect(roleKey("嵌入式软件开发工程师（湖北武汉）", ["湖北省 武汉市 江夏区"])).toBe(roleKey("嵌入式软件开发工程师"));
+    expect(roleKey("嵌入式软件开发工程师（江苏南京）", ["江苏省 南京市 江宁区"])).toBe(roleKey("嵌入式软件开发工程师"));
     expect(roleKey("软件算法工程师（运动控制方向） - 上海(J19729)", ["上海市"])).not.toBe(roleKey("软件算法工程师（嵌入式方向） - 上海(J19720)", ["上海市"]));
     const rows = [row("a1", { title: "控制算法主管工程师(J33341)" }), row("a2", { title: "控制算法助理工程师(J33340)", cities: '["上海"]' }), row("a3", { title: "运动控制工程师" }), row("b1")];
     const { cards, skipped } = run(rows);
     expect(cards.map((c) => c.positionId)).toEqual(["a1", "a3", "b1"]);
     expect(cards[0].variants).toEqual([{ positionId: "a2", title: "控制算法助理工程师(J33340)", cities: ["上海"] }]);
-    expect(cards[0].cities).toEqual(["武汉", "上海"]);
+    expect(cards[0].cities).toEqual(["南京", "上海"]);
     expect(cards[0].notes).toContain("同岗位还有 1 个");
     expect(skipped).toHaveLength(0); // a2 is on a1's card, not left out
   });
@@ -106,7 +106,7 @@ describe("短名单细评: the two lines from the model's deep match", async () 
     const db = openDb(join(dir, "t.db"));
     const domain = new Domain(db);
     ingest(domain, dir, "capture", "c1", [...Array(posts)].map((_, i) => ({ externalId: `j${i}`, url: `https://example.org/jobs/j${i}`, title: `控制算法工程师${i}`, company: "示例海工有限公司",
-      locations: ["武汉"], description: JD, publisher: "site:example", grade: "官方", isOriginal: true, confidence: 1, cohort: "2027届", batch: "校招" }) as any));
+      locations: ["南京"], description: JD, publisher: "site:example", grade: "官方", isOriginal: true, confidence: 1, cohort: "2027届", batch: "校招" }) as any));
     const s = createServices({ db, domain, config: testConfig(dir, { sources: [] }) });
     tagCompany(s, { companyId: (db.prepare("select id from company").get() as any).id, tag: "重点", reason: "测试" });
     const calls: { kind: string | null; purpose: string }[] = [];
@@ -198,7 +198,7 @@ describe("补一下: a plan written once", async () => {
     const db = openDb(join(dir, "t.db"));
     const domain = new Domain(db);
     ingest(domain, dir, "capture", "c1", ["j1", "j2"].map((id) => ({ externalId: id, url: `https://example.org/jobs/${id}`, title: `控制算法工程师${id}`, company: id === "j1" ? "示例海工有限公司" : "示例船舶有限公司",
-      locations: ["武汉"], description: JD, validThrough: "2099-12-31", publisher: "site:example", grade: "官方", isOriginal: true, confidence: 1, cohort: "2027届", batch: "校招" }) as any));
+      locations: ["南京"], description: JD, validThrough: "2099-12-31", publisher: "site:example", grade: "官方", isOriginal: true, confidence: 1, cohort: "2027届", batch: "校招" }) as any));
     const s = createServices({ db, domain, config: testConfig(dir, { sources: [] }) });
     for (const co of db.prepare("select id from company").all() as any[]) tagCompany(s, { companyId: co.id, tag: "重点", reason: "测试" });
     if (o.project !== false) upsertFact(db, { kind: "project", data: { title: "水面无人艇航迹跟踪控制" } }, "本人确认");
@@ -269,8 +269,8 @@ describe("重点公司 card: no open post, a known way to apply", async () => {
     const s = createServices({ db, domain, config: testConfig(dir, { sources: [] }) });
     // 甲: only an old, closed post, but its batch has an apply link; 乙: only its own site on record; 丙: nothing known; 丁: an open post
     ingest(domain, dir, "capture", "c1", [
-      { externalId: "j1", url: "https://example.org/jobs/j1", title: "算法工程师", company: "示例甲科技有限公司", locations: ["武汉"], publisher: "site:example", grade: "官方", isOriginal: true, confidence: 1, cohort: "2027届", batch: "校招" },
-      { externalId: "j2", url: "https://example.org/jobs/j2", title: "算法工程师", company: "示例丁科技有限公司", locations: ["武汉"], publisher: "site:example", grade: "官方", isOriginal: true, confidence: 1, cohort: "2027届", batch: "校招" },
+      { externalId: "j1", url: "https://example.org/jobs/j1", title: "算法工程师", company: "示例甲科技有限公司", locations: ["南京"], publisher: "site:example", grade: "官方", isOriginal: true, confidence: 1, cohort: "2027届", batch: "校招" },
+      { externalId: "j2", url: "https://example.org/jobs/j2", title: "算法工程师", company: "示例丁科技有限公司", locations: ["南京"], publisher: "site:example", grade: "官方", isOriginal: true, confidence: 1, cohort: "2027届", batch: "校招" },
     ] as any);
     const id = (name: string) => (db.prepare("select id from company where name = ?").get(name) as any)?.id as string;
     db.prepare("update position set status = 'closed' where campaign_id in (select id from campaign where company_id = ?)").run(id("示例甲科技有限公司"));

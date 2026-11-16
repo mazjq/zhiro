@@ -51,7 +51,7 @@ async function pick(page: Page, scope: Locator, sel: string, want: string[], fuz
   const found = await scope.evaluate((root, [sel, want, fuzzy]) => {
     document.querySelectorAll("[data-jobos-pick]").forEach((e) => e.removeAttribute("data-jobos-pick"));
     const vis = (e: Element) => { const r = (e as HTMLElement).getBoundingClientRect(); return r.width > 0 && r.height > 0 && getComputedStyle(e).visibility !== "hidden"; };
-    // compared width- and space-insensitively: a site writes 中国地质大学(武汉) where the profile has （武汉）
+    // compared width- and space-insensitively: a site writes 东海科技大学(南京) where the profile has （南京）
     const own = (e: Element) => ((e.querySelector("[class*='option-label']") ?? e).textContent ?? "").normalize("NFKC").replace(/\s+/g, "");
     // a greyed-out item (Moka's calendar shows the next decade's first year, faded, at the end of a page: clicking it does
     // not select it — 2026-10-14) is marked on its wrapper, not on the item itself
@@ -107,7 +107,7 @@ export async function choose(page: Page, el: Locator, value: string, opts: { mon
   return generic(page, el, value, !!opts.monthBox);
 }
 
-/** What to type into a place search: the whole "湖南省岳阳市", then 岳阳市 / 岳阳, then 湖南省 / 湖南 — sites index places differently. */
+/** What to type into a place search: the whole "浙江省嘉兴市", then 嘉兴市 / 嘉兴, then 浙江省 / 浙江 — sites index places differently. */
 export function searchTerms(value: string): string[] {
   const parts = value.split(/(?<=省|自治区|市|自治州|盟|区|县)|[\s/、,，-]+/).map((p) => p.trim()).filter(Boolean); // 杭州 / 广州 end in 州 but are one name
   const bare = (p: string) => p.replace(/(省|市|自治区|区|县)$/, "");
@@ -203,7 +203,7 @@ async function moka(page: Page, el: Locator, value: string, monthBox: boolean): 
   return done();
 }
 
-/** "湖南省岳阳市" → the levels a cascade shows: 湖南省 / 岳阳市. Compared without the 省 / 市 / 区 suffix: Moka shows 湖南, 岳阳市. */
+/** "浙江省嘉兴市" → the levels a cascade shows: 浙江省 / 嘉兴市. Compared without the 省 / 市 / 区 suffix: Moka shows 浙江, 嘉兴市. */
 export function areaLevels(value: string): string[] {
   return value.split(/(?<=省|自治区|特别行政区|市|自治州|盟|地区|区|县|旗)|[\s/、,，-]+/).map((p) => p.trim()).filter(Boolean);
 }
@@ -236,7 +236,7 @@ async function mokaArea(page: Page, el: Locator, value: string): Promise<string>
   // done if the box now shows the last level; if a further column opened (区县) the profile does not go that deep
   if (await waitFor(async () => bareArea(await shown()).includes(bareArea(levels[levels.length - 1])) || (await shown()).includes(levels[levels.length - 1]), 1500)) return "";
   await page.keyboard.press("Escape").catch(() => {});
-  return `这里要选到区/县，画像里只写到「${levels.join("")}」；把画像里这一项写到区县（如 湖南省岳阳市岳阳楼区）就能自动选`;
+  return `这里要选到区/县，画像里只写到「${levels.join("")}」；把画像里这一项写到区县（如 浙江省嘉兴市南湖区）就能自动选`;
 }
 
 /** 出生日期 (年龄) — a year/month calendar: open, switch to the decade view, page to the year, pick year, pick month. */

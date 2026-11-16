@@ -20,10 +20,10 @@ function setup(replies: Record<string, Reply>) {
     const text: string = ctx.messages[0].content[0].text;
     const key = Object.keys(replies).find((k) => text.includes(k));
     const r = key ? replies[key] : { category: "其他" };
-    return { content: [{ type: "text", text: JSON.stringify({ round: "", company: "华中数控", position: "", scheduledAt: null, link: "", summary: key ?? "", confidence: 0.9, ...r }) }] };
+    return { content: [{ type: "text", text: JSON.stringify({ round: "", company: "远帆数控", position: "", scheduledAt: null, link: "", summary: key ?? "", confidence: 0.9, ...r }) }] };
   } } };
   const d: InboxDeps = { domain, vault, llm, auto: false }; // the decision as a confirm card; filing on its own is tested apart
-  const L = (title: string, id: string) => ({ externalId: id, url: "https://e.com", title, company: "武汉华中数控股份有限公司", locations: ["武汉"], publisher: "华中数控", grade: "官方" as const, isOriginal: true, confidence: 1 });
+  const L = (title: string, id: string) => ({ externalId: id, url: "https://e.com", title, company: "上海远帆数控股份有限公司", locations: ["南京"], publisher: "远帆数控", grade: "官方" as const, isOriginal: true, confidence: 1 });
   ingest(domain, vault, "moka", "x", [L("运动控制算法工程师", "1"), L("嵌入式软件工程师", "2")]);
   const control = domain.createApplication(domain.listPositions({ query: "运动控制" }).items[0].id);
   domain.updateApplication({ id: control.id, state: "submitted" });
@@ -36,12 +36,12 @@ describe("inbox: nothing is silently lost", () => {
   it("the filter passes keywords, ATS senders and any company you applied to; what it skips is logged by subject and can be rescued", async () => {
     const { vault, domain, d } = setup({ 下周安排: { category: "面试", round: "二面", scheduledAt: "2026-09-28T10:00:00+08:00" }, 账单: { category: "其他" } });
     const applied = appliedCompanyKeys(domain.db);
-    expect(looksLikeRecruiting(mail("【华中数控】笔试邀请"))).toBe(true);
+    expect(looksLikeRecruiting(mail("【远帆数控】笔试邀请"))).toBe(true);
     expect(looksLikeRecruiting({ from: "no-reply@mail.mokahr.com", subject: "您有一条新消息", text: "点击查看" })).toBe(true);
-    expect(looksLikeRecruiting({ from: "王老师 <wang@hznc.example>", subject: "关于下周安排", text: "华中数控这边想和你约个时间" }, applied)).toBe(true);
+    expect(looksLikeRecruiting({ from: "王老师 <wang@hznc.example>", subject: "关于下周安排", text: "远帆数控这边想和你约个时间" }, applied)).toBe(true);
     expect(looksLikeRecruiting({ from: "bank@x.com", subject: "信用卡账单", text: "本期应还 100 元" }, applied)).toBe(false);
 
-    const box: RawMail[] = [mail("关于下周安排", "华中数控这边想和你约个时间"), { messageId: "<bill>", from: "bank@x.com", subject: "信用卡账单", date: "2026-09-19T01:00:00.000Z", text: "本期应还" }];
+    const box: RawMail[] = [mail("关于下周安排", "远帆数控这边想和你约个时间"), { messageId: "<bill>", from: "bank@x.com", subject: "信用卡账单", date: "2026-09-19T01:00:00.000Z", text: "本期应还" }];
     const fetcher: MailFetcher = async (_a, _s, opts) => (opts?.messageId ? box.filter((m) => m.messageId === opts.messageId) : box);
     await connectAccount(vault, { provider: "163", email: "me@163.com", authCode: "SECRET" }, fetcher);
     expect(await pullAll(d, fetcher)).toMatchObject({ fetched: 2, recruiting: 1, added: 1, skipped: 1, errors: [] });
@@ -150,7 +150,7 @@ describe("inbox: every kind of notice maps to the right change", () => {
   });
 
   it("a company written differently is found by a close name only when the job title agrees too (B4)", async () => {
-    const { domain, d, control } = setup({ 资格审查: { category: "通过", company: "中国武汉华中数控集团有限公司", position: "运动控制算法工程师" }, 无岗位: { category: "通过", company: "中国武汉华中数控集团有限公司", position: "" } });
+    const { domain, d, control } = setup({ 资格审查: { category: "通过", company: "中国上海远帆数控集团有限公司", position: "运动控制算法工程师" }, 无岗位: { category: "通过", company: "中国上海远帆数控集团有限公司", position: "" } });
     expect((await ingestMessage(d, "a", mail("资格审查通过"))).message.applicationId).toBe(control.id);
     expect((await ingestMessage(d, "a", mail("无岗位通知"))).message).toMatchObject({ applicationId: null, candidates: [control.id] });
     void domain;

@@ -223,7 +223,7 @@ export function listPool(db: Db, q: PoolQuery = {}) {
     && (!q.recommendedOnly || r.item.tags.length > 0) && (!q.tag || r.item.tags.some((t: any) => t.tag === q.tag)))
     .map((r) => ({ r, score: scoreOf(r) }));
   // post-level filters (ADR-034): a city, only posts the profile matched, a floor on the 适配度 tier — a company stays
-  // when one of its posts passes, and only those posts are returned (国能 has 2,500; the agent wants the 12 in 武汉)
+  // when one of its posts passes, and only those posts are returned (国能 has 2,500; the agent wants the 12 in 南京)
   const tagFor = q.tag ?? "画像匹配";
   const floor = q.minTier === "优先考虑" ? 200 : q.minTier === "可迁移" ? 100 : 0;
   const postFilter = q.city || q.matchedOnly || floor ? (r: Row, p: any) => {

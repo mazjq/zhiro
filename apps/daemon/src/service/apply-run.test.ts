@@ -44,7 +44,7 @@ describe.skipIf(!CHROME)("开始网申 (ADR-024)", () => {
     upsertFact(db, { kind: "education", data: { school: "示例大学", degree: "博士", major: "控制科学与工程" } }, "本人确认");
     const pdf = join(vault, "cv.pdf"); writeFileSync(pdf, "%PDF-1.4 test");
     db.prepare("insert into resume(id, name, file_name, file_path, is_default, created_at) values ('r1', '通用版', 'cv.pdf', ?, 1, '2026-01-01')").run(pdf);
-    ingest(domain, vault, "moka", "demo", [{ externalId: "1", url: "https://example.com/j", title: "控制算法工程师", company: "示例汽车", locations: ["武汉"], publisher: "示例汽车", grade: "官方", isOriginal: true, confidence: 1 } as any]);
+    ingest(domain, vault, "moka", "demo", [{ externalId: "1", url: "https://example.com/j", title: "控制算法工程师", company: "示例汽车", locations: ["南京"], publisher: "示例汽车", grade: "官方", isOriginal: true, confidence: 1 } as any]);
     const positionId = (db.prepare("select id from position").get() as any).id;
     const app = domain.createApplication(positionId);
     const html = join(vault, "form.html"); writeFileSync(html, FORM, "utf8");
@@ -106,7 +106,7 @@ describe.skipIf(!CHROME)("多段经历 (milestone c)", () => {
     upsertFact(db, { kind: "education", data: { school: "示例大学", degree: "博士", major: "控制科学与工程", period: "2021.09—2027.06" } }, "本人确认");
     upsertFact(db, { kind: "education", data: { school: "示例学院", degree: "本科", major: "自动化", period: "2017.09—2021.06" } }, "本人确认");
     upsertFact(db, { kind: "experience", data: { org: "示例科技", role: "算法实习生", period: "2024.07-2024.09", summary: "控制算法实习" } }, "本人确认");
-    upsertFact(db, { kind: "experience", data: { org: "工程研究中心", role: "助管", period: "2021.9-2023.6" } }, "本人确认"); // not an internship
+    upsertFact(db, { kind: "experience", data: { org: "校团委", role: "助管", period: "2020.9-2022.6" } }, "本人确认"); // not an internship
     ingest(domain, vault, "moka", "demo", [{ externalId: "1", url: "https://example.com/j", title: "控制算法工程师", company: "示例汽车", locations: [], publisher: "示例汽车", grade: "官方", isOriginal: true, confidence: 1 } as any]);
     const app = domain.createApplication((db.prepare("select id from position").get() as any).id);
     const html = join(vault, "form.html"); writeFileSync(html, BLOCKS, "utf8");

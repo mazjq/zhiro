@@ -76,7 +76,7 @@ try {
 
   step("zhiro data probe <local CSV>");
   const csv = join(tmp, "jobs.csv");
-  writeFileSync(csv, "公司,岗位,工作地点,截止时间,投递链接\n示例科技,算法工程师,武汉,2030-01-01,https://jobs.example.com/1\n", "utf8");
+  writeFileSync(csv, "公司,岗位,工作地点,截止时间,投递链接\n示例科技,算法工程师,南京,2030-01-01,https://jobs.example.com/1\n", "utf8");
   const probe = zhiro("data", "probe", csv, "--data", data);
   if (!/示例科技/.test(probe)) fail(`probe did not read the CSV:\n${probe}`);
 

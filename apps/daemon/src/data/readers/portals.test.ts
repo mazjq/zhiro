@@ -12,9 +12,9 @@ describe("智联校园 reader, offline parts", () => {
     expect(siteKeyOf("https://cssc.zhaopin.com/a")).toBe(siteKeyOf("https://cssc.zhaopin.com/b"));
   });
   it("a post keeps its hiring unit as the company and loses the HTML", () => {
-    const l = itemToListing({ company: { campusOrgName: "中国船舶集团有限公司第七一二研究所", campusDepartment: { name: "武汉氢能与燃料电池产业技术研究院有限公司" } },
-      job: { jobNumber: "CCL1J2", title: "氢能与燃料电池研发工程师", cityName: "武汉", minEducationName: "博士", needMajor: "控制科学与工程", detail: "岗位职责<br>1、研发&nbsp;<b>燃料电池</b>" } }, "105924", { id: "c", source: "zhilian", name: "中船集团" })!;
-    expect(l).toMatchObject({ company: "中国船舶集团有限公司第七一二研究所", orgUnit: "武汉氢能与燃料电池产业技术研究院有限公司", locations: ["武汉"], kind: "博士专项", publisher: "zhilian:105924", grade: "官方", description: "岗位职责\n1、研发 燃料电池" });
+    const l = itemToListing({ company: { campusOrgName: "中国船舶集团有限公司第七一二研究所", campusDepartment: { name: "南京氢能与燃料电池产业技术研究院有限公司" } },
+      job: { jobNumber: "CCL1J2", title: "氢能与燃料电池研发工程师", cityName: "南京", minEducationName: "博士", needMajor: "控制科学与工程", detail: "岗位职责<br>1、研发&nbsp;<b>燃料电池</b>" } }, "105924", { id: "c", source: "zhilian", name: "中船集团" })!;
+    expect(l).toMatchObject({ company: "中国船舶集团有限公司第七一二研究所", orgUnit: "南京氢能与燃料电池产业技术研究院有限公司", locations: ["南京"], kind: "博士专项", publisher: "zhilian:105924", grade: "官方", description: "岗位职责\n1、研发 燃料电池" });
   });
 });
 

@@ -103,7 +103,7 @@ const pause = () => 600 + Math.floor(Math.random() * 800);
 export const gaoxiaojob: Source = {
   id: "gaoxiaojob",
   name: "高校人才网",
-  input: "www.gaoxiaojob.com/column/<栏目编号>.html（如武汉 48、武汉科研院所 509、武汉企业 511）",
+  input: "www.gaoxiaojob.com/column/<栏目编号>.html（编号在栏目页的网址里，如 48、509、511）",
   mode: "pull",
   describe: "高校人才网的一个栏目（研究院、实验室、高校团队、事业单位、企业）：读手机版公开列表和每条公告的岗位清单，只收仍有效的；转载来源，记为聚合，零 token",
   detect: (url) => !!columnOf(url),

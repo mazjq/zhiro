@@ -28,7 +28,7 @@ function PresetEditor({ preset, onSaved, onRemoved, onClose }: { preset: any | n
     ["must", "必须含", "如 船舶 控制"],
     ["any", "任一", "如 运动控制 伺服 MPC"],
     ["exclude", "排除", "如 实习 销售"],
-    ["cities", "城市", "如 武汉 上海"],
+    ["cities", "城市", "如 南京 上海"],
   ];
   return (
     <Card className="p-4 mb-4">

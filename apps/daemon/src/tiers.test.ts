@@ -9,7 +9,7 @@ import { importCsv } from "./service/import-csv.js";
 import { callTool, callableBy, type Services } from "./registry.js";
 
 const CSV = `更新时间,公司,企业类型,行业类别,批次,招聘届次,工作地点,招聘岗位,学历要求,专业要求,开始时间,截止时间,简历投递链接,公告链接,是否笔试,公告来源,备注
-2026-09-01,示例汽车,民企,汽车,2027届博士专项,2027届,武汉,"底盘控制算法工程师,仿真建模工程师",博士,控制/车辆,2026-08-20,2030-10-15,https://app.mokahr.com/campus-recruitment/demo/1,https://example.com/n,否,校园招聘网,
+2026-09-01,示例汽车,民企,汽车,2027届博士专项,2027届,南京,"底盘控制算法工程师,仿真建模工程师",博士,控制/车辆,2026-08-20,2030-10-15,https://app.mokahr.com/campus-recruitment/demo/1,https://example.com/n,否,校园招聘网,
 `;
 
 const AGENT = { kind: "agent" as const, via: "career" as const };
@@ -79,13 +79,13 @@ describe("ADR-025 tiers: do / ask / never", () => {
     await expect(callTool("fact.remove", { ids: junk }, HUMAN, s)).rejects.toMatchObject({ code: "NOT_FOUND" });
     // near-duplicate awards: one card for several merges, each saying which goes into which
     const aw: string[] = [];
-    for (const title of ["电赛 · 一等奖", "电赛（本科组）· 一等奖", "数模 · 二等奖", "数模湖北赛区 · 二等奖"]) aw.push((await callTool("fact.upsert", { kind: "award", data: { title } }, HUMAN, s) as any).fact.id);
+    for (const title of ["电赛 · 一等奖", "电赛（本科组）· 一等奖", "数模 · 二等奖", "数模江苏赛区 · 二等奖"]) aw.push((await callTool("fact.upsert", { kind: "award", data: { title } }, HUMAN, s) as any).fact.id);
     const pairs = [{ fromId: aw[0], intoId: aw[1] }, { fromId: aw[2], intoId: aw[3] }];
     const m: any = await callTool("fact.merge", { pairs }, AGENT, s);
     const mc = ((await callTool("proposal.list", {}, HUMAN, s)) as any).items.find((p: any) => p.id === m.proposal.id);
-    expect(mc.context.merges).toEqual(["电赛 · 一等奖 → 并入 → 电赛（本科组）· 一等奖", "数模 · 二等奖 → 并入 → 数模湖北赛区 · 二等奖"]);
+    expect(mc.context.merges).toEqual(["电赛 · 一等奖 → 并入 → 电赛（本科组）· 一等奖", "数模 · 二等奖 → 并入 → 数模江苏赛区 · 二等奖"]);
     await callTool("fact.merge", { pairs }, HUMAN, s);
-    expect(((await callTool("fact.list", { kind: "award" }, HUMAN, s)) as any).items.map((f: any) => f.data.title).sort()).toEqual(["数模湖北赛区 · 二等奖", "电赛（本科组）· 一等奖"]);
+    expect(((await callTool("fact.list", { kind: "award" }, HUMAN, s)) as any).items.map((f: any) => f.data.title).sort()).toEqual(["数模江苏赛区 · 二等奖", "电赛（本科组）· 一等奖"]);
     const research: any = await callTool("research.company", { companyName: "示例汽车" }, AGENT, s);
     expect(research.proposal.kind).toBe("research.company");
     const over: any = await callTool("position.watch", { positionId: pos.id, priority: 2 }, { ...AGENT, overflow: true }, s);

@@ -2,7 +2,7 @@ import { describe, it, expect } from "vitest";
 import { guessColumns, tableToListings, csvToTable, BUILTIN_COLUMNS } from "./sheet.js";
 
 const OWN = `企业名称,岗位,ddl,网申地址,城市,学历,毕业年份
-示例重工,"控制算法工程师、仿真工程师",2099-10-31,https://apply.example.com/a,武汉 上海,硕士及以上,2027届
+示例重工,"控制算法工程师、仿真工程师",2099-10-31,https://apply.example.com/a,南京 上海,硕士及以上,2027届
 示例电子,电机控制工程师,招满为止,https://apply.example.com/b,深圳,本科及以上,2027届
 去年公司,工程师,2020-01-01,https://apply.example.com/c,北京,本科,2027届
 ,无主岗位,,,,,2027届
@@ -24,7 +24,7 @@ describe("a table's rows", () => {
     const table = csvToTable(OWN);
     const out = tableToListings(table, guessColumns(table.headers), { name: "我的表" }, "2026-10-12");
     expect(out.map((l) => `${l.company}|${l.title}`)).toEqual(["示例重工|控制算法工程师", "示例重工|仿真工程师", "示例电子|电机控制工程师"]);
-    expect(out[0]).toMatchObject({ url: "https://apply.example.com/a", locations: ["武汉", "上海"], degreeReq: "硕士及以上", deadlineText: "2099-10-31", cohort: "2027届", publisher: "我的表", grade: "聚合", isOriginal: false });
+    expect(out[0]).toMatchObject({ url: "https://apply.example.com/a", locations: ["南京", "上海"], degreeReq: "硕士及以上", deadlineText: "2099-10-31", cohort: "2027届", publisher: "我的表", grade: "聚合", isOriginal: false });
     // a table with no row ids: the same row is the same row tomorrow, wherever it stands in the file
     const moved = csvToTable(OWN.split("\n").filter((_, i) => i !== 2).join("\n"));
     expect(tableToListings(moved, guessColumns(moved.headers), { name: "我的表" }, "2026-10-12")[0].externalId).toBe(out[0].externalId);
@@ -33,10 +33,10 @@ describe("a table's rows", () => {
     const t = csvToTable(`Security,Role,HQ
 3M,Industrial Conglomerates,"Saint Paul, Minnesota"
 Acme,"Software Engineer; Data Analyst",Austin
-示例重工,控制算法工程师 仿真工程师,武汉 上海
+示例重工,控制算法工程师 仿真工程师,南京 上海
 `);
     const out = tableToListings(t, { company: "Security", positions: "Role", cities: "HQ" }, {}, "2026-10-12");
-    expect(out.map((l) => `${l.company}|${l.title}|${l.locations.join("/")}`)).toEqual(["3M|Industrial Conglomerates|Saint Paul/Minnesota", "Acme|Software Engineer|Austin", "Acme|Data Analyst|Austin", "示例重工|控制算法工程师|武汉/上海", "示例重工|仿真工程师|武汉/上海"]);
+    expect(out.map((l) => `${l.company}|${l.title}|${l.locations.join("/")}`)).toEqual(["3M|Industrial Conglomerates|Saint Paul/Minnesota", "Acme|Software Engineer|Austin", "Acme|Data Analyst|Austin", "示例重工|控制算法工程师|南京/上海", "示例重工|仿真工程师|南京/上海"]);
     const builtin = csvToTable(`公司,招聘岗位
 示例,AI Computing Software Development Intern
 示例二,算法工程师 测试工程师

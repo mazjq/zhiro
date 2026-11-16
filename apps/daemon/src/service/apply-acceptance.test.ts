@@ -84,7 +84,7 @@ describe("acceptance regressions: mapping", () => {
 });
 
 const PAGE = `<!doctype html><meta charset="utf-8">
-<header style="position:fixed;top:0;left:0"><a href="https://example.com/city/wuhan" id="nav">武汉</a></header>
+<header style="position:fixed;top:0;left:0"><a href="https://example.com/city/wuhan" id="nav">南京</a></header>
 <form id="f" style="margin-top:60px" onsubmit="event.preventDefault(); window.submitted = (window.submitted || 0) + 1">
   <div class="ant-form-item"><div class="ant-form-item-label"><label>入学时间</label></div><div class="ant-form-item-control"><span class="ant-picker"><input id="d" placeholder="请选择日期"></span></div></div>
   <div class="apply-field-a string_info"><div class="title-b">现居地</div><div class="sd-Dropdown-container-1"><label class="sd-Select-container-1"><span class="sd-Input-display-value-1"></span><input placeholder="请输入现居地"></label></div></div>
@@ -104,8 +104,8 @@ describe.skipIf(!CHROME)("acceptance regressions: never submit, never follow a p
     const at = (l: string) => page.locator(`[data-jobos-i="${form.fields.find((f) => f.label === l)!.local}"]`);
     expect(await choose(page, at("入学时间"), "2021.09")).toBe("");
     expect(await page.evaluate(() => (window as any).submitted ?? 0)).toBe(0);
-    expect(await choose(page, at("现居地"), "湖北省武汉市")).not.toBe(""); // no suggestions ever appear: it says so
-    expect(page.url()).toMatch(/p\.html$/); // the header's 「武汉」 link was not clicked
+    expect(await choose(page, at("现居地"), "江苏省南京市")).not.toBe(""); // no suggestions ever appear: it says so
+    expect(page.url()).toMatch(/p\.html$/); // the header's 「南京」 link was not clicked
   }, 90_000);
 });
 

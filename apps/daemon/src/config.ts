@@ -42,7 +42,7 @@ export interface JobosConfig {
   feeds?: Array<{ id: string; url: string; publicKey: string; enabled?: boolean }>;
   /** P4: when the daily brief is made (local time, "HH:MM"; default 08:00) */
   brief?: { at?: string };
-  /** 每周短名单: the person's cities in order of preference, a tier per list (["武汉"], ["深圳", "上海"], …); a post elsewhere is listed as skipped. Empty: no city rule. */
+  /** 每周短名单: the person's cities in order of preference, a tier per list (["南京"], ["深圳", "上海"], …); a post elsewhere is listed as skipped. Empty: no city rule. */
   shortlist?: { cities?: string[][] };
   /** P2b: recruiting mail is filed on its own (a stage added, an application moved) when it is clear; off = confirm cards as before */
   inbox?: { auto?: boolean };

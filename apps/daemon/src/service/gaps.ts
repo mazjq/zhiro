@@ -15,14 +15,14 @@ const COMMON: [Gap["kind"], string, string][] = [
   ["basic", "性别", "男 / 女"],
   ["basic", "出生年月", "如 2000.01"],
   ["basic", "民族", "如 汉族"],
-  ["basic", "籍贯", "写到区县，如 湖南省岳阳市岳阳楼区（有的表单要选到区县）"],
-  ["basic", "现居地", "写到区县，如 湖北省武汉市洪山区"],
+  ["basic", "籍贯", "写到区县，如 浙江省嘉兴市南湖区（有的表单要选到区县）"],
+  ["basic", "现居地", "写到区县，如 江苏省南京市鼓楼区"],
   ["basic", "政治面貌", "中共党员 / 共青团员 / 群众 …"],
   ["basic", "预计毕业时间", "如 2027.06"],
   ["basic", "工作经验", "应届生填「应届」（有的表单叫「无工作经验」，会按选项对上）"],
   ["basic", "英语水平", "如 CET-6 550"],
   ["basic", "自我描述", "2–3 句：研究方向、代表成果、想做什么。表单里的「自我描述 / 自我评价 / 个人简介」都用它"],
-  ["preference", "城市", "期望工作城市，如 武汉。可以加多张"],
+  ["preference", "城市", "期望工作城市，如 南京。可以加多张"],
   ["preference", "期望薪资", "如 面议，或 25k×15；几乎每个表单都问"],
   ["preference", "到岗时间", "如 2027年7月"],
 ];
@@ -62,7 +62,7 @@ export function profileGaps(db: Db, vault: string): { items: Gap[] } {
 
   // places some forms want down to the district (Moka's 籍贯 is a 省 → 市 → 区县 cascade)
   for (const f of facts.filter((x) => x.kind === "basic" && ["籍贯", "现居地"].includes(normLabel(x.data.field ?? "")))) {
-    if (!/(区|县|旗)$/.test((f.data.value ?? "").trim())) gaps.push({ kind: "basic", field: `${f.data.field}：写到区县`, hint: `现在是「${f.data.value}」，有的表单要选到区县，如 湖南省岳阳市岳阳楼区`, asked: 0, factId: f.id });
+    if (!/(区|县|旗)$/.test((f.data.value ?? "").trim())) gaps.push({ kind: "basic", field: `${f.data.field}：写到区县`, hint: `现在是「${f.data.value}」，有的表单要选到区县，如 浙江省嘉兴市南湖区`, asked: 0, factId: f.id });
   }
   // records that exist but lack what forms need
   for (const f of facts.filter((x) => ["education", "experience", "project"].includes(x.kind))) {

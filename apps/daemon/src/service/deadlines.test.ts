@@ -18,7 +18,7 @@ function setup() {
   const s: Services = createServices({ db: db, domain, config: testConfig(dir, { sources: [] }) });
   return { dir, domain, db, s };
 }
-const listing = (o: Partial<Listing>): Listing => ({ externalId: o.title ?? "x", url: "https://example.com/j", title: "控制算法工程师", company: "示例", locations: ["武汉"], publisher: "示例", grade: "官方", isOriginal: true, confidence: 1, cohort: "2027届", batch: "秋招", ...o });
+const listing = (o: Partial<Listing>): Listing => ({ externalId: o.title ?? "x", url: "https://example.com/j", title: "控制算法工程师", company: "示例", locations: ["南京"], publisher: "示例", grade: "官方", isOriginal: true, confidence: 1, cohort: "2027届", batch: "秋招", ...o });
 /** n days from today, local */
 const day = (n: number) => beijingDay(new Date(Date.now() + n * 86400000));
 const company = async (s: Services, name: string) => ((await callTool("pool.list", { query: name }, HUMAN, s)) as any).items[0];
@@ -119,14 +119,14 @@ describe("同一个岗位出现在两张表里，日期不同", () => {
     const { dir, domain, s } = setup();
     const row = (publisher: string, company: string, title: string, deadlineText: string, city: string) => listing({ company, title, externalId: `${publisher}|${company}|${title}`, publisher, grade: "聚合", validThrough: undefined, deadlineText, locations: [city] });
     // a sheet row is one company with its posts and one deadline; 表B lists one of 示例重工's two posts, twenty days earlier
-    ingest(domain, dir, "feishu-base", "sheet-a", [row("表A", "示例重工", "控制算法工程师", day(40), "武汉"), row("表A", "示例重工", "仿真工程师", day(40), "武汉"), row("表A", "示例电子", "电机控制工程师", day(30), "深圳")]);
+    ingest(domain, dir, "feishu-base", "sheet-a", [row("表A", "示例重工", "控制算法工程师", day(40), "南京"), row("表A", "示例重工", "仿真工程师", day(40), "南京"), row("表A", "示例电子", "电机控制工程师", day(30), "深圳")]);
     ingest(domain, dir, "feishu-base", "sheet-b", [row("表B", "示例重工", "控制算法工程师", day(20), "上海"), row("表B", "示例电子", "电机控制工程师", day(30), "深圳")]);
     const c = await company(s, "示例重工");
     const both = c.positions.find((p: any) => p.title === "控制算法工程师"), onlyA = c.positions.find((p: any) => p.title === "仿真工程师");
     expect(both.deadline).toMatchObject({ date: day(20), status: "unverified" });
     expect(both.deadline.say).toContain("来源有分歧");
     expect(both.deadline.conflicts.map((x: any) => x.date)).toEqual([day(40)]);
-    expect(both.cities.sort()).toEqual(["上海", "武汉"]);
+    expect(both.cities.sort()).toEqual(["上海", "南京"]);
     // a post only one of them lists goes by that one; the other sheet's day for its own posts is not about it
     expect(onlyA.deadline).toMatchObject({ date: day(40), conflicts: [] });
     // both sheets say the same day: nothing to disagree about
@@ -153,7 +153,7 @@ describe("岗位身份：来源编号优先于标题 (ADR-041)", () => {
     expect(rows.map((r) => r.k)).toEqual(["job-0", "job-1", "job-2"]);
     const c = await company(s, "大疆");
     const same = c.positions.filter((p: any) => p.title === "控制算法工程师");
-    expect(same.map((p: any) => p.cities.join()).sort()).toEqual(["上海", "北京", "深圳", "武汉"].sort());
+    expect(same.map((p: any) => p.cities.join()).sort()).toEqual(["上海", "北京", "深圳", "南京"].sort());
 
     // within one batch: a key-less row of the same title is adopted by the first id, not duplicated
     ingest(domain, dir, "beisen", "b1", [listing({ company: "丁", externalId: "丁-控制" , title: "丁-控制" })]);

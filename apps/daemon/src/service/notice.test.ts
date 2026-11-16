@@ -67,7 +67,7 @@ describe("公众号: an account WeChat verified as an organisation's, named for 
     expect(wx({ id: "Mz4", name: "示例招聘", verified: true }, co).result).toBe("pass");
   });
   it("a group's account is not its unit's", () => {
-    const unit: CompanyIdentity = { name: "示例电信湖北公司", aliases: [], sites: new Set(), accounts: new Set() };
+    const unit: CompanyIdentity = { name: "示例电信江苏公司", aliases: [], sites: new Set(), accounts: new Set() };
     expect(wx({ id: "Mz3", name: "示例电信校招速递", verified: true, signature: "示例电信官方校园招聘信息" }, unit).result).toBe("unknown");
   });
 });
@@ -184,7 +184,7 @@ describe("公告核实: only a deadline that passes all four checks becomes a fa
 });
 
 describe("filing a check", () => {
-  const listing = (o: Partial<Listing>): Listing => ({ externalId: "j1", url: "https://app.mokahr.com/campus-recruitment/acme/1#/job/j1", title: "控制算法工程师", company: "示例重工股份有限公司", locations: ["武汉"],
+  const listing = (o: Partial<Listing>): Listing => ({ externalId: "j1", url: "https://app.mokahr.com/campus-recruitment/acme/1#/job/j1", title: "控制算法工程师", company: "示例重工股份有限公司", locations: ["南京"],
     publisher: "moka:acme", grade: "官方", isOriginal: true, confidence: 1, cohort: "2027届", batch: "校招", ...o });
   function setup() {
     const dir = mkdtempSync(join(tmpdir(), "zhiro-notice-"));

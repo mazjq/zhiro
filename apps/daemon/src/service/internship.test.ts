@@ -7,7 +7,7 @@ import { Domain } from "./domain.js";
 import { ingest, type Listing } from "../data/index.js";
 
 const post = (title: string, extra: Partial<Listing> = {}): Listing => ({
-  externalId: title, url: `https://jobs.example.com/${encodeURIComponent(title)}`, title, company: "示例机器人", locations: ["武汉"],
+  externalId: title, url: `https://jobs.example.com/${encodeURIComponent(title)}`, title, company: "示例机器人", locations: ["南京"],
   validThrough: "2030-12-31", publisher: "example", grade: "官方", isOriginal: true, confidence: 0.9, ...extra,
 });
 

@@ -24,7 +24,7 @@ const CASES: Case[] = [
   { id: "cict-menu", goal: "中国信科：岗位页先列子公司，不能当成空页", input: { url: "https://campus.51job.com/cict2027/jobs.html", refresh: true }, expect: ["烽火通信", "中信科移动"], expectStatus: "ok" },
   { id: "cict-unit", goal: "中国信科：点一家子公司后看到它的岗位", input: { url: "https://campus.51job.com/cict2027/jobs.html", steps: [{ click: "查看详情", near: "中信科移动通信技术股份有限公司" }], refresh: true }, expect: ["2027校招-", "条/页"] },
   { id: "chnenergy-login-wall", goal: "国家能源集团：站点要登录才能看，必须如实报 needsLogin（Zhiro 有专用读取器走接口）", input: { url: "https://zhaopin.chnenergy.com.cn/", refresh: true }, expect: [], expectStatus: "needsLogin" },
-  { id: "zhilian-search", goal: "智联校园：搜索结果页要登录就如实报", input: { url: "https://xiaoyuan.zhaopin.com/search/jn=2&jl=武汉&kw=控制算法", wait: "idle", refresh: true }, expect: [], expectStatus: "needsLogin" },
+  { id: "zhilian-search", goal: "智联校园：搜索结果页要登录就如实报", input: { url: "https://xiaoyuan.zhaopin.com/search/jn=2&jl=南京&kw=控制算法", wait: "idle", refresh: true }, expect: [], expectStatus: "needsLogin" },
   { id: "pipechina-session", goal: "国家管网：开会话选单位，再在同一标签页里点岗位看详情，不重放", input: { url: "https://zhaopin.pipechina.com.cn/recruit#/portal_job_list?job_class=campus", mode: "open", steps: [{ click: "国家管网集团科学技术研究总院分公司" }, { scroll: 2 }], refresh: true }, expect: ["管网仿真优化技术研究岗"], then: { steps: [{ click: "管网仿真优化技术研究岗" }], expect: ["外语", "天津"] } },
   { id: "mp-article", goal: "公众号文章走 HTTP 不开浏览器（或如实报验证）", input: { url: "https://mp.weixin.qq.com/s/placeholder", refresh: true }, expect: [] },
 ];
