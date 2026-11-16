@@ -270,7 +270,7 @@ export function candidates(rows: Row[], me: Me, rules: Rules, applied: Map<strin
  * test-bench post above the design post beside it. Then by slot: 重点公司 has its own two cards whatever they lack; 新机会
  * takes what was read and found to fit (a week nobody read: what the rules do not call 低相关), two a company at most, and
  * always the best of the first city when it has one that fits — said plainly when it has none. The first city's posts
- * that have been open for longer have a row of their own (三张以内), read and fitting only.
+ * that have been open for longer have a row of their own (三张以内, 一家一张), read and fitting only.
  */
 export function pick(rows: Row[], me: Me, rules: Rules, applied: Map<string, string[]>, assessOf: (r: Row) => Assessment | null, today: string, skippedBefore: Set<string>, reads: Reads = {}): { cards: Card[]; skipped: Skipped[]; notes: string[] } {
   const { cands, skipped } = candidates(rows, me, rules, applied, assessOf, today, skippedBefore);
@@ -322,11 +322,10 @@ export function pick(rows: Row[], me: Me, rules: Rules, applied: Map<string, str
   for (const x of news) { const c = card(x, "new"); if (x === firstCity) c.notes.unshift(`${first}本周最对口的一个`); cards.push(c); }
   for (const x of over) rest.push({ x, why: "超出本周张数" });
   // the first city, open for longer: a row of their own, beside this week's — only what was read and fits (never on the
-  // rules alone), two a company at most. They take none of the 新机会.
-  const homes: Cand[] = [], perHome = new Map<string, number>();
+  // rules alone), one a company: three cards are too few for one company to hold two. They take none of the 新机会.
+  const homes: Cand[] = [], perHome = new Set<string>();
   for (const x of cands.filter((x) => x.r.older && x.rank === 0 && (fit(x)?.score ?? 0) >= READ_FLOOR).sort(byValue)) {
-    const n = perHome.get(x.r.company_id) ?? 0;
-    if (homes.length < MAX_HOME && n < PER_COMPANY) { homes.push(x); perHome.set(x.r.company_id, n + 1); }
+    if (homes.length < MAX_HOME && !perHome.has(x.r.company_id)) { homes.push(x); perHome.add(x.r.company_id); }
   }
   for (const x of homes) { const c = card(x, "home"); c.notes.unshift("不是本周新出的，一直在招"); cards.push(c); }
   if (first && cands.length && !homes.length && !news.some((x) => x.rank === 0)) notes.push(`本周${first}没有对口的新岗位`);
