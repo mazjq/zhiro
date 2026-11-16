@@ -1,7 +1,7 @@
 import { positionBrief, applicationBrief, poolCompanyBrief } from "./service/brief.js";
 import { tools, type ToolName, type ToolInput, type ToolOutput, type ToolContract } from "@zhiro/contracts";
 import { Value } from "@sinclair/typebox/value";
-import { DomainError, NotFound, genericCompany } from "./service/domain.js";
+import { APPLY_URL, DomainError, NotFound, genericCompany } from "./service/domain.js";
 import { importCsv } from "./service/import-csv.js";
 import { capture, providerOf } from "./service/capture.js";
 import { runBackup } from "./service/backup.js";
@@ -187,13 +187,13 @@ const handlers: { [N in ToolName]: Handler<N> } = {
     return i.detail === "brief" ? { detail: "brief", hasMore, items: items.map(positionBrief) } : { items, hasMore };
   },
   "position.get": (i, _a, s) => {
-    const r = s.domain.db.prepare(`select p.*, c.company_id, co.name company_name, c.closes_at c_closes, c.major_req c_major, c.apply_url, c.notice_url, c.source_kind, c.source_grade, a.json assessment
+    const r = s.domain.db.prepare(`select p.*, c.company_id, co.name company_name, c.closes_at c_closes, c.major_req c_major, c.apply_url batch_url, ${APPLY_URL} apply_url, c.notice_url, c.source_kind, c.source_grade, a.json assessment
       from position p join campaign c on c.id = p.campaign_id join company co on co.id = c.company_id left join position_assessment a on a.position_id = p.id where p.id = ?`).get(i.id) as any;
     if (!r) throw new ToolError("NOT_FOUND", "没有这个岗位");
     // the person's day for this batch, else the source's (meaning unchanged; read from deadline_override since 2026-10-14)
     const campaignClosesAt = campaignClosesAtOf(s.domain.db, r.campaign_id, r.c_closes ?? null);
     const deadline = resolveFor(s.domain.db, [r.id]).get(r.id);
-    const notice = noticeSummary(s.domain.db, r.campaign_id, r.apply_url);
+    const notice = noticeSummary(s.domain.db, r.campaign_id, r.batch_url); // the batch's announcement goes by the batch's link
     return { position: { id: r.id, campaignId: r.campaign_id, title: r.title, jdText: r.jd_text, cities: JSON.parse(r.cities || "[]"), degreeReq: r.degree_req, status: r.status, directionTags: JSON.parse(r.direction_tags || "[]"), lastSeenAt: r.last_seen_at, watchPriority: r.watch_priority },
       companyId: r.company_id, companyName: r.company_name, closesAt: deadline?.date ?? null, deadline, campaignClosesAt, majorReq: r.major_req || r.c_major || "", applyUrl: r.apply_url, noticeUrl: r.notice_url, sourceKind: r.source_kind, sourceGrade: r.source_grade, lastSeenAt: r.last_seen_at, assessment: r.assessment ? JSON.parse(r.assessment) : null, ...(notice ? { notice } : {}) };
   },
