@@ -119,7 +119,7 @@ export function publisherGate(doc: NoticeDoc, co: CompanyIdentity, ex?: Extract)
     if (a?.id && co.accounts.has(a.id)) return { ...pass(`公众号「${a.name}」已登记为这家公司的`), deps: [{ kind: "account", id: a.id }] };
     if (!a?.verified) return unknown(`公众号「${a?.name || "未知"}」没有机构认证（微信认证），看不出是谁的号`);
     // WeChat verified the account as an organisation's: its name, or its own description saying whose official account
-    // it is, must be this company's name or a full name on record — never a likeness (「中国电信校招速递」 is not 湖北公司)
+    // it is, must be this company's name or a full name on record — never a likeness (「中国电信校招速递」 is not 江苏公司)
     const core = accountCore(a.name), full = [...(co.names ?? [])];
     if (core && (core === plainKey(co.name) || plainKey(a.name) === plainKey(co.name))) return pass(`已微信认证的公众号「${a.name}」，号名就是「${co.name}」`);
     const byName = full.find(([n]) => plainKey(n) === core);

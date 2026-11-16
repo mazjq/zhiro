@@ -7,7 +7,7 @@ import { openDb } from "../db.js";
 import { ingest } from "./ingest.js";
 import type { Listing } from "./types.js";
 
-const post = (id: string): Listing => ({ externalId: id, url: `https://example.com/${id}`, title: `岗位${id}`, company: "示例公司", locations: ["武汉"], cohort: "2027", batch: "秋招", publisher: "iguopin", grade: "官方" as any, isOriginal: true, confidence: 1 } as Listing);
+const post = (id: string): Listing => ({ externalId: id, url: `https://example.com/${id}`, title: `岗位${id}`, company: "示例公司", locations: ["南京"], cohort: "2027", batch: "秋招", publisher: "iguopin", grade: "官方" as any, isOriginal: true, confidence: 1 } as Listing);
 
 describe("which subscriptions list a post", () => {
   it("one channel dropping a post does not close it while another still lists it", () => {

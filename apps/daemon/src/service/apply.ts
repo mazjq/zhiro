@@ -237,7 +237,7 @@ const ABROAD = /海外|境外|留学|国外/;
 /** Words of an option or a button, never a question: a field "labelled" so was read wrong (READ_FORM keeps its own copy). */
 export const OPTION_WORD = /^(无|否|是|有|没有|请选择|选择|男|女|确定|取消|添加|删除)$/;
 export const normLabel = (s: string) => s.replace(/[（(][^）)]*[）)]/g, "").replace(/[*＊:：\s]/g, "").replace(/^(您的|你的|请输入|请填写|请选择)/, "").trim();
-// 「是否接受意向城市调剂」 is a yes / no question, not the city (it got 「武汉」 on 大疆, 2026-10-14)
+// 「是否接受意向城市调剂」 is a yes / no question, not the city (it got 「南京」 on 大疆, 2026-10-14)
 export const canonOf = (label: string) => (/是否/.test(label) ? "" : CANON.find(([re]) => re.test(normLabel(label)))?.[1] ?? "");
 
 /** A question about the company or the post asked: its answer is for that company (「为什么选择我司」「对岗位的理解」). */

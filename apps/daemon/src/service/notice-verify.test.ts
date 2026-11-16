@@ -39,7 +39,7 @@ function setup() {
   const dir = mkdtempSync(join(tmpdir(), "zhiro-notice-run-"));
   const db = openDb(join(dir, "t.db"));
   const domain = new Domain(db);
-  const listing: Listing = { externalId: "j1", url: `${SITE}/jobs/j1`, title: "控制算法工程师", company: "示例重工股份有限公司", locations: ["武汉"], publisher: "site:example", grade: "官方",
+  const listing: Listing = { externalId: "j1", url: `${SITE}/jobs/j1`, title: "控制算法工程师", company: "示例重工股份有限公司", locations: ["南京"], publisher: "site:example", grade: "官方",
     isOriginal: true, confidence: 1, cohort: "2027届", batch: "校招", noticeUrl: `${SITE}/notice/1` } as Listing;
   ingest(domain, dir, "capture", "c1", [listing]);
   const campaignId = (db.prepare("select id from campaign").get() as any).id;
@@ -208,7 +208,7 @@ describe("a unit's announcement on its group's hiring platform (E2, E3)", () => 
     const db = openDb(join(dir, "t.db"));
     const domain = new Domain(db);
     const unit = "示例集团有限公司第一研究所";
-    ingest(domain, dir, "capture", "c1", [{ externalId: "u1", url: "https://mp.weixin.qq.com/s/x", title: "控制算法工程师", company: unit, locations: ["武汉"], publisher: "x", grade: "官方", isOriginal: true, confidence: 1, cohort: "2027届", batch: "秋招" } as Listing,
+    ingest(domain, dir, "capture", "c1", [{ externalId: "u1", url: "https://mp.weixin.qq.com/s/x", title: "控制算法工程师", company: unit, locations: ["南京"], publisher: "x", grade: "官方", isOriginal: true, confidence: 1, cohort: "2027届", batch: "秋招" } as Listing,
       { externalId: "g1", url: "https://example-group.cn/jobs/1", title: "工程师", company: "示例集团", locations: ["北京"], publisher: "x", grade: "官方", isOriginal: true, confidence: 1, cohort: "2027届", batch: "秋招" } as Listing]);
     const id = (n: string) => (db.prepare("select id from company where name = ?").get(n) as any).id as string;
     const root = addSite(db, { companyId: id("示例集团"), siteKey: "example-group.cn", rootKind: "gov", basisUrl: "http://www.sasac.gov.cn/x", basisQuote: "示例集团有限公司 → example-group.cn", fingerprint: "g" }) as { id: string };

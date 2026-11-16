@@ -12,7 +12,7 @@ import type { Listing } from "./types.js";
 const { publicKey, privateKey } = generateKeyPairSync("ed25519");
 const PUB = publicKey.export({ format: "der", type: "spki" }).toString("base64");
 const sha = (x: string | Buffer) => createHash("sha256").update(x).digest("hex");
-const post = (id: string, o: Partial<Listing> = {}): Listing => ({ externalId: id, url: `https://example.com/${id}`, title: `岗位${id}`, company: "示例公司", locations: ["武汉"], cohort: "2027届", batch: "秋招", publisher: "示例公司", grade: "官方", isOriginal: true, confidence: 1, description: `职责${id}`, ...o } as Listing);
+const post = (id: string, o: Partial<Listing> = {}): Listing => ({ externalId: id, url: `https://example.com/${id}`, title: `岗位${id}`, company: "示例公司", locations: ["南京"], cohort: "2027届", batch: "秋招", publisher: "示例公司", grade: "官方", isOriginal: true, confidence: 1, description: `职责${id}`, ...o } as Listing);
 
 /** What the collector writes: a bundle and a signed manifest in one folder. */
 function publish(dir: string, seq: number, subs: { id: string; source?: string; state?: "complete" | "stale"; at: string; rows: unknown[]; held?: string[] }[], o: { createdAt?: string; tamper?: boolean; feed?: string } = {}) {

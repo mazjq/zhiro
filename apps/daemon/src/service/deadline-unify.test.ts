@@ -28,7 +28,7 @@ function setup() {
   const s: Services = createServices({ db: db, domain, config: testConfig(dir, { sources: [] }) });
   return { dir, domain, db, s };
 }
-const listing = (o: Partial<Listing>): Listing => ({ externalId: o.title ?? "x", url: "https://example.com/j", title: "控制算法工程师", company: "示例", locations: ["武汉"], publisher: "示例", grade: "官方", isOriginal: true, confidence: 1, cohort: "2027届", batch: "秋招", ...o });
+const listing = (o: Partial<Listing>): Listing => ({ externalId: o.title ?? "x", url: "https://example.com/j", title: "控制算法工程师", company: "示例", locations: ["南京"], publisher: "示例", grade: "官方", isOriginal: true, confidence: 1, cohort: "2027届", batch: "秋招", ...o });
 const day = (n: number) => beijingDay(new Date(Date.now() + n * 86400000));
 const tick = () => new Promise((r) => setTimeout(r, 5));
 // an ingest is a background write: the pool answers from its old rows once and rebuilds behind; here, read it fresh
@@ -50,14 +50,14 @@ describe("「同一岗位」：岗位池的分组规则（现状，抽出后岗�
     const { dir, domain, db, s } = setup();
     const three = (keep: number[]) => [listing({ company: "大疆", externalId: "j0", locations: ["深圳"] }), listing({ company: "大疆", externalId: "j1", locations: ["上海"] }), listing({ company: "大疆", externalId: "j2", locations: ["北京"] }), listing({ company: "大疆", externalId: "sim", title: "仿真工程师" })].filter((_, i) => keep.includes(i) || i === 3);
     ingest(domain, dir, "moka", "m1", three([0, 1, 2]), { closeUnseen: true });
-    ingest(domain, dir, "feishu-base", "f1", [listing({ company: "大疆", externalId: "s1", title: "仿真工程师", grade: "聚合", locations: ["武汉"] })]);
+    ingest(domain, dir, "feishu-base", "f1", [listing({ company: "大疆", externalId: "s1", title: "仿真工程师", grade: "聚合", locations: ["南京"] })]);
     let c = await company(s, "大疆");
     const ctrl = () => c.positions.filter((p: any) => p.title === "控制算法工程师");
     expect(ctrl().map((p: any) => p.cities.join()).sort()).toEqual(["上海", "北京", "深圳"]);
     const sim = c.positions.filter((p: any) => p.title === "仿真工程师");
     expect(sim).toHaveLength(1);
     expect(sim[0].grades).toEqual(["官方", "聚合"]);
-    expect(sim[0].cities.sort()).toEqual(["武汉"].sort());
+    expect(sim[0].cities.sort()).toEqual(["南京"].sort());
 
     // 北京 watched, then the site drops it: it stays (held); 上海 dropped unwatched: gone
     await callTool("position.watch", { positionId: postId(db, "控制算法工程师", "北京"), priority: 2 }, HUMAN, s);

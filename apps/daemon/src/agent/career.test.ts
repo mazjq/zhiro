@@ -3,14 +3,14 @@ import { forModel, pruneContext } from "./career.js";
 
 describe("what the model sees of a tool result", () => {
   it("a listing becomes a table with every row and every non-empty value intact; only a long free text is abridged", () => {
-    const items = Array.from({ length: 40 }, (_, i) => ({ id: `p${i}`, title: `岗位${i}`, jdText: "很长的职位描述".repeat(200), cities: ["武汉", "上海"], applyUrl: "", closesAt: null, watchPriority: 1 }));
+    const items = Array.from({ length: 40 }, (_, i) => ({ id: `p${i}`, title: `岗位${i}`, jdText: "很长的职位描述".repeat(200), cities: ["南京", "上海"], applyUrl: "", closesAt: null, watchPriority: 1 }));
     const s = forModel({ items, total: 40 });
     const lines = s.split("\n");
     expect(lines[0]).toContain("40 条");
     expect(lines[1].split("\t")).toEqual(["id", "title", "jdText", "cities", "watchPriority"]); // empty columns dropped, keys sent once
     expect(lines).toHaveLength(2 + 40 + 1);
     expect(lines[41]).toContain("岗位39");
-    expect(lines[2]).toContain("武汉、上海");
+    expect(lines[2]).toContain("南京、上海");
     expect(lines[2]).toContain("（共 1400 字）");
     expect(s.endsWith('{"total":40}')).toBe(true);
     // the table is much shorter than the JSON it replaces
@@ -58,12 +58,12 @@ describe("transcript for the drawer", () => {
   it("keeps user and assistant text only, in order", async () => {
     const { transcriptOf } = await import("./career.js");
     const msgs = [
-      { role: "user", content: "关注武汉的岗位", timestamp: 0 },
+      { role: "user", content: "关注南京的岗位", timestamp: 0 },
       { role: "assistant", content: [{ type: "thinking", thinking: "…" }, { type: "toolCall", id: "c1", name: "pool_list", arguments: {} }] },
       { role: "toolResult", toolCallId: "c1", toolName: "pool_list", content: [{ type: "text", text: "items…" }] },
       { role: "assistant", content: [{ type: "text", text: "已关注 3 个。" }] },
     ];
-    expect(transcriptOf(msgs)).toEqual([{ role: "user", text: "关注武汉的岗位" }, { role: "agent", text: "已关注 3 个。" }]);
+    expect(transcriptOf(msgs)).toEqual([{ role: "user", text: "关注南京的岗位" }, { role: "agent", text: "已关注 3 个。" }]);
   });
 });
 

@@ -17,7 +17,7 @@ import { bus } from "./events.js";
  * nothing, and once for a burst.
  */
 const post = (company: string, title: string, over: Partial<Listing> = {}): Listing => ({
-  externalId: `${company}|${title}`, url: `https://example.com/${encodeURIComponent(title)}`, title, company, locations: ["武汉"], description: "jd",
+  externalId: `${company}|${title}`, url: `https://example.com/${encodeURIComponent(title)}`, title, company, locations: ["南京"], description: "jd",
   publisher: company, grade: "官方", isOriginal: true, confidence: 1, cohort: "2027届", batch: "校招", ...over,
 });
 const tick = (ms = 20) => new Promise((ok) => setTimeout(ok, ms));

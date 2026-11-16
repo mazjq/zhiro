@@ -142,7 +142,7 @@ codex mcp add zhiro --env ZHIRO_RESULT_MODE=text -- zhiro mcp
 [WorkBuddy](docs/harness/workbuddy.md) · [任何 MCP 客户端](docs/harness/others.md)
 </details>
 
-设置好后直接跟它说，比如：「这周有什么快截止的」「关注武汉的控制算法岗」「调研一下人形机器人行业」「帮我填第一个岗位的网申」。
+设置好后直接跟它说，比如：「这周有什么快截止的」「关注上海的控制算法岗」「调研一下人形机器人行业」「帮我填第一个岗位的网申」。
 
 ### 在职路里直接用 AI
 

@@ -55,7 +55,7 @@ describe("接一张在线表格（飞书多维表，自己的列名）", () => {
   it("preview shows what would come in; with the mapping confirmed it is subscribed, filed, and refreshed the next day", async () => {
     const { db, s } = setup();
     const rows = feishu(["单位名称", "招聘职位", "网申截止", "投递地址", "工作城市", "备注"], [
-      ["示例重工", "控制算法工程师、仿真工程师", "2099-10-31", "https://apply.example.com/a", "武汉", ""],
+      ["示例重工", "控制算法工程师、仿真工程师", "2099-10-31", "https://apply.example.com/a", "南京", ""],
       ["示例电子", "电机控制工程师", "招满为止", "https://apply.example.com/b", "深圳", ""],
     ]);
 

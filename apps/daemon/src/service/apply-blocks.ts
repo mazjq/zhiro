@@ -39,7 +39,7 @@ const nameOf = (kind: Kind, d: Record<string, string>) => (kind === "education" 
 export const sameName = (a: string, b: string) => same(a, b);
 const same = (a: string, b: string) => { const n = (s: string) => s.normalize("NFKC").replace(/\s+/g, "").toLowerCase(); return !!a && !!b && (n(a).includes(n(b)) || n(b).includes(n(a))); };
 /** One award spelled two ways on the profile (「…（本科组）· 全国二等奖」 / 「… · 全国二等奖」): compared without brackets, dots, the institution. */
-const core = (s: string) => s.normalize("NFKC").replace(/\([^)]*\)|（[^）]*）|[·\s“”"']/g, "").replace(/^东海科技大学/, "").replace(/赛区|省/g, "").toLowerCase();
+const core = (s: string) => s.normalize("NFKC").replace(/\([^)]*\)|（[^）]*）|[·\s“”"']/g, "").replace(/^[一-鿿]{2,12}?(?:大学(?!生)|学院)(?=.)/, "").replace(/赛区|省/g, "").toLowerCase();
 /** most recent first — what Moka's own parse does and what an HR reads first */
 const startOf = (d: Record<string, string>) => { const p = periodParts(d.period ?? d.year ?? ""); return p ? Number(p.start[0]) * 12 + Number(p.start[1] || 1) : 0; };
 

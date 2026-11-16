@@ -1,7 +1,7 @@
 import { describe, it, expect } from "vitest";
 import { pickCandidates } from "./explore.js";
 
-const post = (id: string, tier: string, o: any = {}) => ({ id, title: id, cities: ["武汉"], closesAt: null, watched: false, applicationState: null, match: { score: 120, reason: `${tier} · 证据 控制算法` }, expectation: { status: "pass", score: 1 }, ...o });
+const post = (id: string, tier: string, o: any = {}) => ({ id, title: id, cities: ["南京"], closesAt: null, watched: false, applicationState: null, match: { score: 120, reason: `${tier} · 证据 控制算法` }, expectation: { status: "pass", score: 1 }, ...o });
 const co = (companyId: string, positions: any[], o: any = {}) => ({ companyId, companyName: companyId, expired: false, tags: [], closesAt: null, positions, ...o });
 
 describe("探索候选 (ADR-036)", () => {

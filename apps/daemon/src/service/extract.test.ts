@@ -16,10 +16,10 @@ describe("extract", () => {
     expect(a.images).toEqual(["https://mmbiz.qpic.cn/mmbiz_png/abc/640?wx_fmt=png&from=appmsg"]);
   });
   it("maps an extraction to listings with grade by publisher type", () => {
-    const ex: NoticeExtraction = { isRecruitment: true, company: "示例研究院", publisherType: "高校就业网", cohort: "2027届", batch: "秋招", kind: "博士专项", deadlineText: "2026年10月20日", applyUrl: "https://hr.example.com/apply", cities: ["武汉"], degreeReq: "博士", majorReq: "控制", positions: [{ title: "控制算法", cities: [], degreeReq: "", majorReq: "", jd: "做控制" }, { title: "仿真", cities: ["上海"], degreeReq: "硕士", majorReq: "", jd: "" }], notes: "有笔试" };
+    const ex: NoticeExtraction = { isRecruitment: true, company: "示例研究院", publisherType: "高校就业网", cohort: "2027届", batch: "秋招", kind: "博士专项", deadlineText: "2026年10月20日", applyUrl: "https://hr.example.com/apply", cities: ["南京"], degreeReq: "博士", majorReq: "控制", positions: [{ title: "控制算法", cities: [], degreeReq: "", majorReq: "", jd: "做控制" }, { title: "仿真", cities: ["上海"], degreeReq: "硕士", majorReq: "", jd: "" }], notes: "有笔试" };
     const ls = noticeToListings(ex, "https://job.example.edu.cn/n/1", "capture");
     expect(ls).toHaveLength(2);
-    expect(ls[0]).toMatchObject({ company: "示例研究院", grade: "校方转载", isOriginal: false, url: "https://hr.example.com/apply", locations: ["武汉"], degreeReq: "博士", cohort: "2027届", batch: "秋招", kind: "博士专项", deadlineText: "2026年10月20日", publisher: "capture:job.example.edu.cn" });
+    expect(ls[0]).toMatchObject({ company: "示例研究院", grade: "校方转载", isOriginal: false, url: "https://hr.example.com/apply", locations: ["南京"], degreeReq: "博士", cohort: "2027届", batch: "秋招", kind: "博士专项", deadlineText: "2026年10月20日", publisher: "capture:job.example.edu.cn" });
     expect(ls[1]).toMatchObject({ title: "仿真", locations: ["上海"], degreeReq: "硕士" });
     const officialOnly = noticeToListings({ ...ex, publisherType: "企业官方", positions: [] }, "https://x.com/n", "capture");
     expect(officialOnly).toHaveLength(1);

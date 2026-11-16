@@ -34,7 +34,7 @@ describe("待展开 and the start-up tidying of subscriptions agree", () => {
     ];
     const s: Services = createServices({ db: db, config: testConfig(dir, { sources }) });
     // the sheet knows the group by one row of categories, linking its career site; the site files its posts under the units
-    const row = (o: Partial<Listing>): Listing => ({ externalId: "r1", url: site, title: "技术类", company: "示例重工集团", companyType: "央国企", industry: "装备制造", locations: ["武汉"], publisher: "汇总表", grade: "聚合", isOriginal: false, confidence: 1, cohort: "2027届", batch: "秋招", ...o });
+    const row = (o: Partial<Listing>): Listing => ({ externalId: "r1", url: site, title: "技术类", company: "示例重工集团", companyType: "央国企", industry: "装备制造", locations: ["南京"], publisher: "汇总表", grade: "聚合", isOriginal: false, confidence: 1, cohort: "2027届", batch: "秋招", ...o });
     ingest(s.domain, dir, "feishu-base", "feishu-base-sheet", [row({})]);
     ingest(s.domain, dir, "moka", "moka-示例重工集团", [row({ company: "示例重工集团第一研究所", title: "控制算法工程师", externalId: "u1", grade: "官方", isOriginal: true, publisher: "示例重工" })]);
     // a second group, whose site files its posts under the group's own name

@@ -23,7 +23,7 @@ export function docxParagraphs(buf: Buffer): string[] {
     .replace(/&lt;/g, "<").replace(/&gt;/g, ">").replace(/&quot;/g, "\"").replace(/&apos;/g, "'").replace(/&amp;/g, "&").trim());
 }
 
-/** 「2026年 湖北省…一等奖（省级，团队项目《…》）」 → title, year, level, note. Two awards in one line (「物理竞赛三等奖、数学竞赛三等奖」) are two. */
+/** 「2026年 江苏省…一等奖（省级，团队项目《…》）」 → title, year, level, note. Two awards in one line (「物理竞赛三等奖、数学竞赛三等奖」) are two. */
 export function parseAward(line: string): ReferenceRecord[] {
   const m = line.match(/^\s*\d+[.、．]\s*(\d{4})\s*年\s*(.+)$/);
   if (!m) return [];
@@ -37,7 +37,7 @@ export function parseAward(line: string): ReferenceRecord[] {
   }
   const pieces = rest.split("、").map((p) => p.trim()).filter(Boolean);
   const titles = pieces.length > 1 && pieces.every((p) => /奖|员|生|题/.test(p)) ? pieces : [rest];
-  // 「东海科技大学（武汉）物理竞赛三等奖、数学竞赛三等奖」: the second one keeps the first one's institution
+  // 「东海科技大学（南京）物理竞赛三等奖、数学竞赛三等奖」: the second one keeps the first one's institution
   const org = titles.length > 1 ? (titles[0].match(/^(.*?(大学|学院)(（[^）]*）)?)/)?.[1] ?? "") : "";
   return titles.map((t, i) => ({ title: i > 0 && org && !t.startsWith(org) ? org + t : t, year: m[1], ...(level ? { level } : {}), ...(note ? { note } : {}) }));
 }

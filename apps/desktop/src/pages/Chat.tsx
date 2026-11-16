@@ -101,7 +101,7 @@ export default function Chat({ onClose }: { onClose: () => void }) {
     <div className="h-full flex flex-col p-4">
       <div className="flex items-center mb-3 gap-2"><span className="font-bold">助手</span>{backend && <span className="text-xs text-ink-3" title="在 配置 → 助手 里换">· {WHO[backend] ?? backend}</span>}{log.length > 0 && <button className="ml-auto text-xs text-ink-3 hover:text-accent" onClick={fresh} title="忘掉这段对话，重新开始">新对话</button>}<button className={`${log.length ? "" : "ml-auto"} text-ink-3 px-1`} onClick={onClose}>×</button></div>
       <div className="flex-1 space-y-3 overflow-auto">
-        {log.length === 0 && <div className="text-ink-3 text-sm">试试：「今天有什么截止的」「帮我关注武汉的控制算法岗」</div>}
+        {log.length === 0 && <div className="text-ink-3 text-sm">试试：「今天有什么截止的」「帮我关注上海的控制算法岗」</div>}
         {log.map((m, i) => (
           <div key={i} className={`max-w-[85%] ${m.role === "user" ? "ml-auto" : ""}`}>
             {m.role === "agent" && <Steps steps={m.steps ?? []} live={false} />}

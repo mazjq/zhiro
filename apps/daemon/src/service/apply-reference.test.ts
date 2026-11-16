@@ -14,13 +14,13 @@ const DOC = [
   "主要专业成果", "一、第一作者论文", "1. A. Author, … Journal of Examples, 2023.（第一作者，SCI，JCR Q1）",
   "奖惩信息", "一、奖励（按时间倒序）",
   "1. 2026年 江苏省第九届“挑战杯”大学生创业计划竞赛一等奖（省级，团队项目《海上灯塔》）",
-  "2. 2018年 东海科技大学（武汉）物理竞赛三等奖、数学竞赛三等奖（校级）",
-  "3. 2021年 东海科技大学（武汉）校级优秀本科毕业论文（前5%）",
+  "2. 2018年 东海科技大学（南京）物理竞赛三等奖、数学竞赛三等奖（校级）",
+  "3. 2021年 东海科技大学（南京）校级优秀本科毕业论文（前5%）",
   "二、惩处", "无",
   "*爱好", "网球、滑雪。", "68/2000",
   "*特长", "1. 控制算法设计与仿真", "2. 实时控制与工程部署",
   "自我评价", "控制科学与工程直博。", "另外的版本：", "不该读到的另一版。",
-  "网申常见栏目", "说明：下面是 Zhiro 读的", "身高/cm：178", "体重/kg：待填", "高考分数：待填（只写数字）", "参加高考地：湖南省", "MBTI：INTJ",
+  "网申常见栏目", "说明：下面是 Zhiro 读的", "身高/cm：178", "体重/kg：待填", "高考分数：待填（只写数字）", "参加高考地：浙江省", "MBTI：INTJ",
   "项目经历", "项目名称：仓储机器人调度系统开发项目", "项目描述：校企合作横向项目。", "担任角色：技术负责人", "项目职责：组织完成上位机系统。",
 ];
 
@@ -28,7 +28,7 @@ function db() {
   const d = openDb(join(mkdtempSync(join(tmpdir(), "jobos-ref-")), "t.db"));
   upsertFact(d, { kind: "basic", data: { field: "英语水平", value: "CET-6" } }, "本人确认");
   upsertFact(d, { kind: "preference", data: { field: "期望薪资", value: "面议" } }, "本人确认");
-  upsertFact(d, { kind: "education", data: { school: "东海科技大学（武汉）", degree: "博士", major: "控制科学与工程", period: "2021.09—2027.06" } }, "本人确认");
+  upsertFact(d, { kind: "education", data: { school: "东海科技大学（南京）", degree: "博士", major: "控制科学与工程", period: "2021.09—2027.06" } }, "本人确认");
   upsertFact(d, { kind: "basic", data: { field: "发送动态码", value: "x7k2" } }, "本人确认"); // learned once from a form: never offered again
   upsertFact(d, { kind: "award", data: { title: "全国大学生数学建模竞赛 · 全国二等奖", year: "2019" } }, "材料自述");
   upsertFact(d, { kind: "award", data: { title: "全国大学生数学建模竞赛（本科组）· 全国二等奖", year: "2019" } }, "材料自述");
@@ -40,7 +40,7 @@ const field = (label: string, type = "text", extra: Partial<FormField> = {}): Fo
 describe("the 系统填写 document", () => {
   it("reads awards (two in one line become two), 爱好, 特长, the first 自我评价, 「栏目：值」 lines and projects; 待填 is no value", () => {
     const r = parseReference(DOC);
-    expect(r.awards.map((a) => a.title)).toEqual(["江苏省第九届“挑战杯”大学生创业计划竞赛一等奖", "东海科技大学（武汉）物理竞赛三等奖", "东海科技大学（武汉）数学竞赛三等奖", "东海科技大学（武汉）校级优秀本科毕业论文（前5%）"]);
+    expect(r.awards.map((a) => a.title)).toEqual(["江苏省第九届“挑战杯”大学生创业计划竞赛一等奖", "东海科技大学（南京）物理竞赛三等奖", "东海科技大学（南京）数学竞赛三等奖", "东海科技大学（南京）校级优秀本科毕业论文（前5%）"]);
     expect(r.awards[0]).toMatchObject({ year: "2026", level: "省级", note: "团队项目《海上灯塔》" });
     expect(r.fields.get("爱好")).toBe("网球、滑雪。");
     expect(r.fields.get("个人特长")).toBe("1. 控制算法设计与仿真\n2. 实时控制与工程部署");
