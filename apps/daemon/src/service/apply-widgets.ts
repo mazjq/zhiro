@@ -76,7 +76,7 @@ async function pick(page: Page, scope: Locator, sel: string, want: string[], fuz
  */
 async function press(loc: Locator): Promise<void> {
   try { await loc.click({ timeout: 2000 }); }
-  catch { for (const type of ["mousedown", "mouseup", "click"]) await loc.dispatchEvent(type, { bubbles: true }); }
+  catch { for (const type of ["mousedown", "mouseup", "click"]) await loc.dispatchEvent(type, { bubbles: true }, { timeout: 1500 }); }
 }
 
 const waitFor = async (fn: () => Promise<boolean>, ms = 5000) => { const t = Date.now(); while (Date.now() - t < ms) { if (await fn().catch(() => false)) return true; await new Promise((r) => setTimeout(r, 120)); } return false; };
@@ -97,6 +97,14 @@ export async function familyOf(el: Locator): Promise<"moka" | "moka-date" | "mok
 
 /** Set a dropdown / date / area control to `value`. `monthBox` = this is the 月 box of a 年/月 pair. */
 export async function choose(page: Page, el: Locator, value: string, opts: { monthBox?: boolean } = {}): Promise<string> {
+  try { return await chooseIn(page, el, value, opts); }
+  catch (e: any) {
+    // a pop-up left open took the click meant for the next field (2026-11-16: 籍贯 threw, then 第一学历 「没有弹出来」)
+    await page.keyboard.press("Escape").catch(() => {});
+    return `这个控件没操作成功（${String(e?.message ?? e).split("\n")[0].slice(0, 80)}），请在页面上选`;
+  }
+}
+async function chooseIn(page: Page, el: Locator, value: string, opts: { monthBox?: boolean }): Promise<string> {
   const family = await familyOf(el);
   if (family === "moka") return moka(page, el, value, !!opts.monthBox);
   if (family === "moka-date") return mokaDate(page, el, value);
@@ -196,7 +204,12 @@ async function moka(page: Page, el: Locator, value: string, monthBox: boolean): 
     await close();
     return "网站的候选里没有这一项";
   }
-  if (!(await waitFor(opened, 2500))) { await close(); return "选项没有弹出来"; }
+  if (!(await waitFor(opened, 2500))) {
+    // something else may have had the first click (another control's pop-up closing): close, and open once more
+    await close(); await page.waitForTimeout(200);
+    await press((await container.count()) ? container : el);
+    if (!(await waitFor(opened, 2500))) { await close(); return "选项没有弹出来"; }
+  }
   // long lists (years: 201 of them) may be virtualised: typing narrows them when the box accepts input
   let { root, sel } = await where();
   let r = await pick(page, root, sel, want, !monthBox && !/^\d{4}$/.test(value));
@@ -243,7 +256,12 @@ async function mokaArea(page: Page, el: Locator, value: string): Promise<string>
       const hit = els.filter((e) => !e.children.length && (e as HTMLElement).getBoundingClientRect().height > 0 && (e.textContent ?? "").normalize("NFKC").replace(/\s+/g, "").replace(/(省|市|自治区|壮族自治区|回族自治区|维吾尔自治区|特别行政区|地区|区|县|旗|自治州|盟)$/, "") === w);
       hit[hit.length - 1]?.setAttribute("data-jobos-pick", "1"); // the newest column is the last one
     }, want);
-    await press(page.locator("[data-jobos-pick]").first());
+    // the list may be drawn again between the mark and the click (the mark is then gone): click what is found there now
+    await press(page.locator("[data-jobos-pick]").first()).catch(() => box.locator("li, div, span").evaluateAll((els, w) => {
+      const hit = els.filter((e) => !e.children.length && (e as HTMLElement).getBoundingClientRect().height > 0 && (e.textContent ?? "").normalize("NFKC").replace(/\s+/g, "").replace(/(省|市|自治区|壮族自治区|回族自治区|维吾尔自治区|特别行政区|地区|区|县|旗|自治州|盟)$/, "") === w);
+      const e = hit[hit.length - 1] as HTMLElement | undefined;
+      for (const type of ["mousedown", "mouseup", "click"]) e?.dispatchEvent(new MouseEvent(type, { bubbles: true }));
+    }, want));
     await page.waitForTimeout(400);
   }
   // done if the box now shows the last level; if a further column opened (区县) the profile does not go that deep
