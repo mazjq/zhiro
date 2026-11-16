@@ -128,6 +128,20 @@ describe("the daily brief", () => {
     expect(line?.text).toBe("3 个订阅一周多没读成（官网读到了，但一个岗位都没有 2；官网改版，读取方式要更新 1）：这些公司的岗位可能不全，在「配置 → 订阅」里看");
   });
 
+  it("a model that answers nothing for two days is the first thing to do; one answer and the line is gone", async () => {
+    const db = (await world()).s.domain.db;
+    const now = Date.now();
+    const use = db.prepare("insert into llm_usage(id, at, purpose, ref, provider, model, input, output, cache_read, total, cost) values (?,?,?,'','p','m',0,0,0,?,0)");
+    use.run(ulid(), new Date(now - 20 * DAY).toISOString(), "inbox.poll", 900); // the last time it answered
+    for (let i = 0; i < 4; i++) use.run(ulid(), new Date(now - H * (i + 1)).toISOString(), "inbox.poll", 0);
+    const line = () => makeBrief(db, now).must.find((x) => x.key === "must:model");
+    expect(line()).toBeUndefined(); // four empty calls are not yet a pattern
+    use.run(ulid(), new Date(now - 5 * H).toISOString(), "lead.resolve", 0);
+    expect(line()?.text).toMatch(/^后台用的模型从 \d+ 月 \d+ 日 起没有回答（这两天 5 次都落空）：招聘邮件没在识别，岗位也没在细读。到「配置 → 模型」重新登录$/);
+    use.run(ulid(), new Date(now - 60_000).toISOString(), "inbox.poll", 1200);
+    expect(line()).toBeUndefined();
+  });
+
   it("takes only a real hour and minute", () => {
     expect(normalizeAt("8:05")).toBe("08:05");
     expect(normalizeAt("23:59")).toBe("23:59");

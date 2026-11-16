@@ -630,7 +630,9 @@ const handlers: { [N in ToolName]: Handler<N> } = {
     try {
       if (!s.llm) throw new Error("模型未初始化");
       const msg = await s.llm.models.completeSimple(s.llm.model(), { systemPrompt: "只回复两个字：正常", messages: [{ role: "user", content: [{ type: "text", text: "测试" }], timestamp: Date.now() }] }, { reasoning: "low" });
-      return { ok: true, ...base, latencyMs: Date.now() - t0, reply: contentText(msg.content).trim().slice(0, 40), error: "" };
+      const reply = contentText(msg.content).trim().slice(0, 40);
+      // an answer with nothing in it is not 可用
+      return { ok: !!reply, ...base, latencyMs: Date.now() - t0, reply, error: reply ? "" : "模型没有回答任何内容" };
     } catch (e: any) { return { ok: false, ...base, latencyMs: Date.now() - t0, reply: "", error: String(e?.message ?? e).slice(0, 400) }; }
   },
 };
