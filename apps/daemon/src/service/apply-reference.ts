@@ -51,7 +51,7 @@ const PROJECT_KEYS: [RegExp, keyof ReferenceRecord][] = [[/项目名称|^名称$
 
 export function parseReference(paragraphs: string[], path = ""): Reference {
   const fields = new Map<string, string>(), awards: ReferenceRecord[] = [], projects: ReferenceRecord[] = [];
-  let section = "", project: ReferenceRecord | null = null;
+  let section = "", project: ReferenceRecord | null = null, more: "summary" | "description" | null = null;
   const lines = paragraphs.filter((p) => p && !/^\d+\/\d+$/.test(p)); // 「68/2000」: a character counter copied from a form
   for (let i = 0; i < lines.length; i++) {
     const l = lines[i], bare = l.replace(/^[*＊\s]+/, "");
@@ -76,12 +76,19 @@ export function parseReference(paragraphs: string[], path = ""): Reference {
     if (section === "awards") { awards.push(...parseAward(l)); continue; }
     if (section === "fields") { const m = l.match(KEY); if (m && !BLANK.test(m[2].trim()) && !/^(说明|备注|注)$/.test(m[1].trim())) fields.set(m[1].trim(), m[2].trim()); continue; }
     if (section === "projects") {
-      const m = l.match(KEY);
-      if (!m) continue;
-      const key = PROJECT_KEYS.find(([re]) => re.test(m[1].trim()))?.[1];
-      if (!key) continue;
-      if (key === "title") { project = { title: m[2].trim() }; projects.push(project); continue; }
+      // 「项目职责：本人主要负责以下内容：」 and then a line a point (「· 研究攻关：…」): the points belong to the key above
+      // them, each on its own line, until the next key. A point is never a key itself, whatever words it holds.
+      const point = /^\s*[·•●▪◦\-–—]\s*\S/.test(l);
+      const m = point ? null : l.match(KEY);
+      const key = m ? PROJECT_KEYS.find(([re]) => re.test(m[1].trim()))?.[1] : undefined;
+      if (!m || !key) {
+        // a sentence that goes on (not a short heading) is more of the same too
+        if (project && more && (point || (l.length >= 12 && /[，。；,;]/.test(l)))) (project as any)[more] = [(project as any)[more], l.trim()].filter(Boolean).join("\n");
+        continue;
+      }
+      if (key === "title") { project = { title: m[2].trim() }; projects.push(project); more = null; continue; }
       if (project && !BLANK.test(m[2].trim())) (project as any)[key] = m[2].trim();
+      more = project && (key === "summary" || key === "description") ? key : null;
     }
   }
   return { path, fields, awards, projects };
