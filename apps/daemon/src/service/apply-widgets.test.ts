@@ -51,20 +51,20 @@ const [yb, mb] = document.querySelectorAll(".ym");
 const years = []; for (let y = 2126; y >= 1926; y--) years.push(String(y));
 yb.querySelector("label").onclick = () => menu(yb, years, (t) => { show(yb, t); if (mb.textContent.trim() === "月") show(mb, "1"); }); // Moka's quirk
 mb.querySelector("label").onclick = () => menu(mb, Array.from({ length: 12 }, (_, i) => String(i + 1)), (t) => show(mb, t));
-const schools = ["东海科技大学(武汉)", "东海科技大学(北京)", "武汉大学"]; // the real list writes half-width parentheses
+const schools = ["东海科技大学(南京)", "东海科技大学(北京)", "南京大学"]; // the real list writes half-width parentheses
 $("#school input").oninput = (e) => setTimeout(() => menu($("#school"), schools.filter((s) => s.normalize("NFKC").includes(e.target.value.normalize("NFKC"))).concat(["没有找到学校？添加学校全称"]), (t) => { show($("#school"), t); e.target.value = ""; }), 300);
 // suggestions in a portal at the end of <body>, not inside the control
 $("#major input").oninput = (e) => setTimeout(() => { document.querySelector(".portal")?.remove(); const p = document.createElement("div"); p.className = "portal sd-Select-menu-9";
   for (const t of ["控制科学与工程", "控制工程"].filter((s) => s.startsWith(e.target.value))) { const it = document.createElement("div"); it.className = "sd-list-item-1"; it.innerHTML = '<div class="sd-Menu-common-item-1">' + t + "</div>"; it.onclick = () => { show($("#major"), t); p.remove(); }; p.appendChild(it); }
   document.body.appendChild(p); }, 200);
 // the site indexes places by city name only
-const cities = { 嘉兴: "湖南-嘉兴", 长沙: "湖南-长沙" };
+const cities = { 嘉兴: "浙江-嘉兴", 杭州: "浙江-杭州" };
 $("#home input").oninput = (e) => setTimeout(() => menu($("#home"), cities[e.target.value] ? [cities[e.target.value]] : [], (t) => show($("#home"), t)), 150);
 // a pop-up with class names no selector knows, positioned absolutely at the end of <body>; indexed by city only
-$("#live input").oninput = (e) => setTimeout(() => { document.querySelector(".location-pop")?.remove(); if (e.target.value !== "武汉") return;
+$("#live input").oninput = (e) => setTimeout(() => { document.querySelector(".location-pop")?.remove(); if (e.target.value !== "南京") return;
   const p = document.createElement("div"); p.className = "location-pop"; p.style.cssText = "position:absolute;top:10px;left:10px;background:#fff";
-  p.innerHTML = "<ul><li>湖北省 / 武汉市</li></ul>"; p.querySelector("li").onclick = () => { show($("#live"), "湖北省 / 武汉市"); p.remove(); }; document.body.appendChild(p); }, 150);
-const tree = { 湖南: { 嘉兴市: ["南湖区", "秀洲区"], 长沙市: ["岳麓区"] }, 湖北: { 武汉市: ["鼓楼区"] } };
+  p.innerHTML = "<ul><li>江苏省 / 南京市</li></ul>"; p.querySelector("li").onclick = () => { show($("#live"), "江苏省 / 南京市"); p.remove(); }; document.body.appendChild(p); }, 150);
+const tree = { 浙江: { 嘉兴市: ["南湖区", "秀洲区"], 杭州市: ["西湖区"] }, 江苏: { 南京市: ["鼓楼区"] } };
 $("#hukou input").onclick = () => { const host = $("#hukou > span"); host.innerHTML = ""; const path = [];
   const col = (items, next) => { const c = document.createElement("ul"); c.className = "col"; for (const t of items) { const li = document.createElement("li"); li.textContent = t; li.onclick = () => next(t); c.appendChild(li); } host.appendChild(c); };
   col(Object.keys(tree), (p) => { path.push(p); col(Object.keys(tree[p]), (c) => { path.push(c); col(tree[p][c], (d) => { path.push(d); $("#hukou input").value = path.join(" "); host.innerHTML = ""; }); }); }); };
@@ -113,13 +113,13 @@ describe.skipIf(!CHROME)("widget drivers (Moka sd-*, 北森 phoenix-*)", () => {
     // year first; Moka then sets the empty month to 1, which the month driver overwrites
     expect(await choose(page, await box("就读时间", 0), "2021")).toBe("");
     expect(await choose(page, await box("就读时间", 1), "09", { monthBox: true })).toBe("");
-    expect(await choose(page, await box("学校名称"), "东海科技大学（武汉）")).toBe("");
+    expect(await choose(page, await box("学校名称"), "东海科技大学（南京）")).toBe("");
     expect(await choose(page, await box("专业名称"), "控制科学与工程")).toBe(""); // suggestions outside the control
-    expect(await choose(page, await box("籍贯"), "湖南省嘉兴市")).toBe(""); // found as 嘉兴 after the full name gave nothing
-    expect(await choose(page, await box("所在地"), "湖北省武汉市")).toBe(""); // found in an unknown pop-up, as 武汉
-    expect(await choose(page, await box("户口所在地"), "湖南省嘉兴市")).toMatch(/要选到区\/县/); // one level short: says so, does not hang
+    expect(await choose(page, await box("籍贯"), "浙江省嘉兴市")).toBe(""); // found as 嘉兴 after the full name gave nothing
+    expect(await choose(page, await box("所在地"), "江苏省南京市")).toBe(""); // found in an unknown pop-up, as 南京
+    expect(await choose(page, await box("户口所在地"), "浙江省嘉兴市")).toMatch(/要选到区\/县/); // one level short: says so, does not hang
     await page.keyboard.press("Escape");
-    expect(await choose(page, await box("户口所在地"), "湖南省嘉兴市南湖区")).toBe("");
+    expect(await choose(page, await box("户口所在地"), "浙江省嘉兴市南湖区")).toBe("");
     expect(await choose(page, await box("出生日期"), "2001.03")).toBe("");
     expect(await choose(page, await box("学历"), "博士")).toBe("");
     expect(await choose(page, await box("开始时间"), "2021-09")).toBe("");
@@ -127,8 +127,8 @@ describe.skipIf(!CHROME)("widget drivers (Moka sd-*, 北森 phoenix-*)", () => {
     const shown = await page.evaluate(() => [
       ...Array.from(document.querySelectorAll("[class*=display-value]")).map((e) => e.textContent), (document.querySelector("#birth input") as HTMLInputElement).value,
       ...Array.from(document.querySelectorAll(".phoenix-select__tipEle")).map((e) => e.textContent)]);
-    expect(shown).toEqual(["男", "2021", "9", "东海科技大学(武汉)", "控制科学与工程", "湖南-嘉兴", "湖北省 / 武汉市", "2001-03", "博士", "2021-09"]);
-    expect((await readForm()).fields.map((f) => f.value)).toEqual(["男", "2021", "9", "东海科技大学(武汉)", "控制科学与工程", "湖南-嘉兴", "湖北省 / 武汉市", "湖南 嘉兴市 南湖区", "2001-03", "博士", "2021-09"]);
+    expect(shown).toEqual(["男", "2021", "9", "东海科技大学(南京)", "控制科学与工程", "浙江-嘉兴", "江苏省 / 南京市", "2001-03", "博士", "2021-09"]);
+    expect((await readForm()).fields.map((f) => f.value)).toEqual(["男", "2021", "9", "东海科技大学(南京)", "控制科学与工程", "浙江-嘉兴", "江苏省 / 南京市", "浙江 嘉兴市 南湖区", "2001-03", "博士", "2021-09"]);
   }, 60_000);
 
   it("never picks among several near matches, and says when an option does not exist", async () => {

@@ -83,7 +83,7 @@ const sheet = (row: string, over: Partial<Listing> = {}): Listing => ({ external
   companyType: "民企", industry: "科技", locations: ["北京", "上海"], deadlineText: "招满为止", degreeReq: "本科, 硕士", majorReq: "/", cohort: "2027届", batch: "秋招", kind: "校招",
   publisher: "飞书校招汇总表", grade: "校方转载", isOriginal: false, confidence: 0.7, ...over });
 const site = (id: string, title: string, over: Partial<Listing> = {}): Listing => ({ externalId: id, url: `https://app.mokahr.com/campus-recruitment/acme/1#/job/${id}`, title, company: "示例重工",
-  locations: ["武汉"], description: "jd", publisher: "moka:acme", grade: "官方", isOriginal: true, confidence: 0.9, cohort: "2027届", batch: "校招", ...over });
+  locations: ["南京"], description: "jd", publisher: "moka:acme", grade: "官方", isOriginal: true, confidence: 0.9, cohort: "2027届", batch: "校招", ...over });
 const SEED_SHEET = [sheet("r1"), sheet("r1", { externalId: "r1|算法类", title: "算法类" }), sheet("r2", { company: "另一家", title: "测试类", externalId: "r2|测试类" }), sheet("r3", { company: "第三家", title: "销售", externalId: "r3|销售", deadlineText: "2026-12-01" })];
 const SEED_SITE = [site("j1", "控制算法工程师"), site("j2", "仿真工程师", { validThrough: "2026-11-30" }), site("j3", "电机控制工程师", { validThrough: "2026-11-30" })];
 
@@ -138,7 +138,7 @@ describe("ingest writes only what changed, and ends where the full rewrite ends 
     compare("moka", [SEED_SITE], [site("j1", "控制算法工程师", { validThrough: "2026-10-30" }), ...SEED_SITE.slice(1)]);
   });
   it("a post closed elsewhere comes back open; a renamed post (same site id) keeps its id; a listing twice in one pull", () => {
-    compare("moka", [SEED_SITE], [site("j1", "控制算法工程师（武汉）"), SEED_SITE[1], SEED_SITE[2], SEED_SITE[2]], (db) => db.prepare("update position set status = 'closed' where title = '仿真工程师'").run());
+    compare("moka", [SEED_SITE], [site("j1", "控制算法工程师（南京）"), SEED_SITE[1], SEED_SITE[2], SEED_SITE[2]], (db) => db.prepare("update position set status = 'closed' where title = '仿真工程师'").run());
   });
   it("a post first seen without a site id is taken over by the id that arrives under its title", () => {
     compare("moka", [[site("https://x/1", "控制算法工程师", { url: "https://x/1" })]], [site("j1", "控制算法工程师")]);

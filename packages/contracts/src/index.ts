@@ -254,7 +254,7 @@ export const tools = {
   }),
   "position.list": defineTool({
     name: "position.list",
-    description: "列出在招岗位（库里有国能、华能、国聘等官方接口站的全量岗位，含每个岗位自己的学历与专业要求），默认按招聘项目截止时间排序。按专业 / 学历 / 城市筛：major=\"控制科学与工程 自动化\"（任一词命中）、degree=\"博士\"、city=\"武汉\"；companyId 限定公司。",
+    description: "列出在招岗位（库里有国能、华能、国聘等官方接口站的全量岗位，含每个岗位自己的学历与专业要求），默认按招聘项目截止时间排序。按专业 / 学历 / 城市筛：major=\"控制科学与工程 自动化\"（任一词命中）、degree=\"博士\"、city=\"南京\"；companyId 限定公司。",
     input: Type.Object({
       campaignId: Type.Optional(Id),
       companyId: Type.Optional(Id),
@@ -711,7 +711,7 @@ export const tools = {
   }),
   "fact.upsert": defineTool({
     name: "fact.upsert",
-    description: "新增或更新一张事实卡。带 id = 人工编辑（整卡替换）；不带 id = 按 (kind, 去重键) 合并：已有卡只补缺失字段并追加来源，不会被覆盖。各类 data 的必填字段：basic 为 {field, value}；preference（期望卡）为 {field, value}，一类一张卡，多个值用、分隔（如 {\"field\":\"城市\",\"value\":\"武汉、深圳\"}），可加 mode（\"硬性\"，只有 城市 / 公司类型 可设；硬性才过滤，其余只排序）和 note（一句话备注，给人和模型看）；education {school, degree, major}（可加 period）；direction / exclude {keyword}；publication / patent / award / project {title}；experience {org, role}；skill {name}。",
+    description: "新增或更新一张事实卡。带 id = 人工编辑（整卡替换）；不带 id = 按 (kind, 去重键) 合并：已有卡只补缺失字段并追加来源，不会被覆盖。各类 data 的必填字段：basic 为 {field, value}；preference（期望卡）为 {field, value}，一类一张卡，多个值用、分隔（如 {\"field\":\"城市\",\"value\":\"南京、深圳\"}），可加 mode（\"硬性\"，只有 城市 / 公司类型 可设；硬性才过滤，其余只排序）和 note（一句话备注，给人和模型看）；education {school, degree, major}（可加 period）；direction / exclude {keyword}；publication / patent / award / project {title}；experience {org, role}；skill {name}。",
     input: Type.Object({
       id: Type.Optional(Id), kind: Type.String(), data: Type.Record(Type.String(), Type.String()),
       grade: Type.Optional(FactGrade), statement: Type.Optional(Type.String()),
@@ -933,7 +933,7 @@ export const tools = {
   }),
   "pool.list": defineTool({
     name: "pool.list",
-    description: "岗位库按公司聚合（每家公司一行）：跨来源合并，字段取等级最高且最近核验的值，低等级来源的不同说法列在 conflicts；含合并后的岗位、推荐标签、近几天新增数。岗位级过滤：city（岗位所在城市，如 武汉）、matchedOnly（只要画像匹配的岗位）、minTier（适配度下限：优先考虑 / 可迁移；每个岗位的 match.reason 以 优先考虑/可迁移/待补资料/明显缺口/低相关 开头，写明职责关系、有证据的要求、待核实与缺口）。",
+    description: "岗位库按公司聚合（每家公司一行）：跨来源合并，字段取等级最高且最近核验的值，低等级来源的不同说法列在 conflicts；含合并后的岗位、推荐标签、近几天新增数。岗位级过滤：city（岗位所在城市，如 南京）、matchedOnly（只要画像匹配的岗位）、minTier（适配度下限：优先考虑 / 可迁移；每个岗位的 match.reason 以 优先考虑/可迁移/待补资料/明显缺口/低相关 开头，写明职责关系、有证据的要求、待核实与缺口）。",
     input: Type.Object({ detail: Detail, positionsLimit: Type.Optional(Type.Number({ description: "简版每家公司最多列几个匹配岗位（默认 50）；某家 matchedHasMore 时带 companyId 和同样的条件、调大它，取回这家全部匹配岗位" })), companyId: Type.Optional(Id), query: Type.Optional(Type.String()), tag: Type.Optional(Type.String()), recommendedOnly: Type.Optional(Type.Boolean()), companyType: Type.Optional(Type.String({ description: "企业类型子串，如 央国企 / 民企 / 外企 / 事业单位" })), city: Type.Optional(Type.String()), matchedOnly: Type.Optional(Type.Boolean()), minTier: Type.Optional(Type.Union([Type.Literal("优先考虑"), Type.Literal("可迁移")])), newWithinDays: Type.Optional(Type.Number({ default: 3 })), limit: Type.Optional(Type.Number({ default: 200 })), offset: Type.Optional(Type.Number({ default: 0 })),
       hideExpectationFail: Type.Optional(Type.Boolean({ description: "隐藏不符合硬性期望卡（城市 / 公司类型）或公司标了「不投」的岗位；待核实的保留。默认不隐藏，每个岗位带 expectation 判定与理由" })),
       includeStale: Type.Optional(Type.Boolean({ description: "默认不列过期信息（往届、截止已过一周以上、源站已撤下；关注和申请过的照样列）；true 全列，每个岗位带 stale 理由" })),
@@ -1220,7 +1220,7 @@ export const tools = {
   "intel.smeResearch": defineTool({
     name: "intel.smeResearch",
     description: "派联网 worker 去找某个省/市的专精特新名单文件（各批小巨人、省级名单），只返回名单链接，系统下载解析后并入本地名录。异步，几分钟；消耗 Claude Code 额度（约 0.1–1 美元）。结果用 research.get 看。",
-    input: Type.Object({ region: Type.String({ description: "省或市，如 湖北、深圳" }), hint: Type.Optional(Type.String({ description: "已知的线索，如某个公示页链接或批次" })) }),
+    input: Type.Object({ region: Type.String({ description: "省或市，如 江苏、深圳" }), hint: Type.Optional(Type.String({ description: "已知的线索，如某个公示页链接或批次" })) }),
     output: Type.Object({ runId: Id, workflowId: Id }),
     effects: EGRESS,
     execution: "job",

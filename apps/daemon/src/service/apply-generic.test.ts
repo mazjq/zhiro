@@ -42,7 +42,7 @@ function popper(items, onPick) { document.querySelector(".el-popper")?.remove();
 $("#sex input").onclick = () => popper(["男", "女"], (t) => $("#sex input").value = t);
 // the date editor: a typed value is taken on Enter, normalised to YYYY-MM
 $("#birth input").onkeydown = (e) => { if (e.key === "Enter") { const m = e.target.value.match(/(\\d{4})-(\\d{2})/); e.target.value = m ? m[1] + "-" + m[2] : ""; } };
-const tree = { 湖南省: { 嘉兴市: ["南湖区"] }, 湖北省: { 武汉市: ["鼓楼区"] } };
+const tree = { 浙江省: { 嘉兴市: ["南湖区"] }, 江苏省: { 南京市: ["鼓楼区"] } };
 $("#home input").onclick = () => { document.querySelector(".el-cascader__dropdown")?.remove(); const d = document.createElement("div"); d.className = "el-cascader__dropdown"; d.style.cssText = "position:absolute;top:0;left:500px"; document.body.appendChild(d); const path = [];
   const col = (items, next) => { const c = document.createElement("ul"); c.className = "el-cascader-menu"; for (const t of items) { const li = document.createElement("li"); li.className = "el-cascader-node"; li.innerHTML = '<span class="el-cascader-node__label">' + t + "</span>"; li.onclick = () => next(t); c.appendChild(li); } d.appendChild(c); };
   col(Object.keys(tree), (p) => { path.push(p); col(Object.keys(tree[p]), (c) => { path.push(c); col(tree[p][c], (x) => { path.push(x); $("#home input").value = path.join(" / "); d.remove(); }); }); }); };
@@ -65,9 +65,9 @@ describe.skipIf(!CHROME)("generic driver on an Element UI site", () => {
     expect(form.fields.map((f) => [f.label, f.type, f.required])).toEqual([["性别", "dropdown", true], ["出生年月", "date", false], ["籍贯", "cascader", false], ["入学年月", "month", false], ["是否服从调剂", "radio", false]]);
     expect(await choose(page, await box("性别"), "男")).toBe("");
     expect(await choose(page, await box("出生年月"), "2001.03")).toBe("");
-    expect(await choose(page, await box("籍贯"), "湖南省嘉兴市南湖区")).toBe("");
+    expect(await choose(page, await box("籍贯"), "浙江省嘉兴市南湖区")).toBe("");
     expect(await choose(page, await box("入学年月"), "2021.09")).toBe("");
     const values = await page.evaluate(() => Array.from(document.querySelectorAll("form input:not([type=radio])")).map((i) => (i as HTMLInputElement).value));
-    expect(values).toEqual(["男", "2001-03", "湖南省 / 嘉兴市 / 南湖区", "2021-09"]);
+    expect(values).toEqual(["男", "2001-03", "浙江省 / 嘉兴市 / 南湖区", "2021-09"]);
   }, 60_000);
 });

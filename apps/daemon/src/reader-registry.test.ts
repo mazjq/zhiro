@@ -16,7 +16,7 @@ const fake: Source = {
   id: "fakesite", name: "示例招聘站", input: "jobs.fakesite.example/<公司>", mode: "pull", describe: "测试用",
   detect: (url) => /^https:\/\/jobs\.fakesite\.example\//.test(url),
   siteKey: (url) => new URL(url).pathname.split("/")[1],
-  fetch: async (cfg) => [{ externalId: "p-1", url: `${cfg.url}/p-1`, title: "控制算法工程师", company: cfg.name ?? "示例", locations: ["武汉"], publisher: "fakesite:acme", grade: "官方", isOriginal: true, confidence: 0.9, cohort: "2027届", batch: "校招" }],
+  fetch: async (cfg) => [{ externalId: "p-1", url: `${cfg.url}/p-1`, title: "控制算法工程师", company: cfg.name ?? "示例", locations: ["南京"], publisher: "fakesite:acme", grade: "官方", isOriginal: true, confidence: 0.9, cohort: "2027届", batch: "校招" }],
 };
 
 function setup() {

@@ -113,7 +113,7 @@ export function guessColumns(headers: string[]): Columns {
 
 /**
  * A cell that lists several things: separated by 、，,；; | or a line break — and by spaces only where every word is
- * Chinese (「武汉 上海」 is two cities, 「算法工程师 测试工程师」 two posts; "Saint Paul" is one, "AI Computing Software
+ * Chinese (「南京 上海」 is two cities, 「算法工程师 测试工程师」 two posts; "Saint Paul" is one, "AI Computing Software
  * Development Intern" one post, 「算法工程师 AI」 one). The built-in layout used to split on every space: NVIDIA's one
  * English post became five (「AI」「Computing」…; 2026-10-23).
  */

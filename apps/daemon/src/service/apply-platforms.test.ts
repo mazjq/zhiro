@@ -33,7 +33,7 @@ const FEISHU = `<!doctype html><meta charset="utf-8"><div class="resumeEditForm-
 const $ = (s, r = document) => r.querySelector(s);
 function drop(html, after) { document.querySelector(".atsx-select-dropdown")?.remove(); const d = document.createElement("div"); d.className = "atsx-select-dropdown"; d.style.cssText = "position:absolute;top:0;left:400px"; d.innerHTML = html; document.body.appendChild(d); after(d); }
 $("#sex").onclick = () => drop('<div role="option">男</div><div role="option">女</div>', (d) => d.querySelectorAll("[role=option]").forEach((o) => o.onclick = () => { $("#sex .v").textContent = o.textContent; $("#sex input").value = o.textContent; d.remove(); }));
-$("#city").onclick = () => drop('<input class="atsx-select-search__field"><div class="atsx-tree"></div>', (d) => { const s = d.querySelector("input"); s.oninput = () => { d.querySelector(".atsx-tree").innerHTML = s.value === "武汉" ? '<span data-cy-value="420100">武汉市</span>' : ""; d.querySelectorAll("[data-cy-value]").forEach((n) => n.onclick = () => { $("#city input").value = n.textContent; d.remove(); }); }; });
+$("#city").onclick = () => drop('<input class="atsx-select-search__field"><div class="atsx-tree"></div>', (d) => { const s = d.querySelector("input"); s.oninput = () => { d.querySelector(".atsx-tree").innerHTML = s.value === "南京" ? '<span data-cy-value="420100">南京市</span>' : ""; d.querySelectorAll("[data-cy-value]").forEach((n) => n.onclick = () => { $("#city input").value = n.textContent; d.remove(); }); }; });
 function eduEntry() { const i = document.querySelectorAll("#edu .resumeEditForm-item").length; const e = document.createElement("div"); e.className = "resumeEditForm-item";
   e.innerHTML = '<div class="atsx-form-item"><div class="atsx-form-item-label">学校</div><input id="education[' + i + '].school"></div>'
     + '<div class="atsx-form-item"><div class="atsx-form-item-label">就读时间</div><div class="atsx-date-picker atsx-date-picker-period-month"><input readonly placeholder="开始时间"></div></div>';
@@ -90,9 +90,9 @@ describe.skipIf(!CHROME)("platform replicas", () => {
     expect(slotsOf(form.fields).map((s) => [s.section, s.entry])).toEqual([["教育经历", 0]]);
     const by = (l: string) => at(page, form.fields.find((f) => f.label === l)!);
     expect(await choose(page, by("性别"), "男")).toBe("");
-    expect(await choose(page, by("现居城市"), "湖北省武汉市")).toBe("");
+    expect(await choose(page, by("现居城市"), "江苏省南京市")).toBe("");
     expect(await choose(page, by("就读时间"), "2021-09")).toBe("");
-    expect(await page.evaluate(() => Array.from(document.querySelectorAll("input:not(.atsx-select-search__field)")).map((i) => (i as HTMLInputElement).value))).toEqual(["", "男", "武汉市", "", "2021-09"]);
+    expect(await page.evaluate(() => Array.from(document.querySelectorAll("input:not(.atsx-select-search__field)")).map((i) => (i as HTMLInputElement).value))).toEqual(["", "男", "南京市", "", "2021-09"]);
   }, 60_000);
 
   it("大易 (antd 3): portal options with a disabled one, typed date committed on blur", async () => {
@@ -108,7 +108,7 @@ describe.skipIf(!CHROME)("platform replicas", () => {
     const page = await open(WJX);
     const form = await readForm();
     expect(form.fields.map((f) => [f.label, f.type, f.required, f.options])).toEqual([["姓名", "text", true, []], ["性别", "radio", true, ["男", "女"]], ["籍贯", "dropdown", false, []]]);
-    expect(await choose(page, at(page, form.fields[2]), "湖南省嘉兴市")).toMatch(/问卷星/);
+    expect(await choose(page, at(page, form.fields[2]), "浙江省嘉兴市")).toMatch(/问卷星/);
     // the radio goes through the run's own writer; here: clicking the named option checks the hidden input
     await page.locator("#div2 [for]", { hasText: "女" }).first().click();
     expect(await page.evaluate(() => (document.getElementById("q2_2") as HTMLInputElement).checked)).toBe(true);

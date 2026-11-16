@@ -24,7 +24,7 @@ function setup() {
   return { dir, db, workflows, ctx };
 }
 const OWN = `企业名称,岗位,ddl,网申地址,城市,学历,毕业年份
-示例重工,"控制算法工程师、仿真工程师",2099-10-31,https://apply.example.com/a,武汉 上海,硕士及以上,2027届
+示例重工,"控制算法工程师、仿真工程师",2099-10-31,https://apply.example.com/a,南京 上海,硕士及以上,2027届
 示例电子,电机控制工程师,招满为止,https://apply.example.com/b,深圳,本科及以上,2027届
 去年公司,工程师,2020-01-01,https://apply.example.com/c,北京,本科,2027届
 ,无主岗位,,,,,2027届
@@ -60,7 +60,7 @@ describe("CSV 表格", () => {
     const pv = await previewSource(ctx, { url });
     expect(pv).toMatchObject({ source: "csv", table: true, subscribed: null, rows: 4, posts: 3, companies: 2, problem: "" });
     expect(pv.columns).toMatchObject({ company: "企业名称", positions: "岗位", deadline: "ddl" });
-    expect(pv.sample[0]).toEqual({ company: "示例重工", title: "控制算法工程师", deadline: "2099-10-31", cities: ["武汉", "上海"], url: "https://apply.example.com/a" });
+    expect(pv.sample[0]).toEqual({ company: "示例重工", title: "控制算法工程师", deadline: "2099-10-31", cities: ["南京", "上海"], url: "https://apply.example.com/a" });
     expect(db.prepare("select count(*) n from position").get()).toEqual({ n: 0 }); // a preview files nothing
     // another look right after (a column changed in the form) does not read the table again
     const answered = vi.fn(async (u: string) => Object.defineProperty(new Response(body, { headers: { "content-type": "text/csv" } }), "url", { value: String(u) }));

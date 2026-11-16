@@ -12,7 +12,7 @@ function setup() {
   return { dir, domain: { db: openDb(join(dir, "t.db")) } };
 }
 const L = (over: Partial<Listing> = {}): Listing => ({
-  externalId: "j1", url: "https://app.mokahr.com/campus-recruitment/x/1#/job/j1", title: "控制算法工程师", company: "示例", locations: ["湖北 武汉市"],
+  externalId: "j1", url: "https://app.mokahr.com/campus-recruitment/x/1#/job/j1", title: "控制算法工程师", company: "示例", locations: ["江苏 南京市"],
   description: "jd", publisher: "moka:x", grade: "官方", isOriginal: true, confidence: 0.9, cohort: "2027届", batch: "秋招", ...over,
 });
 
@@ -42,11 +42,11 @@ describe("moka mapping", () => {
     expect(mokaTenant("https://app.mokahr.com/campus-recruitment/voyah/146293")).toMatchObject({ orgId: "voyah", siteId: "146293" });
     expect(mokaTenant("https://example.com")).toBeNull();
     const l = toListing(
-      { title: "底盘控制", url: "https://app.mokahr.com/campus-recruitment/voyah/146293#/job/abc%2F1", company: "voyah", location: "湖北 武汉市/上海 浦东", description: "类型: 全职\n部门: 智能底盘\n要求 博士" },
+      { title: "底盘控制", url: "https://app.mokahr.com/campus-recruitment/voyah/146293#/job/abc%2F1", company: "voyah", location: "江苏 南京市/上海 浦东", description: "类型: 全职\n部门: 智能底盘\n要求 博士" },
       { id: "m", source: "moka", url: "https://app.mokahr.com/campus-recruitment/voyah/146293", name: "岚图汽车", cohort: "2027届" },
     );
     expect(l).toMatchObject({ externalId: "abc/1", company: "岚图汽车", orgUnit: "智能底盘", employmentType: "全职", degreeReq: "博士", kind: "博士专项", batch: "校招", grade: "官方", publisher: "moka:voyah" });
-    expect(l.locations).toEqual(["湖北 武汉市", "上海 浦东"]);
+    expect(l.locations).toEqual(["江苏 南京市", "上海 浦东"]);
   });
 });
 
@@ -61,7 +61,7 @@ describe("feishu-base", () => {
     const fieldMap = {
       f1: { name: "公司", type: 1 }, f2: { name: "招聘届次", type: 4, property: { options: [{ id: "o27", name: "2027届" }, { id: "o26", name: "2026届" }] } },
       f3: { name: "招聘岗位", type: 1 }, f4: { name: "截止时间", type: 1 }, f5: { name: "简历投递链接", type: 1 }, f6: { name: "公告来源", type: 20 },
-      f7: { name: "工作地点", type: 4, property: { options: [{ id: "c1", name: "武汉" }, { id: "c2", name: "上海" }] } }, f8: { name: "企业类型", type: 3, property: { options: [{ id: "t1", name: "央国企" }] } },
+      f7: { name: "工作地点", type: 4, property: { options: [{ id: "c1", name: "南京" }, { id: "c2", name: "上海" }] } }, f8: { name: "企业类型", type: 3, property: { options: [{ id: "t1", name: "央国企" }] } },
     };
     const text = (s: string) => ({ value: [{ type: "text", text: s }] });
     const row = (o: Record<string, { value: unknown }>) => ({ f1: text("示例重工"), f3: text("控制算法工程师、仿真工程师"), f6: text("官网"), f7: { value: ["c1", "c2"] }, f8: { value: "t1" }, ...o });
@@ -72,7 +72,7 @@ describe("feishu-base", () => {
     };
     const out = rowsToListings(fieldMap, records, { cohort: "2027届", name: "汇总表" });
     expect(out.map((l) => l.title)).toEqual(["控制算法工程师", "仿真工程师"]);
-    expect(out[0]).toMatchObject({ company: "示例重工", url: "https://apply.example.com/a", locations: ["武汉", "上海"], companyType: "央国企", grade: "聚合", cohort: "2027届", externalId: "r1|控制算法工程师" });
+    expect(out[0]).toMatchObject({ company: "示例重工", url: "https://apply.example.com/a", locations: ["南京", "上海"], companyType: "央国企", grade: "聚合", cohort: "2027届", externalId: "r1|控制算法工程师" });
   });
 });
 

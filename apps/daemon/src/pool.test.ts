@@ -28,7 +28,7 @@ function setup() {
 }
 
 const listing = (o: Partial<Listing>): Listing => ({
-  externalId: o.title ?? "x", url: "https://example.com/j", title: "底盘控制算法工程师", company: "示例汽车", locations: ["武汉"],
+  externalId: o.title ?? "x", url: "https://example.com/j", title: "底盘控制算法工程师", company: "示例汽车", locations: ["南京"],
   publisher: "示例汽车", grade: "官方", isOriginal: true, confidence: 1, cohort: "2027届", batch: "秋招", ...o,
 });
 
@@ -134,10 +134,10 @@ describe("profile + recommend", () => {
 
   it("期望卡 (ADR-036): a hard city hides 不符合 only when asked, 待核实 stays, 不投 companies fail, 重点 and 不投 exclude each other", async () => {
     const { dir, domain, s } = setup();
-    ingest(domain, dir, "moka", "m-wh", [listing({ company: "武汉公司", locations: ["武汉"] })]);
+    ingest(domain, dir, "moka", "m-wh", [listing({ company: "南京公司", locations: ["南京"] })]);
     ingest(domain, dir, "moka", "m-bj", [listing({ company: "北京公司", locations: ["北京"] })]);
     ingest(domain, dir, "moka", "m-na", [listing({ company: "没写地方公司", locations: [] })]);
-    await callTool("fact.upsert", { kind: "preference", data: { field: "城市", value: "武汉、深圳", mode: "硬性" } }, HUMAN, s);
+    await callTool("fact.upsert", { kind: "preference", data: { field: "城市", value: "南京、深圳", mode: "硬性" } }, HUMAN, s);
     await expect(callTool("fact.upsert", { kind: "preference", data: { field: "行业", value: "机器人", mode: "硬性" } }, HUMAN, s)).rejects.toMatchObject({ code: "BAD_MODE" });
     // one card per field: a second 城市 card merges into the first instead of adding a row
     await callTool("fact.upsert", { kind: "preference", data: { field: "城市", value: "上海" } }, HUMAN, s);
@@ -145,14 +145,14 @@ describe("profile + recommend", () => {
 
     const all = (await callTool("pool.list", { sort: "match" }, HUMAN, s)) as any;
     const st = Object.fromEntries(all.items.map((c: any) => [c.companyName, c.expectation.status]));
-    expect(st).toEqual({ 武汉公司: "pass", 北京公司: "fail", 没写地方公司: "unknown" });
-    expect(all.items[0].companyName).toBe("武汉公司"); // pass before unknown before fail
+    expect(st).toEqual({ 南京公司: "pass", 北京公司: "fail", 没写地方公司: "unknown" });
+    expect(all.items[0].companyName).toBe("南京公司"); // pass before unknown before fail
     expect(all.items.find((c: any) => c.companyName === "北京公司").positions[0].expectation.reasons[0]).toMatchObject({ field: "城市", status: "fail", evidence: "北京", hard: true });
 
     const shown = (await callTool("pool.list", { hideExpectationFail: true }, HUMAN, s)) as any;
-    expect(shown.items.map((c: any) => c.companyName).sort()).toEqual(["武汉公司", "没写地方公司"]);
+    expect(shown.items.map((c: any) => c.companyName).sort()).toEqual(["南京公司", "没写地方公司"]);
 
-    const wh = all.items.find((c: any) => c.companyName === "武汉公司").companyId;
+    const wh = all.items.find((c: any) => c.companyName === "南京公司").companyId;
     await callTool("recommend.tag", { companyId: wh, tag: "重点" }, HUMAN, s);
     await callTool("recommend.tag", { companyId: wh, tag: "不投" }, HUMAN, s);
     const after = (await callTool("pool.list", { companyId: wh }, HUMAN, s)) as any;
@@ -273,7 +273,7 @@ describe("岗位适配度 v2 (ADR-035): 库犸 regression", () => {
       listing({ company: "库犸科技", title: "自动化测试工程师", externalId: "3", degreeReq: "本科及以上", description: 测试, locations: ["深圳"] }),
     ]);
     ingest(domain, dir, "sheet", "x", [listing({ company: "库犸科技", title: "运动规划算法工程师", grade: "聚合", publisher: "汇总表", majorReq: "自动化、计算机", locations: ["深圳"] })]);
-    ingest(domain, dir, "chnenergy", "n", [listing({ company: "国家能源集团", title: "电气工程师（某电厂）", degreeReq: "大学本科", description: "技能岗;某电厂;专业:自动化类;大学本科;1人", locations: ["湖北武汉"] })]);
+    ingest(domain, dir, "chnenergy", "n", [listing({ company: "国家能源集团", title: "电气工程师（某电厂）", degreeReq: "大学本科", description: "技能岗;某电厂;专业:自动化类;大学本科;1人", locations: ["江苏南京"] })]);
     await callTool("fact.upsert", { kind: "education", data: { school: "某大学", degree: "博士", major: "控制科学与工程" } }, HUMAN, s);
     await callTool("fact.upsert", { kind: "direction", data: { keyword: "动力定位/运动控制" } }, HUMAN, s);
     await callTool("fact.upsert", { kind: "education", data: { school: "某大学", degree: "本科", major: "自动化" } }, HUMAN, s);
@@ -281,7 +281,7 @@ describe("岗位适配度 v2 (ADR-035): 库犸 regression", () => {
     await callTool("fact.upsert", { kind: "skill", data: { name: "MATLAB / Simulink", level: "熟练" } }, HUMAN, s);
     await callTool("fact.upsert", { kind: "skill", data: { name: "C/C++", level: "熟练" } }, HUMAN, s);
     await callTool("fact.upsert", { kind: "skill", data: { name: "单片机编程", level: "熟练" } }, HUMAN, s);
-    await callTool("fact.upsert", { kind: "preference", data: { field: "城市", value: "武汉" } }, HUMAN, s); await settle();
+    await callTool("fact.upsert", { kind: "preference", data: { field: "城市", value: "南京" } }, HUMAN, s); await settle();
     return { dir, domain, s };
   }
   const tierOf = (co: any, t: string) => co.positions.find((p: any) => p.title === t)?.match?.reason.split(" · ")[0];

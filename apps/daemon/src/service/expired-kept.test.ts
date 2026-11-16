@@ -13,7 +13,7 @@ import { expiredMany, changedCompanies, resolveMany, beijingDay, setOverride, re
  */
 const day = (n: number) => beijingDay(new Date(Date.now() + n * 86400000));
 const site = (id: string, title: string, over: Partial<Listing> = {}): Listing => ({ externalId: id, url: `https://app.mokahr.com/campus-recruitment/acme/1#/job/${id}`, title, company: "示例重工",
-  locations: ["武汉"], publisher: "moka:acme", grade: "官方", isOriginal: true, confidence: 1, cohort: "2027届", batch: "校招", ...over });
+  locations: ["南京"], publisher: "moka:acme", grade: "官方", isOriginal: true, confidence: 1, cohort: "2027届", batch: "校招", ...over });
 const sheet = (company: string, title: string, deadline: string): Listing => ({ externalId: `${company}|${title}`, url: "https://example.com/a", title, company, locations: ["北京"],
   deadlineText: deadline, publisher: "飞书校招汇总表", grade: "校方转载", isOriginal: false, confidence: 0.7, cohort: "2027届", batch: "秋招" });
 // 第四家 is on the sheet alone: its deadline is what changes (示例重工's sheet rows go by the official batch's day)

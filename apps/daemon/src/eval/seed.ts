@@ -34,15 +34,15 @@ export interface World {
 }
 
 export const COMPANIES = {
-  xinglan: { name: "星澜汽车", off: 3, city: "武汉", type: "民企", industry: "汽车" },
-  chutian: { name: "楚天智驾", off: 6, city: "武汉", type: "民企", industry: "自动驾驶" },
-  jiangcheng: { name: "江城机器人", off: 20, city: "武汉", type: "民企", industry: "机器人" },
+  xinglan: { name: "星澜汽车", off: 3, city: "南京", type: "民企", industry: "汽车" },
+  chutian: { name: "楚天智驾", off: 6, city: "南京", type: "民企", industry: "自动驾驶" },
+  jiangcheng: { name: "江城机器人", off: 20, city: "南京", type: "民企", industry: "机器人" },
   qinghe: { name: "青禾电子", off: 2, city: "深圳", type: "民企", industry: "电子" },
   huaruiDL: { name: "华瑞动力", off: 10, city: "上海", type: "国企", industry: "电机" },
   huaruiZN: { name: "华瑞智能", off: 40, city: "杭州", type: "民企", industry: "工业自动化" },
   beichen: { name: "北辰装备研究所", off: 30, city: "西安", type: "研究院所", industry: "航天" },
-  yuanche: { name: "远澈科技", off: 15, city: "武汉", type: "民企", industry: "软件" },
-  jiugang: { name: "旧港船舶", off: -5, city: "武汉", type: "国企", industry: "船舶" },
+  yuanche: { name: "远澈科技", off: 15, city: "南京", type: "民企", industry: "软件" },
+  jiugang: { name: "旧港船舶", off: -5, city: "南京", type: "国企", industry: "船舶" },
 } as const;
 const C = COMPANIES;
 type CK = keyof typeof C;
@@ -52,7 +52,7 @@ const P: { key: string; co: CK; title: string; cities?: string[]; degree?: strin
   { key: "xinglan_vcu", co: "xinglan", title: "整车控制策略工程师", jd: "负责整车控制器（VCU）能量管理与驱动策略开发；熟悉 Simulink 建模。" },
   { key: "xinglan_admin", co: "xinglan", title: "行政专员", jd: "负责园区行政事务、会议组织。" },
   { key: "chutian_motion", co: "chutian", title: "运动控制算法工程师", jd: "负责自动驾驶车辆运动控制算法（轨迹跟踪、纵向控制）的设计与仿真验证。" },
-  { key: "chutian_perception", co: "chutian", title: "感知算法工程师", cities: ["武汉", "上海"], jd: "负责多传感器融合感知算法研发。" },
+  { key: "chutian_perception", co: "chutian", title: "感知算法工程师", cities: ["南京", "上海"], jd: "负责多传感器融合感知算法研发。" },
   { key: "jiangcheng_robot", co: "jiangcheng", title: "机器人控制算法工程师", jd: "负责协作机械臂的力控与运动规划算法；有 ROS、动力学建模经验优先。" },
   { key: "jiangcheng_embedded", co: "jiangcheng", title: "嵌入式软件工程师", jd: "负责机器人关节驱动器的嵌入式软件开发（C/C++，RTOS）。" },
   { key: "qinghe_power", co: "qinghe", title: "电源控制工程师", jd: "负责数字电源环路控制设计与调试。" },
@@ -103,7 +103,7 @@ export async function seedWorld(dir: string): Promise<World> {
     { kind: "direction", data: { keyword: "控制" } },
     { kind: "direction", data: { keyword: "运动控制" } },
     { kind: "direction", data: { keyword: "控制算法" } },
-    { kind: "preference", data: { field: "城市", value: "武汉" } },
+    { kind: "preference", data: { field: "城市", value: "南京" } },
     { kind: "skill", data: { name: "MATLAB/Simulink" } },
     { kind: "project", data: { title: "四轮移动机器人轨迹跟踪 MPC 控制", period: "2025.03—2025.12" } },
   ];
@@ -163,7 +163,7 @@ export async function seedWorld(dir: string): Promise<World> {
   // so only company.intelDetail shows it
   const intel = (kind: string, data: unknown, source: string) => db.prepare("insert into company_intel(company_id, kind, data_json, source, fetched_at) values (?,?,?,?,?)").run(co.xinglan, kind, JSON.stringify(data), source, now());
   intel("listing", { code: "300999", orgId: "eval", market: "A股", name: "星澜汽车" }, "cninfo:topSearch");
-  intel("basic", { orgName: "星澜汽车股份有限公司", industry: "汽车制造业", province: "湖北", employees: 8200, founded: "2012-05-18", listed: "2021-07-09" }, "eastmoney:F10");
+  intel("basic", { orgName: "星澜汽车股份有限公司", industry: "汽车制造业", province: "江苏", employees: 8200, founded: "2012-05-18", listed: "2021-07-09" }, "eastmoney:F10");
   intel("finance", { latest: null, annual: [{ period: "2025年报", revenue: 12_860_000_000, netProfit: 610_000_000, revenueYoy: 18.4, netProfitYoy: 9.1, rdExpense: 1_520_000_000, staffCash: 1_900_000_000 }] }, "eastmoney:ZYZB+sina:lrb");
   intel("irm", { items: [
     { date: day(-20), q: "请问公司2027届校园招聘计划招多少人？", a: "您好，感谢关注。公司始终重视人才梯队建设，近年来持续加大在智能底盘、整车电子电气架构与三电系统方向的研发投入，并与多所高校建立联合实验室和实习基地，为优秀毕业生提供完善的培养体系与职业发展通道。按照目前规划，公司2027届校园招聘规模约1200人，其中研发类岗位约占七成，谢谢。" },
