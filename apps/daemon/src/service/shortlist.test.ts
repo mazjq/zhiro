@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { pick, cityRank, roleKey, weekOf, MAX_NEW, MAX_KEY, CITY_STEP, READ_FLOOR } from "./shortlist.js";
+import { pick, cityRank, roleKey, weekOf, MAX_NEW, MAX_KEY, MAX_HOME, CITY_STEP, READ_FLOOR } from "./shortlist.js";
 
 const me: any = { level: 3, concepts: new Set(["control_algorithm", "motor_control"]), stems: ["控制"], direction: ["动力定位"], user: { level: 3, majors: [], gaps: new Set(), evidence: [] } };
 const rules = (o: any = {}) => ({ tiers: [["南京"], ["深圳", "上海"], ["北京"]], noCities: [], onePerGroup: [], excludes: [], blocked: new Set<string>(), ...o });
@@ -86,12 +86,38 @@ describe("每周短名单", () => {
     expect(noneHome.notes).toEqual(["本周南京没有对口的新岗位"]);
   });
 
+  it("first-city posts open for longer: a row of their own, three at most, read and fitting only; they take none of the 新机会", () => {
+    const sh = [...Array(MAX_NEW)].map((_, i) => row(`s${i}`, { company_id: `s${i}`, jd_text: "x", cities: '["上海"]' }));
+    const old = (id: string) => row(id, { company_id: id, jd_text: "x", older: 1 });
+    const reads = (o: Record<string, number>) => ({ fit: (id: string) => (id in o ? { score: o[id], verdict: "" } : id.startsWith("s") ? { score: 90, verdict: "" } : null) });
+    const a = run([...sh, old("o1"), old("o2"), old("o3")], { reads: reads({ o1: 60, o2: 72 }) }); // o3 was not read
+    expect(a.cards.filter((c) => c.slot === "new")).toHaveLength(MAX_NEW);
+    expect(a.cards.filter((c) => c.slot === "home").map((c) => c.positionId)).toEqual(["o2", "o1"]); // best first; o3 was not read
+    expect(a.cards.find((c) => c.positionId === "o2")!.notes[0]).toBe("不是本周新出的，一直在招");
+    expect(a.notes).toEqual([]);
+    expect(a.skipped.some((x) => /^o/.test(x.positionId))).toBe(false); // older posts are not listed as left out
+    const b = run([...sh, old("o1")], { reads: reads({ o1: 40 }) });
+    expect(b.notes).toEqual(["本周南京没有对口的新岗位"]);
+    // three at most, two a company; a new first-city post this week does not take the row away
+    const c = run([row("n1", { jd_text: "x" }), ...["p1", "p2", "p3"].map((id, i) => row(id, { company_id: "p", title: ["控制算法工程师", "控制算法工程师（伺服）", "控制算法工程师（导航）"][i], jd_text: "x", older: 1 })), old("o1"), old("o2")], { reads: { fit: (id: string) => ({ score: ({ p1: 95, p2: 94, p3: 93, o1: 70, o2: 60 } as Record<string, number>)[id] ?? 80, verdict: "" }) } });
+    expect(MAX_HOME).toBe(3);
+    expect(c.cards.map((x) => [x.positionId, x.slot])).toEqual([["n1", "new"], ["p1", "home"], ["p2", "home"], ["o1", "home"]]);
+  });
+
   it("重点公司的岗位: two cards of their own, whatever they lack, and they take none of the 新机会", () => {
     const rows = [...Array(3)].map((_, i) => row(`k${i}`, { company_id: `k${i}`, key_company: 1, a: { tier: "明显缺口", S: 10 * i, A: 0, judgements: [] } })).concat([row("a1")]);
     const { cards, skipped } = run(rows);
     expect(cards.map((c) => [c.positionId, c.slot])).toEqual([["k2", "key"], ["k1", "key"], ["a1", "new"]]);
     expect(MAX_KEY).toBe(2);
     expect(skipped.map((x) => [x.positionId, x.reason])).toEqual([["k0", "超出本周张数"]]);
+  });
+
+  it("a title that names the city is believed over the batch's list of cities", () => {
+    // the batch lists 南京 among its cities; this post says it is in 珠海, which is not on the person's list
+    const rows = [row("a1", { title: "运动控制工程师（工作地点 珠海）", cities: '["南京","珠海"]' }), row("b1", { title: "运动控制工程师（工作地点 南京）", cities: '["南京","珠海"]', company_id: "b" })];
+    const { cards, skipped } = run(rows);
+    expect(cards.map((c) => [c.positionId, c.cities, c.cityRank])).toEqual([["b1", ["南京"], 0]]);
+    expect(skipped.map((x) => [x.positionId, x.reason])).toEqual([["a1", "工作地不在你的城市名单里"]]);
   });
 
   it("同集团: side by side with a note, kept out only when the person said that group takes one", () => {
@@ -190,6 +216,26 @@ describe("短名单细评: the two lines from the model's deep match", async () 
     expect((await readForShortlist(b.s)).read).toBe(0);
     expect(runShortlist(b.s).notes).toEqual(["这周没能细读岗位描述，按规则粗排"]);
     void latestShortlist;
+  });
+
+  it("the first city's posts are always read, whatever the look over the titles chose", async () => {
+    const { readForShortlist, READ_PER_WEEK } = await import("./shortlist.js");
+    // more posts than the week reads, all of another company than the 重点 one, in the person's first city
+    const { s, db, calls } = setup((n) => (n === 1 ? [] : good), 1);
+    db.prepare("delete from recommendation").run(); // no 重点 company: nothing is read for being one
+    const { upsertFact } = await import("./profile.js");
+    upsertFact(db, { kind: "direction", data: { keyword: "控制算法" } }, "本人确认"); // so the titles are the person's kind of post
+    const { ingest: put } = await import("../data/index.js");
+    put(s.domain, s.config.vault, "capture", "c2", [...Array(READ_PER_WEEK + 6)].map((_, i) => ({ externalId: `x${i}`, url: `https://example.org/x${i}`, title: `控制算法工程师x${i}`, company: `示例公司${i}`,
+      locations: ["上海"], description: JD, publisher: "site:example", grade: "官方", isOriginal: true, confidence: 1, cohort: "2027届", batch: "校招" }) as any));
+    (s.config as any).shortlist = { cities: [["南京"], ["上海"]] };
+    put(s.domain, s.config.vault, "capture", "c3", [{ externalId: "home", url: "https://example.org/home", title: "控制算法工程师home", company: "本地示例公司",
+      locations: ["南京"], description: JD, publisher: "site:example", grade: "官方", isOriginal: true, confidence: 1, cohort: "2027届", batch: "校招" } as any]);
+    const r = await readForShortlist(s);
+    const home = (db.prepare("select id from position where title = '控制算法工程师home'").get() as any).id;
+    expect(r.picked.has(home)).toBe(true);
+    expect(db.prepare("select 1 from position_fit where position_id = ?").get(home)).toBeTruthy(); // read, though the title look returned nothing
+    expect(calls.length).toBeGreaterThan(1);
   });
 
   it("a line whose quote is not in the post, a refusal of the gate, or a model error keeps the rule wording", async () => {
