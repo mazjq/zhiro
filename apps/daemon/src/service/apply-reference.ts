@@ -60,6 +60,7 @@ export function parseReference(paragraphs: string[], path = ""): Reference {
     if (/惩处|^主要专业成果|^奖惩信息$/.test(bare)) { section = ""; continue; }
     if (/^(网申常见栏目|常见栏目|基本信息补充)/.test(bare)) { section = "fields"; continue; }
     if (/^项目经历|^项目经验/.test(bare)) { section = "projects"; continue; }
+    if (/^(爱好|特长|个人特长)$/.test(bare)) more = null;
     if (/^爱好$/.test(bare)) { const v = lines[i + 1] ?? ""; if (v && !BLANK.test(v)) fields.set("爱好", v); i++; continue; }
     if (/^(特长|个人特长)$/.test(bare)) {
       const out: string[] = [];
@@ -68,6 +69,8 @@ export function parseReference(paragraphs: string[], path = ""): Reference {
       continue;
     }
     if (/^(自我评价|自我描述)$/.test(bare)) {
+      // what follows the first version (「另外的版本…」 and its text) belongs to nothing: not to the project above it either
+      section = ""; more = null;
       const out: string[] = [];
       while (i + 1 < lines.length && !/^(另外的版本|其他版本|[*＊]?\S{1,8}$)/.test(lines[i + 1])) out.push(lines[++i]);
       if (out.length) fields.set("自我评价", out.join("\n"));
