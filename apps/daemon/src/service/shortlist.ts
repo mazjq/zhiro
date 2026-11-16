@@ -159,7 +159,16 @@ const fillable = (a: Assessment | null) => a && a.A >= 30 ? a.judgements.find((j
 const daysLeft = (closesAt: string | null, today: string) => closesAt ? Math.round((Date.parse(closesAt.slice(0, 10)) - Date.parse(today)) / DAY) : null;
 const plusDays = (day: string, n: number) => new Date(Date.parse(day) + n * DAY).toISOString().slice(0, 10);
 
-const placeOf = (r: { cities: string; c_cities: string }) => { const own = json.parse(r.cities, [] as string[]); return own.length ? own : json.parse(r.c_cities, [] as string[]); };
+/**
+ * Where a post is. A title that says so (「…（工作地点 珠海）」) is believed over the list of cities beside it: a batch's
+ * posts often all carry the batch's whole list, and a post in 珠海 counted as one in the person's first city.
+ */
+const placeOf = (r: { cities: string; c_cities: string; title?: string }) => {
+  const said = /工作地点?[:：\s]*([一-鿿]{2,6}?)(?:[）)\s,，、/]|$)/.exec(r.title ?? "")?.[1];
+  if (said) return [said];
+  const own = json.parse(r.cities, [] as string[]);
+  return own.length ? own : json.parse(r.c_cities, [] as string[]);
+};
 const placesOf = (cities: string[]) => cities.flatMap((c) => c.split(/[\s,，/、]+/)).map((c) => c.replace(/(省|市|区|县|自治区|特别行政区)$/, "")).filter((c) => c.length >= 2);
 /**
  * What makes two posts of one company the same role: the title without where it is (the post's own cities), which
@@ -173,10 +182,8 @@ export function roleKey(title: string, cities: string[] = []): string {
 }
 
 function toCard(r: Row, a: Assessment | null, me: Me, rules: Rules, applied: Map<string, string[]>, today: string, slot: Slot = "new", same: Row[] = []): Card {
-  const cities = json.parse(r.cities, [] as string[]);
-  const citiesOf = (x: Row) => { const own = json.parse(x.cities, [] as string[]); return own.length ? own : json.parse(x.c_cities, [] as string[]); };
-  const variants = same.map((x) => ({ positionId: x.id, title: x.title, cities: citiesOf(x) }));
-  const where = [...new Set([...(cities.length ? cities : json.parse(r.c_cities, [] as string[])), ...variants.flatMap((v) => v.cities)])];
+  const variants = same.map((x) => ({ positionId: x.id, title: x.title, cities: placeOf(x) }));
+  const where = [...new Set([...placeOf(r), ...variants.flatMap((v) => v.cities)])];
   const closesAt = r.closes_at ?? r.c_closes ?? null;
   const group = groupOf(r.company) ?? undefined;
   const groupApplied = (group ? applied.get(group) ?? [] : []).filter((n) => n !== r.company);
@@ -433,7 +440,7 @@ function readsOf(s: Services, picked?: Set<string>): Reads {
   return { picked, fit: (id) => { const r = q.get(id) as { score: number; verdict: string; profile_hash: string } | undefined; return r && r.profile_hash === hash ? { score: r.score, verdict: r.verdict } : null; } };
 }
 
-export const READ_PER_WEEK = 40;
+export const READ_PER_WEEK = 40, FIRST_CITY_READS = 8;
 const TRIAGE = `你在帮一位应届生从一批新岗位里挑出值得细读岗位描述的。给你他的画像和岗位清单，每行是：编号｜公司｜岗位名｜城市｜学历。
 挑出工作内容最可能与他的方向、研究和项目直接相关的；研发、算法、设计类优先，测试、销售、运维、行政靠后。
 岗位名只是沾了一个词的不要（例如对做控制工程的人：「风险控制」「物料控制」「财务控制」）。
@@ -455,7 +462,11 @@ export async function readForShortlist(s: Services, nowMs = Date.now(), maxMs = 
     const db = s.domain.db;
     const { rows, me, rules, applied, today, skippedBefore } = poolOf(s, nowMs);
     const { cands } = candidates(rows, me, rules, applied, (r) => assessed(db, r, me), today, skippedBefore);
-    const must = cands.filter((x) => x.r.key_company || /博士/.test(x.r.title));
+    // the first city's posts are always read too (FIRST_CITY_READS of them at most, the ones the rules rate highest):
+    // the list promises its best fitting post a card, and a post nobody read cannot be found to fit — a week that
+    // read none of them said 「没有对口的新岗位」 of a city it had not looked at
+    const home = cands.filter((x) => x.rank === 0 && (x.r.jd_text ?? "").trim()).slice(0, FIRST_CITY_READS);
+    const must = cands.filter((x) => x.r.key_company || /博士/.test(x.r.title) || home.includes(x));
     const others = cands.filter((x) => !must.includes(x)); // highest rule score first (candidates sorts them)
     // a post with no description cannot be read and takes none of the week's readings, so the look over the titles may
     // choose more than READ_PER_WEEK: on the first library half of what it chose had no description, and half the

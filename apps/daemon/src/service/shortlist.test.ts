@@ -94,6 +94,14 @@ describe("每周短名单", () => {
     expect(skipped.map((x) => [x.positionId, x.reason])).toEqual([["k0", "超出本周张数"]]);
   });
 
+  it("a title that names the city is believed over the batch's list of cities", () => {
+    // the batch lists 南京 among its cities; this post says it is in 珠海, which is not on the person's list
+    const rows = [row("a1", { title: "运动控制工程师（工作地点 珠海）", cities: '["南京","珠海"]' }), row("b1", { title: "运动控制工程师（工作地点 南京）", cities: '["南京","珠海"]', company_id: "b" })];
+    const { cards, skipped } = run(rows);
+    expect(cards.map((c) => [c.positionId, c.cities, c.cityRank])).toEqual([["b1", ["南京"], 0]]);
+    expect(skipped.map((x) => [x.positionId, x.reason])).toEqual([["a1", "工作地不在你的城市名单里"]]);
+  });
+
   it("同集团: side by side with a note, kept out only when the person said that group takes one", () => {
     const applied = new Map([["中船", ["中国船舶集团有限公司第七〇九研究所"]]]);
     const rows = [row("a1", { company: "中国船舶集团有限公司第七二二研究所" })];
@@ -190,6 +198,26 @@ describe("短名单细评: the two lines from the model's deep match", async () 
     expect((await readForShortlist(b.s)).read).toBe(0);
     expect(runShortlist(b.s).notes).toEqual(["这周没能细读岗位描述，按规则粗排"]);
     void latestShortlist;
+  });
+
+  it("the first city's posts are always read, whatever the look over the titles chose", async () => {
+    const { readForShortlist, READ_PER_WEEK } = await import("./shortlist.js");
+    // more posts than the week reads, all of another company than the 重点 one, in the person's first city
+    const { s, db, calls } = setup((n) => (n === 1 ? [] : good), 1);
+    db.prepare("delete from recommendation").run(); // no 重点 company: nothing is read for being one
+    const { upsertFact } = await import("./profile.js");
+    upsertFact(db, { kind: "direction", data: { keyword: "控制算法" } }, "本人确认"); // so the titles are the person's kind of post
+    const { ingest: put } = await import("../data/index.js");
+    put(s.domain, s.config.vault, "capture", "c2", [...Array(READ_PER_WEEK + 6)].map((_, i) => ({ externalId: `x${i}`, url: `https://example.org/x${i}`, title: `控制算法工程师x${i}`, company: `示例公司${i}`,
+      locations: ["上海"], description: JD, publisher: "site:example", grade: "官方", isOriginal: true, confidence: 1, cohort: "2027届", batch: "校招" }) as any));
+    (s.config as any).shortlist = { cities: [["南京"], ["上海"]] };
+    put(s.domain, s.config.vault, "capture", "c3", [{ externalId: "home", url: "https://example.org/home", title: "控制算法工程师home", company: "本地示例公司",
+      locations: ["南京"], description: JD, publisher: "site:example", grade: "官方", isOriginal: true, confidence: 1, cohort: "2027届", batch: "校招" } as any]);
+    const r = await readForShortlist(s);
+    const home = (db.prepare("select id from position where title = '控制算法工程师home'").get() as any).id;
+    expect(r.picked.has(home)).toBe(true);
+    expect(db.prepare("select 1 from position_fit where position_id = ?").get(home)).toBeTruthy(); // read, though the title look returned nothing
+    expect(calls.length).toBeGreaterThan(1);
   });
 
   it("a line whose quote is not in the post, a refusal of the gate, or a model error keeps the rule wording", async () => {
