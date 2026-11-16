@@ -65,6 +65,8 @@ export default function ModelService({ inside = false }: { inside?: boolean }) {
       </div>
 
       {(st.state === "signed_out" || st.state === "error") && method && <div className="mt-3 min-h-[57px] flex items-end"><Button tone="primary" disabled={busy} onClick={() => run("model.login")}>{method.kind === "api" ? "配置" : "登录"}</Button></div>}
+      {/* a login on file can have run out (the test below says so): the way back in is here, not only when nothing is on file */}
+      {st.state === "ready" && method && method.kind !== "api" && method.kind !== "none" && <div className="mt-2"><button className="text-xs text-accent" disabled={busy} onClick={() => run("model.login")}>重新登录</button></div>}
 
       {locked && (
         <div className="mt-3 border border-line rounded-md p-3 bg-ground/60 text-sm space-y-2">

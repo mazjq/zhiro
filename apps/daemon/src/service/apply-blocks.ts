@@ -65,6 +65,19 @@ const level = (s = "") => (/博士/.test(s) ? "博士" : /硕士/.test(s) ? "硕
 export const notDegree = (d: Record<string, string>) => /联合培养|访问|访学|交换|交流|不授学位|非学位/.test(d.degree ?? "");
 const planName = (kind: Kind, d: Record<string, string>) => (kind === "education" && d.degree ? `${d.school ?? ""}（${level(d.degree)}）` : nameOf(kind, d));
 
+/** One school written two ways (「阿尔伯塔大学（University of Alberta）」 on the profile, 「University of Alberta(加拿大)」 on the form): any of its names. */
+const sameSchool = (a: string, b: string) => {
+  const parts = (s: string) => s.normalize("NFKC").toLowerCase().split(/[()]/).map((p) => p.replace(/\s+/g, "")).filter((p) => p.length >= 4);
+  return parts(a).some((x) => parts(b).includes(x)); // a whole name of it, not a piece: 「示例大学」 is not 「海外示例大学」
+};
+/** Entries of 教育背景 already on the form that are a stay with no degree on the profile (the site parsed them out of the resume). */
+export function visitEntries(db: Db, fields: FormField[]): { section: string; name: string }[] {
+  const visits = listFacts(db).items.filter((f) => f.kind === "education" && notDegree(f.data as Record<string, string>)).map((f) => String(f.data.school ?? "")).filter(Boolean);
+  if (!visits.length) return [];
+  return slotsOf(fields).filter((s) => blockKind(s.section) === "education").map((s) => ({ section: s.section, name: filledName("education", s) }))
+    .filter((e) => e.name && visits.some((v) => sameSchool(v, e.name)));
+}
+
 /**
  * For every block the form has and the profile has records for: which record goes into which entry, and which records
  * still need a new entry (slot = null). Records already present in a filled entry are dropped from the plan.

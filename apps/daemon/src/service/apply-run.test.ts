@@ -10,7 +10,8 @@ import { ingest } from "../data/index.js";
 import { upsertFact, listFacts } from "./profile.js";
 import { closeBrowser, activePage, readForm } from "./apply.js";
 import { planBlocks } from "./apply-blocks.js";
-import { startRun, currentRun, stopRun, submittedNow } from "./apply-run.js";
+import { startRun, currentRun, stopRun, submittedNow, PARSE_WAIT } from "./apply-run.js";
+Object.assign(PARSE_WAIT, { step: 150, start: 0, most: 3000 }); // the test page parses nothing
 import type { Services } from "../services.js";
 
 const CHROME = ["C:/Program Files/Google/Chrome/Application/chrome.exe", "/usr/bin/google-chrome", "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome"].some(existsSync);
