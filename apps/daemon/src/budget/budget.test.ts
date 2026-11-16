@@ -118,6 +118,12 @@ describe("only background work asks", () => {
     const { l: l2 } = llm(async () => { throw new Error("BACKGROUND_FAILED: claude：一分钟没有任何输出"); });
     await expect(asBackground("capture_recheck", () => l2.models.completeSimple({} as any, ctx as any))).rejects.not.toMatchObject({ code: "BUDGET_DEFERRED" });
   });
+  it("a call the provider failed is an error with the provider's words, not an empty answer", async () => {
+    // no login in this folder: pi-ai answers with stopReason "error" and nothing in it, without throwing
+    const l = createLlm({ vault: mkdtempSync(join(tmpdir(), "zhiro-budget-llm-")), llm: { provider: "openai-codex", model: "gpt-5.5" } } as any);
+    l.route = () => ({ kind: "model" });
+    await expect(l.models.completeSimple(l.model(), ctx as any)).rejects.toMatchObject({ code: "MODEL_ERROR", message: expect.stringMatching(/^MODEL_ERROR: .+/) });
+  });
   it("a gate that throws holds the work instead of letting it through", async () => {
     const { l } = llm();
     l.gate = async () => { throw new Error("db locked"); };

@@ -123,7 +123,13 @@ export function createLlm(config: JobosConfig): Llm {
       report(msg, { provider: to.name, id: a.model || to.name }); // not through pi's streams, so counted here
       return msg;
     }
-    return complete(model, ctx, opts).catch(limited);
+    // pi-ai does not throw when the provider fails (a login that ran out, a model that is gone): it answers with
+    // stopReason "error" and nothing in it. Taken as an answer, the test button said 可用 and every caller parsed an empty
+    // string (2026-10-30…11-16). It is an error here, with the provider's own words.
+    return complete(model, ctx, opts).then((m: any) => {
+      if (m?.stopReason === "error") throw Object.assign(new Error(`MODEL_ERROR: ${String(m.errorMessage ?? "模型服务没有回答").slice(0, 300)}`), { code: "MODEL_ERROR" });
+      return m;
+    }).catch(limited);
   };
   const out = Object.assign(llm, {
     models,
