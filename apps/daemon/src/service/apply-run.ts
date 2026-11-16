@@ -5,10 +5,10 @@ import type { Services } from "../services.js";
 import type { Db } from "../db.js";
 import { DomainError, NotFound } from "./domain.js";
 import { openBrowser, browserOpen, activePage, readForm, mapFields, normLabel, reusableAnswer, SENSITIVE, peopleSection, type Mapped, type FormField } from "./apply.js";
-import { pickResume } from "./resumes.js";
-import { upsertFact } from "./profile.js";
+import { pickResume, resumeByLabel } from "./resumes.js";
+import { listFacts, upsertFact } from "./profile.js";
 import { choose } from "./apply-widgets.js";
-import { planBlocks, slotsOf, valueIn, addEntry, blockKind, partOf, planRecords, sameName, projectPart } from "./apply-blocks.js";
+import { planBlocks, slotsOf, valueIn, addEntry, blockKind, partOf, planRecords, sameName, projectPart, isOngoingBox, studyEnd } from "./apply-blocks.js";
 import { readReference } from "./apply-reference.js";
 const MAX_ENTRIES = 30;
 /** Fields whose answer was cut to the box's length limit this run, and that limit. */
@@ -236,26 +236,28 @@ async function tick(s: Services): Promise<void> {
   const attention: Attention[] = [...traces];
   if (foundAs) attention.push({ section: "岗位", label: foundAs, kind: "和画像不同", detail: "Zhiro 按岗位名在官网列表里找到的这一个，提交前请核对是不是你要投的岗位" });
   if (!uploaded) {
-    const r = s.domain.db.prepare("select file_path, file_name from resume where name = ?").get(run.resume) as any;
+    const r = resumeByLabel(s.domain.db, run.resume);
     const path = r?.file_path as string | undefined;
+    let why = ""; // what the site's upload said when it refused, for the person to read
+    const failed = (e: any) => { why = String(e?.message ?? e).split("\n")[0].slice(0, 120); };
     if (path && existsSync(path)) {
       // named 姓名+简历 — the library's own name ("通用 v6 Codex …") is nobody's business
       const owner = (s.domain.db.prepare("select data_json from fact where kind = 'basic'").all() as { data_json: string }[]).map((x) => JSON.parse(x.data_json)).find((d) => d.field === "姓名")?.value ?? "";
       const ext = (r.file_name ?? "").match(/\.[a-z0-9]+$/i)?.[0] ?? ".pdf";
       const upload = { name: `${owner}简历${ext}`, mimeType: /\.docx?$/i.test(r.file_name ?? "") ? "application/msword" : "application/pdf", buffer: readFileSync(path) };
       beforeUpload = form.fields;
-      if (file) await locate(page, file).setInputFiles(upload).then(() => { uploaded = true; }).catch(() => {});
+      if (file) await locate(page, file).setInputFiles(upload).then(() => { uploaded = true; }).catch(failed);
       else {
         // no file input in the DOM yet: some sites create it when their upload button is clicked — the one click a run makes
         const button = page.getByText(/^\s*上传简历\s*$/).first();
         if (await button.isVisible().catch(() => false)) {
           const chooser = page.waitForEvent("filechooser", { timeout: 5000 });
           await button.click({ timeout: 3000 }).catch(() => {});
-          await chooser.then((c) => c.setFiles(upload)).then(() => { uploaded = true; }).catch(() => {});
+          await chooser.then((c) => c.setFiles(upload)).then(() => { uploaded = true; }).catch(failed);
         }
       }
       if (uploaded) {
-        const id = (s.domain.db.prepare("select id from resume where name = ?").get(run.resume) as any)?.id;
+        const id = r?.id as string | undefined;
         traces = id ? (await checkResume(s.domain.db, id).catch(() => ({ items: [] }))).items.map((t) => ({ section: "上传", label: t.where, kind: "简历痕迹" as const, detail: `「${t.found}」${t.advice}` })) : [];
       }
       if (uploaded) {
@@ -271,7 +273,7 @@ async function tick(s: Services): Promise<void> {
         return;
       }
     }
-    if (file || files.length) attention.push({ section: (file ?? files[0]).section, label: (file ?? files[0]).label || "简历附件", kind: "请上传简历", detail: run.resume ? `没能自动传上「${run.resume}」` : "简历库里还没有简历" });
+    if (file || files.length) attention.push({ section: (file ?? files[0]).section, label: (file ?? files[0]).label || "简历附件", kind: "请上传简历", detail: !run.resume ? "简历库里还没有简历" : !r ? `简历库里找不到「${run.resume}」：「用的简历」要写库里的名称或文件名` : !path || !existsSync(path) ? `「${run.resume}」的文件不在了，请重新导入这份简历` : `没能自动传上「${run.resume}」${why ? `：${why}` : ""}` });
   }
 
   const ref = readReference(s.config.apply?.referenceDoc);
@@ -398,7 +400,7 @@ async function fillBlocks(s: Services, page: Page, attention: Attention[]): Prom
     for (const f of next.slot.fields) {
       const k = normLabel(f.label), n = nth.get(k) ?? 0;
       if (f.type !== "checkbox") nth.set(k, n + 1);
-      const v = f.type === "checkbox" ? (/至今/.test(next.record.period ?? "") && f.options.some((o) => /至今/.test(o)) ? "至今" : "") : valueIn(next.kind, next.record, f, n, next.slot.fields);
+      const v = f.type === "checkbox" ? (/至今/.test(next.record.period ?? "") && isOngoingBox(f) ? "至今" : "") : valueIn(next.kind, next.record, f, n, next.slot.fields, studyEnd(listFacts(s.domain.db).items));
       if (!v) continue;
       // N3: a control that already shows something else (a select's default 「本科」 in the PhD's entry) is left alone but reported
       if (!EMPTY.test(f.value.trim())) { if (f.value.trim().normalize("NFKC") !== v.normalize("NFKC")) attention.push({ section: f.section, label: `${next.name} · ${f.label}`, kind: "和画像不同", detail: `表单里是「${f.value.trim()}」，画像里是「${v}」` }); continue; }

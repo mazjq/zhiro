@@ -5,7 +5,7 @@ import { join } from "node:path";
 import { openDb } from "../db.js";
 import { Domain } from "./domain.js";
 import { ingest } from "../data/index.js";
-import { saveResume, listResumes, pickResume, removeResume, analyzeResume } from "./resumes.js";
+import { saveResume, listResumes, pickResume, removeResume, analyzeResume, resumeByLabel } from "./resumes.js";
 
 function setup() {
   const vault = mkdtempSync(join(tmpdir(), "jobos-resume-"));
@@ -51,6 +51,15 @@ describe("简历库", () => {
     expect(listResumes(db).items).toMatchObject([{ name: "金融版", isDefault: true }]);
     await expect(saveResume(db, vault, { name: "金融版", fileName: "z.txt", bytes: file("z") })).rejects.toMatchObject({ code: "DUPLICATE" });
     await expect(saveResume(db, vault, { name: "exe", fileName: "z.exe", bytes: file("z") })).rejects.toMatchObject({ code: "UNSUPPORTED_FILE" });
+  });
+
+  it("an application's 用的简历 names a resume by its library name or by its file's name", async () => {
+    const { vault, db } = setup();
+    const r = await saveResume(db, vault, { name: "研究版", fileName: "示例-研究版-v3.txt", bytes: file("做过运动控制") });
+    expect(resumeByLabel(db, "研究版")?.id).toBe(r.resume.id);
+    expect(resumeByLabel(db, " 示例-研究版-v3.txt ")?.id).toBe(r.resume.id);
+    expect(resumeByLabel(db, "没有这一份")).toBeUndefined();
+    expect(resumeByLabel(db, "")).toBeUndefined();
   });
 
   it("analysis is advice only and refuses a resume it cannot read", async () => {

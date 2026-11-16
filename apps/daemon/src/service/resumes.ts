@@ -24,6 +24,16 @@ function row(r: any) {
     note: r.note as string, isDefault: !!r.is_default, hasText: !!r.text_path && existsSync(r.text_path), filePath: r.file_path as string, createdAt: r.created_at as string };
 }
 
+/**
+ * The library row an application's 用的简历 names. People and agents write the library name (「研究版」) or the file's
+ * name (「某某-研究版-v10.pdf」) there; both mean the same resume (a run once uploaded nothing for it, 2026-11-16).
+ */
+export function resumeByLabel(db: Db, label: string): any {
+  const l = (label ?? "").trim();
+  if (!l) return undefined;
+  return db.prepare("select * from resume where name = ?").get(l) ?? db.prepare("select * from resume where file_name = ? order by is_default desc, created_at limit 1").get(l);
+}
+
 export function listResumes(db: Db) {
   return { items: (db.prepare("select * from resume order by is_default desc, created_at").all() as any[]).map(row) };
 }

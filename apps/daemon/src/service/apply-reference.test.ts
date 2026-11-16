@@ -51,6 +51,9 @@ describe("the 系统填写 document", () => {
     expect(r.fields.has("说明")).toBe(false);
     expect(r.projects).toEqual([{ title: "仓储机器人调度系统开发项目", description: "校企合作横向项目。", role: "技术负责人", summary: "组织完成上位机系统。" }]);
     expect(parseAward("不是一条奖")).toEqual([]);
+    // the date to the month, and who gave it after a 「｜」
+    expect(parseAward("3. 2019.12 全国大学生数学建模竞赛二等奖（国家级）｜示例学会")).toEqual([{ title: "全国大学生数学建模竞赛二等奖", year: "2019", period: "2019.12-2019.12", issuer: "示例学会", level: "国家级" }]);
+    expect(parseAward("4. 2020年6月 校级优秀学生")).toEqual([{ title: "校级优秀学生", year: "2020", period: "2020.06-2020.06" }]);
     expect(refAnswer(r, "个人特长")?.key).toBe("个人特长");
     expect(refAnswer(r, "身高/cm")?.value).toBe("178");
   });
@@ -122,7 +125,7 @@ describe("what the first real Moka form got wrong", () => {
     expect(valueIn("project", record, slot[1], 0, slot)).toBe("校企合作横向项目。");
     expect(valueIn("project", record, slot[2], 0, slot)).toBe("技术负责人：组织完成上位机系统。");
     const alone = entry(["项目名称", "项目描述"], "项目经验");
-    expect(valueIn("project", record, alone[1], 0, alone)).toBe("校企合作横向项目。\n本人职责：技术负责人：组织完成上位机系统。");
+    expect(valueIn("project", record, alone[1], 0, alone)).toBe("校企合作横向项目。组织完成上位机系统。");
     // a real Moka form: a one-line 「职责」 beside the 「项目中职责」 paragraph is the role
     const both = entry(["项目名称", "职责", "项目描述", "项目中职责"], "项目经验").map((f, i) => (i === 1 ? { ...f, type: "text" } : f));
     expect(valueIn("project", record, both[1], 0, both)).toBe("技术负责人");
@@ -130,5 +133,30 @@ describe("what the first real Moka form got wrong", () => {
     const awards = entry(["奖项名称"], "获奖经历");
     expect(planBlocks(d, awards).map((p) => p.name)).toEqual(["全国大学生数学建模竞赛 · 全国二等奖"]);
     expect(planBlocks(d, awards, parseReference(DOC)).map((p) => p.name)).toHaveLength(4);
+  });
+});
+
+describe("系统填写文档: a project's duties over several lines", () => {
+  const PROJECTS = [
+    "项目经历",
+    "项目名称：示例重点项目", "项目描述：某基金重点项目，面向示例装备的协同控制。", "担任角色：项目骨干",
+    "项目职责：本人主要负责以下内容：",
+    "· 研究攻关：承担研究内容二，完成仿真软件", "· 申报论证：撰写研究内容及技术路线，负责编制答辩材料",
+    "项目名称：示例横向项目", "项目描述：与某单位合作的示例艇项目", "项目职责：负责硬件选型与验证平台搭建，实现室外定位。",
+    "自我评价", "这是标准版的一段自我评价。", "另外的版本（长版）：", "不该读到的长版，比标准版长。",
+  ];
+  it("the points under 项目职责 are its lines, up to the next key; a point is never a key, whatever words it holds", () => {
+    const r = parseReference(PROJECTS);
+    expect(r.projects).toEqual([
+      { title: "示例重点项目", description: "某基金重点项目，面向示例装备的协同控制。", role: "项目骨干", summary: "本人主要负责以下内容：\n· 研究攻关：承担研究内容二，完成仿真软件\n· 申报论证：撰写研究内容及技术路线，负责编制答辩材料" },
+      { title: "示例横向项目", description: "与某单位合作的示例艇项目", summary: "负责硬件选型与验证平台搭建，实现室外定位。" },
+    ]);
+    expect(r.fields.get("自我评价")).toBe("这是标准版的一段自我评价。"); // the first version only
+  });
+  it("an entry with only 项目描述 gets the description and the duties run together, line breaks kept", () => {
+    const [a, b] = parseReference(PROJECTS).projects as unknown as Record<string, string>[];
+    const box = { index: 0, local: 0, frame: "", section: "项目经历", label: "项目描述", type: "textarea", required: false, options: [], value: "", placeholder: "", name: "", entry: 0 } as any;
+    expect(valueIn("project", a, box, 0, [box])).toBe("某基金重点项目，面向示例装备的协同控制。本人主要负责以下内容：\n· 研究攻关：承担研究内容二，完成仿真软件\n· 申报论证：撰写研究内容及技术路线，负责编制答辩材料");
+    expect(valueIn("project", b, box, 0, [box])).toBe("与某单位合作的示例艇项目。负责硬件选型与验证平台搭建，实现室外定位。"); // a full stop where the description had none
   });
 });
