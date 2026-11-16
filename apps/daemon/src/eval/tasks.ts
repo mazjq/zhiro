@@ -169,8 +169,8 @@ export const TASKS: Task[] = [
   },
   // ---------------- 多步 ----------------
   {
-    id: "M1-find-and-watch", category: "多步", prompt: "帮我找武汉的控制算法岗，关注匹配度最高的三个。",
-    criteria: "三个目标：楚天智驾/运动控制算法、星澜汽车/底盘控制算法、江城机器人/机器人控制算法（后两个已关注，指出已关注也算覆盖）；提案只能落在武汉在招的控制类岗位上，不含已截止的旧港船舶。",
+    id: "M1-find-and-watch", category: "多步", prompt: "帮我找南京的控制算法岗，关注匹配度最高的三个。",
+    criteria: "三个目标：楚天智驾/运动控制算法、星澜汽车/底盘控制算法、江城机器人/机器人控制算法（后两个已关注，指出已关注也算覆盖）；提案只能落在南京在招的控制类岗位上，不含已截止的旧港船舶。",
     expectTools: ["pool.list", "position.list"], allowProposals: ["position.watch"], budget: 5,
     check(c) {
       const canon = [c.w.pos.chutian_motion, c.w.pos.xinglan_chassis, c.w.pos.jiangcheng_robot];
@@ -195,7 +195,7 @@ export const TASKS: Task[] = [
   // ---------------- 解释 ----------------
   {
     id: "E1-why-recommended", category: "解释", prompt: "为什么推荐我江城机器人？",
-    criteria: "引用实际标签与理由：「我点名的」(导师推荐/力控/离家近) 和「画像匹配」(标题命中 控制/控制算法、城市 武汉)。",
+    criteria: "引用实际标签与理由：「我点名的」(导师推荐/力控/离家近) 和「画像匹配」(标题命中 控制/控制算法、城市 南京)。",
     expectTools: ["pool.list", "company.search"], allowProposals: [], budget: 3,
     check(c) {
       const manual = any(c.text, "导师", "我点名", "点名");

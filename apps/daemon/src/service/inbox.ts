@@ -66,10 +66,10 @@ export function looksLikeRecruiting(m: Pick<RawMail, "from" | "subject" | "text"
   return appliedCompanies.some((c) => c.length >= 2 && flat.includes(c));
 }
 
-/** Names (and aliases) of companies the user has an open application with, as lossless keys; legal suffixes dropped so "华中数控" matches "武汉华中数控股份有限公司". */
+/** Names (and aliases) of companies the user has an open application with, as lossless keys; legal suffixes dropped so "远帆数控" matches "上海远帆数控股份有限公司". */
 export function appliedCompanyKeys(db: Db): string[] {
   const rows = db.prepare("select distinct co.name, co.aliases from application a join campaign c on c.id = a.campaign_id join company co on co.id = c.company_id where a.state not in ('closed', 'cancelled')").all() as any[];
-  // HR mail says "华中数控", the registered name is "武汉华中数控股份有限公司": also try it without the legal tail and the place-name head
+  // HR mail says "远帆数控", the registered name is "上海远帆数控股份有限公司": also try it without the legal tail and the place-name head
   const REGION = /^(中国|北京|上海|天津|重庆|深圳|广州|武汉|杭州|南京|成都|西安|苏州|长沙|合肥|青岛|厦门|宁波|无锡|济南|郑州|大连|沈阳|哈尔滨|长春|福州|东莞|佛山|珠海|昆明|贵阳|南昌|太原|石家庄|兰州|乌鲁木齐|湖北|湖南|广东|江苏|浙江|山东|四川|陕西|河南|河北|安徽|福建|江西|辽宁|吉林|黑龙江)(市|省)?/u;
   const short = (n: string) => companyKey(n).replace(/(股份|集团|科技|技术)$/u, "");
   const brand = (n: string) => short(n).replace(REGION, "");

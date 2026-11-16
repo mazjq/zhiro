@@ -51,7 +51,7 @@ async function pick(page: Page, scope: Locator, sel: string, want: string[], fuz
   const found = await scope.evaluate((root, [sel, want, fuzzy]) => {
     document.querySelectorAll("[data-jobos-pick]").forEach((e) => e.removeAttribute("data-jobos-pick"));
     const vis = (e: Element) => { const r = (e as HTMLElement).getBoundingClientRect(); return r.width > 0 && r.height > 0 && getComputedStyle(e).visibility !== "hidden"; };
-    // compared width- and space-insensitively: a site writes 东海科技大学(武汉) where the profile has （武汉）
+    // compared width- and space-insensitively: a site writes 东海科技大学(南京) where the profile has （南京）
     const own = (e: Element) => ((e.querySelector("[class*='option-label']") ?? e).textContent ?? "").normalize("NFKC").replace(/\s+/g, "");
     // a greyed-out item (Moka's calendar shows the next decade's first year, faded, at the end of a page: clicking it does
     // not select it — 2026-10-14) is marked on its wrapper, not on the item itself
@@ -76,7 +76,7 @@ async function pick(page: Page, scope: Locator, sel: string, want: string[], fuz
  */
 async function press(loc: Locator): Promise<void> {
   try { await loc.click({ timeout: 2000 }); }
-  catch { for (const type of ["mousedown", "mouseup", "click"]) await loc.dispatchEvent(type, { bubbles: true }); }
+  catch { for (const type of ["mousedown", "mouseup", "click"]) await loc.dispatchEvent(type, { bubbles: true }, { timeout: 1500 }); }
 }
 
 const waitFor = async (fn: () => Promise<boolean>, ms = 5000) => { const t = Date.now(); while (Date.now() - t < ms) { if (await fn().catch(() => false)) return true; await new Promise((r) => setTimeout(r, 120)); } return false; };
@@ -97,6 +97,14 @@ export async function familyOf(el: Locator): Promise<"moka" | "moka-date" | "mok
 
 /** Set a dropdown / date / area control to `value`. `monthBox` = this is the 月 box of a 年/月 pair. */
 export async function choose(page: Page, el: Locator, value: string, opts: { monthBox?: boolean } = {}): Promise<string> {
+  try { return await chooseIn(page, el, value, opts); }
+  catch (e: any) {
+    // a pop-up left open took the click meant for the next field (2026-11-16: 籍贯 threw, then 第一学历 「没有弹出来」)
+    await page.keyboard.press("Escape").catch(() => {});
+    return `这个控件没操作成功（${String(e?.message ?? e).split("\n")[0].slice(0, 80)}），请在页面上选`;
+  }
+}
+async function chooseIn(page: Page, el: Locator, value: string, opts: { monthBox?: boolean }): Promise<string> {
   const family = await familyOf(el);
   if (family === "moka") return moka(page, el, value, !!opts.monthBox);
   if (family === "moka-date") return mokaDate(page, el, value);
@@ -107,11 +115,14 @@ export async function choose(page: Page, el: Locator, value: string, opts: { mon
   return generic(page, el, value, !!opts.monthBox);
 }
 
-/** What to type into a place search: the whole "湖南省嘉兴市", then 嘉兴市 / 嘉兴, then 湖南省 / 湖南 — sites index places differently. */
+/** What to type into a place search: the whole "浙江省嘉兴市", then 嘉兴市 / 嘉兴, then 浙江省 / 浙江 — sites index places differently. */
 export function searchTerms(value: string): string[] {
   const parts = value.split(/(?<=省|自治区|市|自治州|盟|区|县)|[\s/、,，-]+/).map((p) => p.trim()).filter(Boolean); // 杭州 / 广州 end in 州 but are one name
   const bare = (p: string) => p.replace(/(省|市|自治区|区|县)$/, "");
-  const out = [value, ...[...parts].reverse().flatMap((p) => [p, bare(p)])];
+  // a name with a bracket (「东海科技大学（南京）」): sites spell the bracket half-width and search by it literally, so
+  // that spelling too, and the name before the bracket (the list then shows both campuses and the pick decides)
+  const half = value.normalize("NFKC"), head = half.split("(")[0].trim();
+  const out = [value, ...(half !== value ? [half] : []), ...(head !== half ? [head] : []), ...[...parts].reverse().flatMap((p) => [p, bare(p)])];
   return [...new Set(out.filter((x) => x.length >= 2))];
 }
 
@@ -193,17 +204,32 @@ async function moka(page: Page, el: Locator, value: string, monthBox: boolean): 
     await close();
     return "网站的候选里没有这一项";
   }
-  if (!(await waitFor(opened, 2500))) { await close(); return "选项没有弹出来"; }
+  if (!(await waitFor(opened, 2500))) {
+    // something else may have had the first click (another control's pop-up closing): close, and open once more
+    await close(); await page.waitForTimeout(200);
+    await press((await container.count()) ? container : el);
+    if (!(await waitFor(opened, 2500))) { await close(); return "选项没有弹出来"; }
+  }
   // long lists (years: 201 of them) may be virtualised: typing narrows them when the box accepts input
   let { root, sel } = await where();
   let r = await pick(page, root, sel, want, !monthBox && !/^\d{4}$/.test(value));
-  if (r === null && (await el.isEditable().catch(() => false))) { await el.pressSequentially(value, { delay: 40 }).catch(() => {}); await page.waitForTimeout(400); ({ root, sel } = await where()); r = await pick(page, root, sel, want, false); }
+  // typed as the site spells it (half-width brackets), then without the bracket: 「（南京）」 typed full-width narrowed the
+  // list to nothing on a site whose options say 「(南京)」 (2026-11-16)
+  const half = value.normalize("NFKC"), head = half.split("(")[0].trim();
+  for (const term of [...new Set([half, head])]) {
+    if (r !== null || !term || !(await el.isEditable().catch(() => false))) break;
+    await el.fill("").catch(() => {});
+    await el.pressSequentially(term, { delay: 40 }).catch(() => {});
+    await page.waitForTimeout(400);
+    ({ root, sel } = await where());
+    r = await pick(page, root, sel, want, false);
+  }
   if (r === null) { await close(); return `没有「${value}」这个选项`; }
   if (r) { await close(); return r; }
   return done();
 }
 
-/** "湖南省嘉兴市" → the levels a cascade shows: 湖南省 / 嘉兴市. Compared without the 省 / 市 / 区 suffix: Moka shows 湖南, 嘉兴市. */
+/** "浙江省嘉兴市" → the levels a cascade shows: 浙江省 / 嘉兴市. Compared without the 省 / 市 / 区 suffix: Moka shows 浙江, 嘉兴市. */
 export function areaLevels(value: string): string[] {
   return value.split(/(?<=省|自治区|特别行政区|市|自治州|盟|地区|区|县|旗)|[\s/、,，-]+/).map((p) => p.trim()).filter(Boolean);
 }
@@ -230,13 +256,18 @@ async function mokaArea(page: Page, el: Locator, value: string): Promise<string>
       const hit = els.filter((e) => !e.children.length && (e as HTMLElement).getBoundingClientRect().height > 0 && (e.textContent ?? "").normalize("NFKC").replace(/\s+/g, "").replace(/(省|市|自治区|壮族自治区|回族自治区|维吾尔自治区|特别行政区|地区|区|县|旗|自治州|盟)$/, "") === w);
       hit[hit.length - 1]?.setAttribute("data-jobos-pick", "1"); // the newest column is the last one
     }, want);
-    await press(page.locator("[data-jobos-pick]").first());
+    // the list may be drawn again between the mark and the click (the mark is then gone): click what is found there now
+    await press(page.locator("[data-jobos-pick]").first()).catch(() => box.locator("li, div, span").evaluateAll((els, w) => {
+      const hit = els.filter((e) => !e.children.length && (e as HTMLElement).getBoundingClientRect().height > 0 && (e.textContent ?? "").normalize("NFKC").replace(/\s+/g, "").replace(/(省|市|自治区|壮族自治区|回族自治区|维吾尔自治区|特别行政区|地区|区|县|旗|自治州|盟)$/, "") === w);
+      const e = hit[hit.length - 1] as HTMLElement | undefined;
+      for (const type of ["mousedown", "mouseup", "click"]) e?.dispatchEvent(new MouseEvent(type, { bubbles: true }));
+    }, want));
     await page.waitForTimeout(400);
   }
   // done if the box now shows the last level; if a further column opened (区县) the profile does not go that deep
   if (await waitFor(async () => bareArea(await shown()).includes(bareArea(levels[levels.length - 1])) || (await shown()).includes(levels[levels.length - 1]), 1500)) return "";
   await page.keyboard.press("Escape").catch(() => {});
-  return `这里要选到区/县，画像里只写到「${levels.join("")}」；把画像里这一项写到区县（如 湖南省嘉兴市南湖区）就能自动选`;
+  return `这里要选到区/县，画像里只写到「${levels.join("")}」；把画像里这一项写到区县（如 浙江省嘉兴市南湖区）就能自动选`;
 }
 
 /** 出生日期 (年龄) — a year/month calendar: open, switch to the decade view, page to the year, pick year, pick month. */

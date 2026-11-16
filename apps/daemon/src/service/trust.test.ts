@@ -9,7 +9,7 @@ import { checkNotice, recordCheck, type NoticeDoc, type Extract } from "./notice
 import { companyIdentity } from "./notice-verify.js";
 
 const SEASON = { cohort: "2027", since: "2026-03-01", until: "2027-08-31" };
-const listing = (company: string, url: string): Listing => ({ externalId: `${company}-1`, url, title: "控制算法工程师", company, locations: ["武汉"], publisher: "x", grade: "官方", isOriginal: true, confidence: 1, cohort: "2027届", batch: "校招" });
+const listing = (company: string, url: string): Listing => ({ externalId: `${company}-1`, url, title: "控制算法工程师", company, locations: ["南京"], publisher: "x", grade: "官方", isOriginal: true, confidence: 1, cohort: "2027届", batch: "校招" });
 function setup() {
   const dir = mkdtempSync(join(tmpdir(), "zhiro-trust-"));
   const db = openDb(join(dir, "t.db"));
@@ -80,19 +80,19 @@ describe("官网信任根: only sites on record, with their evidence, are a comp
 
 describe("exchange disclosures: one listed company, by its exact name", () => {
   const hit = (code: string, zwjc: string, o: Partial<ExchangeHit> = {}): ExchangeHit => ({ code, zwjc, category: "A股", delisted: "false", ...o });
-  const orgs: Record<string, string> = { "300161": "武汉华中数控股份有限公司", "600000": "示例集团股份有限公司", "600001": "示例科技股份有限公司" };
+  const orgs: Record<string, string> = { "300161": "杭州海康威视数字技术股份有限公司", "600000": "示例集团股份有限公司", "600001": "示例科技股份有限公司" };
   const org = (c: string) => orgs[c];
   it("matches the short name or the full name exactly, and only when one live A-share does", () => {
     expect(pickExchange(["华中数控"], [hit("300161", "华中数控")], org)?.code).toBe("300161");
-    expect(pickExchange(["武汉华中数控股份有限公司"], [hit("300161", "华中数控")], org)?.code).toBe("300161");
+    expect(pickExchange(["杭州海康威视数字技术股份有限公司"], [hit("300161", "华中数控")], org)?.code).toBe("300161");
     expect(pickExchange(["华中数控集团"], [hit("300161", "华中数控")], org)).toBeNull(); // a name containing another is no match
     expect(pickExchange(["示例"], [hit("600000", "示例集团"), hit("600001", "示例科技")], org)).toBeNull();
     expect(pickExchange(["华中数控"], [hit("300161", "华中数控", { delisted: "true" })], org)).toBeNull();
     expect(pickExchange(["华中数控"], [hit("01810", "华中数控", { category: "港股" })], org)).toBeNull();
   });
   it("reads the full name and every disclosed website", () => {
-    expect(parseProfile({ data: { records: [{ basicInformation: [{ ORGNAME: "武汉华中数控股份有限公司", F011V: "www.huazhongcnc.com；http://www.hzncc.com" }] }] } }))
-      .toEqual({ orgName: "武汉华中数控股份有限公司", websites: ["www.huazhongcnc.com", "http://www.hzncc.com"] });
+    expect(parseProfile({ data: { records: [{ basicInformation: [{ ORGNAME: "杭州海康威视数字技术股份有限公司", F011V: "www.huazhongcnc.com；http://www.hzncc.com" }] }] } }))
+      .toEqual({ orgName: "杭州海康威视数字技术股份有限公司", websites: ["www.huazhongcnc.com", "http://www.hzncc.com"] });
     expect(parseProfile({ data: { records: [] } })).toBeNull();
   });
 });

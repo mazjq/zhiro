@@ -122,8 +122,8 @@ describe("mapping from what the user answered before", () => {
     upsertFact(db, { id: phd.id, kind: "education", data: { ...phd.data, period: "2021.09—2027.06" } }, "本人确认"); // the user edits the card
     upsertFact(db, { kind: "basic", data: { field: "性别", value: "男" } }, "本人确认");
     upsertFact(db, { kind: "basic", data: { field: "民族", value: "汉族" } }, "本人确认");
-    upsertFact(db, { kind: "preference", data: { field: "期望城市", value: "武汉" } }, "本人确认");
-    upsertFact(db, { kind: "basic", data: { field: "校招面试站点", value: "武汉站" } }, "本人确认");
+    upsertFact(db, { kind: "preference", data: { field: "期望城市", value: "南京" } }, "本人确认");
+    upsertFact(db, { kind: "basic", data: { field: "校招面试站点", value: "南京站" } }, "本人确认");
     const m = await mapFields(db, undefined, [
       field({ index: 0, label: "性别", type: "dropdown" }), field({ index: 1, label: "民族", type: "dropdown" }), field({ index: 2, label: "期望工作城市" }),
       field({ index: 3, label: "校招面试站点（必选）", type: "cascader" }), field({ index: 4, label: "期望薪资" }),
@@ -134,8 +134,8 @@ describe("mapping from what the user answered before", () => {
     const by = (i: number) => m.find((x) => x.index === i)!;
     expect(by(0)).toMatchObject({ proposed: "男", status: "可填" });
     expect(by(1)).toMatchObject({ proposed: "汉族", status: "可填" });
-    expect(by(2)).toMatchObject({ proposed: "武汉", status: "可填" });
-    expect(by(3)).toMatchObject({ proposed: "武汉站", status: "可填" });
+    expect(by(2)).toMatchObject({ proposed: "南京", status: "可填" });
+    expect(by(3)).toMatchObject({ proposed: "南京站", status: "可填" });
     expect(by(4).status).toBe("由你填写");
     expect([5, 6, 7, 8].map((i) => by(i).proposed)).toEqual(["2021", "09", "2027", "06"]);
     expect(by(9)).toMatchObject({ status: "画像里没有", proposed: "" });

@@ -6,7 +6,7 @@ import type { Db } from "../db.js";
 import type { Llm } from "../llm.js";
 import { DomainError } from "./domain.js";
 import { listFacts } from "./profile.js";
-import { blockKind } from "./apply-blocks.js";
+import { blockKind, notDegree } from "./apply-blocks.js";
 import { optionAliases } from "./apply-widgets.js";
 import type { Reference } from "./apply-reference.js";
 
@@ -36,7 +36,9 @@ async function launchNew(vault: string, headless: boolean): Promise<BrowserConte
     const { chromium } = await import("playwright-core");
     // chromiumSandbox: Playwright turns Chrome's sandbox OFF by default (the "--no-sandbox" warning bar); this is the
     // user's real browser on real sites, so keep the sandbox on.
-    try { ctx = await chromium.launchPersistentContext(dir, { channel: "chrome", headless, viewport: null, chromiumSandbox: true, args: ["--no-first-run", "--no-default-browser-check"] }); }
+    try { ctx = await chromium.launchPersistentContext(dir, { channel: "chrome", headless, viewport: null, chromiumSandbox: true, args: ["--no-first-run", "--no-default-browser-check"],
+      // Playwright starts Chrome with extensions off; this is the person's own window, and they may want theirs in it
+      ignoreDefaultArgs: ["--disable-extensions"] }); }
     catch (e: any) { throw new DomainError("BROWSER_FAILED", `启动 Chrome 失败：${String(e?.message ?? e).split("\n")[0]}（需要本机装有 Chrome；同一个专用 profile 不能被两个 Chrome 同时打开）`); }
     ctxHeadless = headless;
     ctx.on("close", () => { ctx = null; ctxHeadless = false; });
@@ -237,7 +239,7 @@ const ABROAD = /海外|境外|留学|国外/;
 /** Words of an option or a button, never a question: a field "labelled" so was read wrong (READ_FORM keeps its own copy). */
 export const OPTION_WORD = /^(无|否|是|有|没有|请选择|选择|男|女|确定|取消|添加|删除)$/;
 export const normLabel = (s: string) => s.replace(/[（(][^）)]*[）)]/g, "").replace(/[*＊:：\s]/g, "").replace(/^(您的|你的|请输入|请填写|请选择)/, "").trim();
-// 「是否接受意向城市调剂」 is a yes / no question, not the city (it got 「武汉」 on 大疆, 2026-10-14)
+// 「是否接受意向城市调剂」 is a yes / no question, not the city (it got 「南京」 on 大疆, 2026-10-14)
 export const canonOf = (label: string) => (/是否/.test(label) ? "" : CANON.find(([re]) => re.test(normLabel(label)))?.[1] ?? "");
 
 /** A question about the company or the post asked: its answer is for that company (「为什么选择我司」「对岗位的理解」). */
@@ -288,7 +290,7 @@ function valueFor(facts: any[], key: string, section: string, ref?: Reference | 
     return { value: hits.map((h) => h.data.value).join("、"), source: hits.length ? `${hits[0].kind === "basic" ? "基本信息" : "意向"} · ${hits[0].grade}` : "" };
   }
   if (kind === "education") {
-    const edu = facts.filter((x) => x.kind === "education");
+    const edu = facts.filter((x) => x.kind === "education" && !notDegree(x.data)); // a 联合培养 / visit is not the 博士 院校 nor the 最高学历
     const rank = (d: string) => (d.includes("博士") ? 3 : d.includes("硕士") ? 2 : 1);
     const [sec, lab = ""] = section.split("|");
     const stagesIn = (s: string) => [/本科|学士/.test(s) && 1, /硕士/.test(s) && 2, /博士/.test(s) && 3].filter(Boolean) as number[];

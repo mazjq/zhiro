@@ -6,8 +6,8 @@ import { pathToFileURL } from "node:url";
 import { openDb } from "../db.js";
 import { upsertFact } from "./profile.js";
 import { openBrowser, closeBrowser, activePage, readForm, mapFields, normLabel, type FormField } from "./apply.js";
-import { choose } from "./apply-widgets.js";
-import { planBlocks } from "./apply-blocks.js";
+import { choose, searchTerms } from "./apply-widgets.js";
+import { planBlocks, valueIn, studyEnd, isOngoingBox, visitEntries } from "./apply-blocks.js";
 import { siteFilled } from "./apply-run.js";
 
 /** Regressions for the defects the independent acceptance found (docs/reports/2026-09-21-autofill-acceptance.md). */
@@ -67,6 +67,61 @@ describe("acceptance regressions: mapping", () => {
     expect(plan).toHaveLength(2);
   });
 
+  it("教育背景: a stay that gives no degree is not an entry; two degrees at one school are two entries", () => {
+    const db = profile();
+    upsertFact(db, { kind: "education", data: { school: "海外示例大学", degree: "联合培养博士（不授学位）", major: "电气工程", period: "2024.12—2026.11" } }, "本人确认");
+    const blank = (section: string) => [field({ section, label: "学校名称", entry: 0 }), field({ section, label: "学历", type: "select", entry: 0 })];
+    const names = (fields: FormField[]) => planBlocks(db, fields).map((p) => p.name);
+    expect(names(blank("教育背景"))).toEqual(["示例大学（博士）", "示例学院（本科）"]); // the highest degree first, as before; the visit is left out
+    // the 博士 entry already on the form does not stand for a 硕士 at the same school
+    upsertFact(db, { kind: "education", data: { school: "示例大学", degree: "硕士", major: "控制工程", period: "2019.09—2021.06" } }, "本人确认");
+    const filled = [field({ section: "教育背景", label: "学校名称", value: "示例大学", entry: 0 }), field({ section: "教育背景", label: "学历", type: "select", value: "博士", entry: 0 })];
+    expect(names(filled)).toEqual(["示例大学（硕士）", "示例学院（本科）"]);
+  });
+
+  it("a period that runs on: the entry's 「至今」 box is ticked and the end left empty; with no such box the end is when the person's studies end", () => {
+    const rec = { title: "示例项目", period: "2024.01-至今" };
+    const year = (label: string) => field({ section: "项目经历", label, placeholder: "年", entry: 0 }), month = (label: string) => field({ section: "项目经历", label, placeholder: "月", entry: 0 });
+    const boxes = [year("起止时间"), month("起止时间"), year("起止时间"), month("起止时间")];
+    const tick = field({ section: "项目经历", label: "起止时间", type: "checkbox", options: ["至今"], entry: 0 });
+    const until = studyEnd([{ kind: "education", data: { degree: "博士", period: "2021.09—2027.06" } }, { kind: "education", data: { degree: "联合培养博士（不授学位）", period: "2024.12—2028.11" } }]);
+    expect(until).toEqual(["2027", "06"]); // the degree programme, not the visit
+    expect(boxes.map((f, i) => valueIn("project", rec, f, i, [...boxes, tick], until))).toEqual(["2024", "01", "", ""]);
+    expect(isOngoingBox(tick)).toBe(true);
+    expect(isOngoingBox(field({ label: "至今", type: "checkbox" }))).toBe(true); // a site that names the box itself
+    expect(boxes.map((f, i) => valueIn("project", rec, f, i, boxes, until))).toEqual(["2024", "01", "2027", "06"]);
+    expect(valueIn("project", rec, field({ section: "项目经历", label: "结束时间", entry: 0 }), 0, [], until)).toBe("2027-06");
+  });
+
+  it("教育背景: an entry the site made for a stay with no degree is named for the person to delete, and no record goes into it", () => {
+    const db = profile();
+    upsertFact(db, { kind: "education", data: { school: "海外示例大学（Example University）", degree: "联合培养博士（不授学位）", major: "电气工程", period: "2024.12—2026.11" } }, "本人确认");
+    const e = (entry: number, school: string, degree: string) => [field({ section: "教育背景", label: "学校名称", type: "dropdown", value: school, entry }), field({ section: "教育背景", label: "学历", type: "dropdown", value: degree, entry })];
+    // as the site parsed the resume: the doctorate, the visit under its English name, the bachelor's
+    const form = [...e(0, "示例大学", "博士研究生"), ...e(1, "Example University(某国)", ""), ...e(2, "示例学院", "本科")];
+    expect(visitEntries(db, form)).toEqual([{ section: "教育背景", name: "Example University(某国)" }]);
+    expect(planBlocks(db, form)).toEqual([]); // both degrees are on the form already; the visit's entry is nobody's slot
+  });
+
+  it("a name with a bracket is searched as the site spells it, then without the bracket", () => {
+    expect(searchTerms("示例大学（南京）").slice(0, 3)).toEqual(["示例大学（南京）", "示例大学(南京)", "示例大学"]);
+    expect(searchTerms("示例大学")).toEqual(["示例大学"]);
+  });
+
+  it("获奖: 颁发单位 is filled from the card's org or the document's issuer", () => {
+    const box = field({ section: "获奖情况", label: "颁发单位", entry: 0 });
+    expect(valueIn("award", { title: "示例奖", org: "示例学会" }, box, 0)).toBe("示例学会");
+    expect(valueIn("award", { title: "示例奖", issuer: "示例协会", org: "示例学会" }, box, 0)).toBe("示例协会");
+    expect(valueIn("award", { title: "示例奖" }, field({ section: "获奖情况", label: "奖项名称", entry: 0 }), 0)).toBe("示例奖");
+  });
+
+  it("教育背景: a 联合培养 stay is not the 最高学历 either", async () => {
+    const db = profile();
+    upsertFact(db, { kind: "education", data: { school: "海外示例大学", degree: "联合培养博士（不授学位）", major: "电气工程", period: "2024.12—2026.11" } }, "本人确认");
+    const m = await mapFields(db, undefined, [field({ index: 0, section: "博士教育", label: "学校名称" })]);
+    expect(m[0].proposed).toBe("示例大学");
+  });
+
   it("N11: a section that only says 研究生 takes the doctorate of a direct PhD; 硕士 stays empty", async () => {
     const m = await mapFields(profile(), undefined, [field({ index: 0, section: "研究生教育", label: "学校名称" }), field({ index: 1, section: "研究生阶段", label: "专业" }), field({ index: 2, section: "硕士教育", label: "学校名称" })]);
     expect(m.map((x) => x.proposed)).toEqual(["示例大学", "控制科学与工程", ""]);
@@ -84,7 +139,7 @@ describe("acceptance regressions: mapping", () => {
 });
 
 const PAGE = `<!doctype html><meta charset="utf-8">
-<header style="position:fixed;top:0;left:0"><a href="https://example.com/city/wuhan" id="nav">武汉</a></header>
+<header style="position:fixed;top:0;left:0"><a href="https://example.com/city/wuhan" id="nav">南京</a></header>
 <form id="f" style="margin-top:60px" onsubmit="event.preventDefault(); window.submitted = (window.submitted || 0) + 1">
   <div class="ant-form-item"><div class="ant-form-item-label"><label>入学时间</label></div><div class="ant-form-item-control"><span class="ant-picker"><input id="d" placeholder="请选择日期"></span></div></div>
   <div class="apply-field-a string_info"><div class="title-b">现居地</div><div class="sd-Dropdown-container-1"><label class="sd-Select-container-1"><span class="sd-Input-display-value-1"></span><input placeholder="请输入现居地"></label></div></div>
@@ -104,8 +159,8 @@ describe.skipIf(!CHROME)("acceptance regressions: never submit, never follow a p
     const at = (l: string) => page.locator(`[data-jobos-i="${form.fields.find((f) => f.label === l)!.local}"]`);
     expect(await choose(page, at("入学时间"), "2021.09")).toBe("");
     expect(await page.evaluate(() => (window as any).submitted ?? 0)).toBe(0);
-    expect(await choose(page, at("现居地"), "湖北省武汉市")).not.toBe(""); // no suggestions ever appear: it says so
-    expect(page.url()).toMatch(/p\.html$/); // the header's 「武汉」 link was not clicked
+    expect(await choose(page, at("现居地"), "江苏省南京市")).not.toBe(""); // no suggestions ever appear: it says so
+    expect(page.url()).toMatch(/p\.html$/); // the header's 「南京」 link was not clicked
   }, 90_000);
 });
 

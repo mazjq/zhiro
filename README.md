@@ -63,6 +63,17 @@ public institutions post). It can also read spreadsheets you keep yourself (Feis
 The same job sometimes shows different deadlines on different sites. Zhiro compares them and notes which site each
 date came from and whether it has been verified.
 
+**A brief every morning.** Jobs that close today or soon and that you have not applied to, and the tests and
+interviews you have been given, all in one place. It also tells you which new jobs fit you.
+
+**A list every Monday.** From the week's new jobs Zhiro picks about ten worth a look; you click apply, skip or hold.
+When you skip you can say why, for example “not this city”, and jobs like it stop appearing.
+
+**Mark the companies you want.** You can mark one before it starts hiring, and Zhiro tells you as soon as it posts a
+job.
+
+**Internships too.** Zhiro collects internship postings by itself and recommends the ones that suit you first.
+
 Your education, skills, projects and preferred cities are kept in your profile. Job recommendations, choosing a
 resume and filling in forms all take their information from there.
 
@@ -85,13 +96,66 @@ right resume, and then stops so you can check it and press *Submit* yourself.
 |---|---|
 | ![Applications](docs/assets/pipeline.png) | ![Inbox](docs/assets/inbox.png) |
 
-### 5. Your data stays safe
+### 5. The important things reach your phone
+
+Connect Feishu (Lark) and these come straight to your phone:
+
+- the brief each morning
+- the times of tests and interviews (once the day before, once shortly before they start)
+- a job you meant to apply to that is about to close
+- interview invitations, assessments, offers and rejections that arrive in your mailbox
+
+A message counts as delivered once you have opened it. If a test or interview reminder stays unopened, Zhiro sends it
+again as a Feishu urgent message, and then as a text message.
+
+Connecting Feishu takes about ten minutes, once: [follow these steps](docs/feishu.md) (in Chinese).
+
+| The morning brief | A test, a deadline, an interview invitation |
+|---|---|
+| <img src="docs/assets/feishu-brief.png" alt="The daily brief in Feishu on a phone" width="300"> | <img src="docs/assets/feishu-reminders.png" alt="A test reminder, a deadline reminder and an interview invitation in Feishu on a phone" width="300"> |
+
+<sub>The brief on the left is a real one; the companies, jobs and times in the three reminders on the right are made up.</sub>
+
+### 6. Your data stays safe
 
 An AI assistant can only directly do things that can be undone. Anything else waits until you click to confirm. It
 never gets your logins for any site.
 
 All your data is kept in one folder on your computer. Zhiro backs it up before every upgrade, and if an upgrade goes
 wrong, one command restores it.
+
+## What it does
+
+✅ works today　🚧 being built　📌 planned (the order may change)
+
+| | Feature | |
+|---|---|---|
+| **Finding jobs** | Reads the recruiting sites you subscribe to every day: Moka, Beisen, Feishu Jobs, 51job, Zhaopin, iGuopin, Dayee, 高校人才网 and more | ✅ |
+| | Ranks jobs against your degree, major and experience | ✅ |
+| | A brief every morning, a list every Monday | ✅ |
+| | Internships: collected automatically, the ones that suit you recommended first | ✅ |
+| | Companies you want: mark one before it starts hiring and hear as soon as it posts | ✅ |
+| | Reads spreadsheets you keep yourself (Feishu Base, CSV) | ✅ |
+| | The Monday list is chosen after an AI has read each job description, so it picks better | 🚧 |
+| | Jobs posted without a description get it filled in from the original page | 📌 |
+| | More sources: small companies' own sites, university career sites, WeChat official accounts | 📌 |
+| | A shared set of job data out of the box, so you need not subscribe site by site | 📌 |
+| **Seeing the gap** | Collects what jobs ask for and lists the skills you lack, with how many jobs ask for each | ✅ |
+| | Tells you which skill would open the most jobs and how you could pick it up | 📌 |
+| **Knowing a company** | Listed companies: three years of financials, headcount and pay, a year of announcements | ✅ |
+| | Industry research reports with a source for every conclusion | ✅ |
+| | Several companies side by side | ✅ |
+| **Deadlines** | The deadlines different sites give for the same job, compared | ✅ |
+| | Reads the official announcement to check that a deadline is real | ✅ |
+| **After you apply** | Keeps track of where each application stands | ✅ |
+| | Fills in application forms, then stops for you to check and submit | ✅ |
+| | Reads recruiting email, recognises tests, interviews, offers and rejections, and updates the application | ✅ |
+| | Reminders on your phone through Feishu; the important ones are repeated until you have seen them | ✅ |
+| **AI assistants** | Works with Claude Code, Codex, WorkBuddy and other assistants, by chatting | ✅ |
+| | Chat with an AI inside Zhiro | ✅ |
+| | Before using AI in the background it checks your allowance, and waits when it is running low | ✅ |
+| **Your data** | Everything stays on your computer; backed up before each upgrade, restored with one command | ✅ |
+| | A tray icon: start and stop with one click, see how it is running | 📌 |
 
 ## Install
 
@@ -211,6 +275,7 @@ More: [docs/data.md](docs/data.md) · Bring your own spreadsheet: [docs/data-sou
 |---|---|
 | [docs/data.md](docs/data.md) | Where your data is; backup, upgrade, rollback, moving to another disk |
 | [docs/data-sources.md](docs/data-sources.md) | Subscribe to your own sheet (Feishu Base, CSV) |
+| [docs/feishu.md](docs/feishu.md) | Send the brief and reminders to Feishu on your phone |
 | [docs/harness/](docs/harness/) | Claude Code, Codex, WorkBuddy, DeepSeek (dsh), other MCP clients |
 | [docs/contrib/](docs/contrib/) | Architecture and design decisions, for contributors |
 

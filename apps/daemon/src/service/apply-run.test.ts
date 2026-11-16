@@ -10,7 +10,8 @@ import { ingest } from "../data/index.js";
 import { upsertFact, listFacts } from "./profile.js";
 import { closeBrowser, activePage, readForm } from "./apply.js";
 import { planBlocks } from "./apply-blocks.js";
-import { startRun, currentRun, stopRun, submittedNow } from "./apply-run.js";
+import { startRun, currentRun, stopRun, submittedNow, PARSE_WAIT } from "./apply-run.js";
+Object.assign(PARSE_WAIT, { step: 150, start: 0, most: 3000 }); // the test page parses nothing
 import type { Services } from "../services.js";
 
 const CHROME = ["C:/Program Files/Google/Chrome/Application/chrome.exe", "/usr/bin/google-chrome", "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome"].some(existsSync);
@@ -44,7 +45,7 @@ describe.skipIf(!CHROME)("开始网申 (ADR-024)", () => {
     upsertFact(db, { kind: "education", data: { school: "示例大学", degree: "博士", major: "控制科学与工程" } }, "本人确认");
     const pdf = join(vault, "cv.pdf"); writeFileSync(pdf, "%PDF-1.4 test");
     db.prepare("insert into resume(id, name, file_name, file_path, is_default, created_at) values ('r1', '通用版', 'cv.pdf', ?, 1, '2026-01-01')").run(pdf);
-    ingest(domain, vault, "moka", "demo", [{ externalId: "1", url: "https://example.com/j", title: "控制算法工程师", company: "示例汽车", locations: ["武汉"], publisher: "示例汽车", grade: "官方", isOriginal: true, confidence: 1 } as any]);
+    ingest(domain, vault, "moka", "demo", [{ externalId: "1", url: "https://example.com/j", title: "控制算法工程师", company: "示例汽车", locations: ["南京"], publisher: "示例汽车", grade: "官方", isOriginal: true, confidence: 1 } as any]);
     const positionId = (db.prepare("select id from position").get() as any).id;
     const app = domain.createApplication(positionId);
     const html = join(vault, "form.html"); writeFileSync(html, FORM, "utf8");

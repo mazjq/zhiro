@@ -8,8 +8,8 @@ import { hkFinance } from "./intel.js";
 
 describe("专精特新名录 from a list file", () => {
   it("pulls company names out of a pasted table, without headers or serial numbers", () => {
-    const text = `序号 企业名称 所在地\n1 深圳拓竹科技有限公司 深圳\n2  武汉华中数控股份有限公司 武汉\n3 中国科学院沈阳自动化研究所 沈阳\n本公司承诺…`;
-    expect(companyNames(text)).toEqual(["深圳拓竹科技有限公司", "武汉华中数控股份有限公司", "中国科学院沈阳自动化研究所"]);
+    const text = `序号 企业名称 所在地\n1 深圳拓竹科技有限公司 深圳\n2  杭州海康威视数字技术股份有限公司 南京\n3 中国科学院沈阳自动化研究所 沈阳\n本公司承诺…`;
+    expect(companyNames(text)).toEqual(["深圳拓竹科技有限公司", "杭州海康威视数字技术股份有限公司", "中国科学院沈阳自动化研究所"]);
   });
   it("upserts per (name, level) and counts new vs updated", () => {
     const db = openDb(join(mkdtempSync(join(tmpdir(), "jobos-sme-")), "t.db"));
