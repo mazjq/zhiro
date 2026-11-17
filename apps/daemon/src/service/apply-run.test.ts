@@ -150,6 +150,44 @@ describe.skipIf(!CHROME)("提交之后 (N1)", () => {
   }, 60_000);
 });
 
+// rows of a list outside the blocks Zhiro fills (技能, 论文 …): 添加 puts a row in and shifts every field below it
+const ROWS = `<!doctype html><meta charset="utf-8"><title>申请职位</title>
+<div class="blockTitle-x1">个人信息</div>
+${["姓名", "邮箱", "手机号码"].map((l) => `<div class="apply-field-a"><div class="title-b">${l}</div><input></div>`).join("")}
+<div class="blockTitle-x1">专业技能</div>
+<div id="skills"><div class="apply-field-a"><div class="title-b">技能名称</div><input></div></div><a id="more">再加一条</a>
+<div class="blockTitle-x1">其他</div>
+<div class="apply-field-a"><div class="title-b">信息来源</div><input id="from"></div>
+<button onclick="document.body.innerHTML='<h1>投递成功</h1>'">提交</button>
+<script>document.querySelector("#more").onclick = () => document.querySelector("#skills").insertAdjacentHTML("beforeend", '<div class="apply-field-a"><div class="title-b">技能名称</div><input></div>');</script>`;
+
+describe.skipIf(!CHROME)("提交之后：只记一次，列表里的行不记", () => {
+  afterAll(async () => { stopRun(); await closeBrowser(); });
+  it("a caption that repeats is a row of a list, not 基本信息; a field that moved down is learned once", async () => {
+    const vault = mkdtempSync(join(tmpdir(), "jobos-rows-"));
+    const db = openDb(join(vault, "t.db"));
+    const domain = new Domain(db);
+    const s: Services = createServices({ db: db, domain, config: testConfig(vault, { reminders: { daysBefore: [] }, sources: [] }) });
+    upsertFact(db, { kind: "basic", data: { field: "姓名", value: "李示例" } }, "本人确认");
+    ingest(domain, vault, "moka", "demo", [{ externalId: "1", url: "https://example.com/j", title: "工程师", company: "示例", locations: [], publisher: "示例", grade: "官方", isOriginal: true, confidence: 1 } as any]);
+    const app = domain.createApplication((db.prepare("select id from position").get() as any).id);
+    const html = join(vault, "form.html"); writeFileSync(html, ROWS, "utf8");
+    await startRun(s, app.id, { tickMs: 100, headless: true, url: pathToFileURL(html).href });
+    await until(() => currentRun()?.state === "待你提交");
+    const page = await activePage();
+    await page.locator("#skills input").nth(0).fill("示例技能甲");
+    await page.locator("#from").fill("校园宣讲");
+    await new Promise((r) => setTimeout(r, 500));
+    await page.locator("#more").click();
+    await page.locator("#skills input").nth(1).fill("示例技能乙");
+    await new Promise((r) => setTimeout(r, 500));
+    await page.locator("button").click();
+    await until(() => currentRun()?.state === "已投递");
+    expect(currentRun()!.learned).toEqual(["信息来源"]);
+    expect(listFacts(db).items.filter((f) => f.kind === "basic").map((f) => f.data.field).sort()).toEqual(["信息来源", "姓名"]);
+  }, 60_000);
+});
+
 describe("提交之后 (N7): success beside a form that is still there", () => {
   const f = (label: string, disabled = false) => ({ label, disabled });
   const known = new Set(["姓名", "邮箱", "手机号码", "最高学历"]);

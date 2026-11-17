@@ -98,6 +98,13 @@ export function resumeInput<T extends { label: string; section: string; accept?:
   return files.find((f) => /简历|resume|cv/i.test(f.label + f.section) && !/附件|其他|作品/.test(f.label)) ?? (spare.length === 1 ? spare[0] : files.length === 1 ? files[0] : undefined);
 }
 const keyOf = (f: { section: string; label: string; local: number }) => `${f.section}|${f.label}|${f.local}`;
+const capOf = (f: { section: string; label: string }) => `${f.section}|${f.label}`;
+/**
+ * The form as now read, plus what earlier steps held and is no longer on screen. A caption still on screen is taken from
+ * the new reading alone: an entry added above shifts every field below it, and each old position was kept as one more
+ * field (a real form ended with the same captions learned five times over, 2026-11-17).
+ */
+const carry = (old: Mapped[], now: Mapped[]): Mapped[] => { const on = new Set(now.map(capOf)); return [...old.filter((o) => !on.has(capOf(o))), ...now]; };
 
 /**
  * How many fields the site filled after the resume upload (D15): matched by 分组|标签 in order, not by element index —
@@ -208,9 +215,9 @@ async function tick(s: Services): Promise<void> {
     if (labelled.length >= 3) {
       gone = 0;
       const fresh = await mapFields(s.domain.db, undefined, form.fields, undefined, run.company);
-      const merged = fresh.map((f) => { const old = lastForm.find((o) => keyOf(o) === keyOf(f)); return old ? { ...old, value: f.value } : f; });
-      const seen = new Set(merged.map(keyOf));
-      lastForm = [...lastForm.filter((o) => !seen.has(keyOf(o))), ...merged];
+      // a field that moved down keeps what was decided for its caption (a box Zhiro filled is not the user's typing)
+      const merged = fresh.map((f) => { const old = lastForm.find((o) => keyOf(o) === keyOf(f)) ?? lastForm.find((o) => capOf(o) === capOf(f)); return old ? { ...old, ...f, factKey: old.factKey, proposed: old.proposed, source: old.source, status: old.status, how: old.how } : f; });
+      lastForm = carry(lastForm, merged);
       return;
     }
     if (SUCCESS.test(text)) return finish(s, true, "页面显示投递成功");
@@ -321,7 +328,7 @@ async function tick(s: Services): Promise<void> {
   }
   if (!run.paused) filled += await fillBlocks(s, page, attention);
   // keep what earlier steps of the form held (a multi-step form): the snapshot and what is learned from it
-  lastForm = [...lastForm.filter((o) => !mapped.some((m) => keyOf(m) === keyOf(o))), ...mapped];
+  lastForm = carry(lastForm, mapped);
   if (run.paused) { await banner(page, "Zhiro 已暂停，页面交给你", "#6b7280"); return set(s, { filled, attention, bySite, progress: null }); }
   // entries added above changed the form: remember its new shape, or the next tick would take it for a new form
   filledSignature = (await readForm().catch(() => form)).fields.filter((f) => f.label && f.type !== "file").map((f) => f.label).join("|");
@@ -516,7 +523,12 @@ async function write(page: Page, f: Mapped): Promise<string> {
 function finish(s: Services, ok: boolean, why: string): void {
   if (!run) return;
   const learned: string[] = [];
+  // a caption that repeats is a row of a list (技能, 论文, a second 项目 on a form whose headings were not read): a record,
+  // never 基本信息 — as a card it would be copied into every box of that name on the next form
+  const times = new Map<string, number>();
+  for (const f of lastForm) times.set(capOf(f), (times.get(capOf(f)) ?? 0) + 1);
   for (const f of lastForm) {
+    if ((times.get(capOf(f)) ?? 0) > 1) continue;
     const v = f.value.trim();
     if (!f.label || f.type === "file" || f.type === "password" || SENSITIVE.test(f.label) || peopleSection(f.section) || EMPTY.test(v) || ours.has(keyOf(f))) continue;
     if (f.status !== "画像里没有" && f.status !== "由你填写") continue;
