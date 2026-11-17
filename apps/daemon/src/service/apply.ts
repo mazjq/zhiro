@@ -86,7 +86,8 @@ export async function activePage(): Promise<Page> {
 
 /** `local` is the field's number inside its own frame; the element carries it as data-jobos-i so the filler can find it again. */
 /** `entry`: which entry of a repeated block (教育背景 / 实习经历 …) the field sits in, -1 outside one. */
-export interface FormField { index: number; local: number; frame: string; section: string; label: string; type: string; required: boolean; options: string[]; value: string; placeholder: string; name: string; disabled?: boolean; entry?: number }
+/** `accept`: what a file input takes (its accept attribute), "" when it does not say. */
+export interface FormField { index: number; local: number; frame: string; section: string; label: string; type: string; required: boolean; options: string[]; value: string; placeholder: string; name: string; disabled?: boolean; entry?: number; accept?: string }
 
 /**
  * Runs inside the page (every frame). Finds the label the way a person would: <label for>, aria-label, the form-item
@@ -125,7 +126,22 @@ const READ_FORM = () => {
     const prev = (item ?? el).previousElementSibling; if (prev && text(prev) && text(prev).length <= 20 && !OPTION_WORD.test(text(prev))) return text(prev);
     return "";
   };
+  // 北森, the 2022 form (read from its own script, ux-recruitment-portal-2022-form-pc): a group is a heading that carries
+  // the group's id, then a box whose children are the group's entries — each a .ux-standard-form of its own; the last
+  // entry holds the group's 「添加…」, #<id>_addButton. Class names there are hashed; the ids and this order are not.
+  const beisen2022 = !!document.querySelector(".ux-standard-form");
+  const beisenGroup = (el: Element): { section: string; entry: number } | null => {
+    if (!beisen2022) return null;
+    for (let n: Element | null = el.closest(".ux-standard-form") ?? el; n?.parentElement && n !== document.body; n = n.parentElement) {
+      const box = n.parentElement;
+      let h = box.previousElementSibling; while (h && !h.id) h = h.previousElementSibling; // a description may sit between
+      if (!h || !text(h) || text(h).length > 24 || h.querySelector("input, textarea, select")) continue;
+      return { section: text(h), entry: Array.from(box.children).filter((c) => c.querySelector(".ux-standard-form")).indexOf(n) };
+    }
+    return null;
+  };
   const sectionOf = (el: Element): string => {
+    const group = beisenGroup(el); if (group) return group.section;
     for (let n: Element | null = el; n && n !== document.body; n = n.parentElement) {
       for (let s = n.previousElementSibling; s; s = s.previousElementSibling) {
         // a caption that belongs to a field (it sits inside a field wrapper) is a label, never a section heading
@@ -148,6 +164,7 @@ const READ_FORM = () => {
   // Moka: every entry of a block is an apply-fields-* wrapper inside apply-block-*; its position is the entry number
   // 飞书: .createFormSection-formList > .resumeEditForm-item, one per entry
   const entryOf = (el: Element) => {
+    const group = beisenGroup(el); if (group) return group.entry;
     const ent = el.closest("[class*='apply-fields-'], .resumeEditForm-item"); if (!ent) return -1;
     const moka = ent.matches("[class*='apply-fields-']");
     const blk = ent.closest(moka ? "[class*='apply-block-']" : ".createFormSection-formList") ?? ent.parentElement;
@@ -159,7 +176,8 @@ const READ_FORM = () => {
   const push = (el: Element, type: string, options: string[], value: string) => {
     if (seen.has(el) || (type !== "file" && !visible(el))) return; seen.add(el);
     out.push({ local: stamp(el), section: sectionOf(el), label: labelOf(el), type, required: required(el), options: options.slice(0, 40), value: value.slice(0, 120), placeholder: el.getAttribute("placeholder") ?? "", name: el.getAttribute("name") ?? el.getAttribute("id") ?? "",
-      disabled: !!(el as HTMLInputElement).disabled || !!el.closest("[class*='containerDisabled'], [class*='Input-disabled'], .is-disabled, .ant-select-disabled"), entry: entryOf(el) });
+      disabled: !!(el as HTMLInputElement).disabled || !!el.closest("[class*='containerDisabled'], [class*='Input-disabled'], .is-disabled, .ant-select-disabled"), entry: entryOf(el),
+      ...(type === "file" ? { accept: el.getAttribute("accept") ?? "" } : {}) });
   };
   for (const el of Array.from(document.querySelectorAll("input, textarea, select"))) {
     const t = (el.getAttribute("type") ?? el.tagName).toLowerCase();
@@ -215,6 +233,20 @@ export const SENSITIVE = /身份证|证件号|护照|银行|卡号|密码|验证
 const OTHER_PEOPLE = /家庭|家人|亲属|家属|紧急联系|父母|配偶|成员|证明人|推荐人|内推人|联系人|社会关系/;
 const FORM_TITLE = /报名|登记|招聘|招募|应聘/; // N5: a form's own title („2027届研发成员招聘报名表“) can end up as the section of its first fields
 export const peopleSection = (section: string): boolean => OTHER_PEOPLE.test(section) && !FORM_TITLE.test(section);
+/**
+ * A row about somebody else, told by its 「关系」 box where no heading says so: the name just before it and what follows
+ * about that person. (A 家庭成员 row on a form whose headings were not read got the person's own name, 2026-11-17.)
+ */
+const KIN = /^(关系|与本人关系|与本人的关系|称谓|亲属关系|成员关系)$/, KIN_ROW = /姓名|称谓|关系|单位|职务|职位|职业|电话|手机|联系|年龄|出生|政治面貌|学历|住址|地址/;
+export function othersRows(labels: string[]): Set<number> {
+  const rows = new Set<number>(), l = labels.map(normLabel);
+  l.forEach((label, i) => {
+    if (!KIN.test(label)) return;
+    for (let j = i - 1; j >= Math.max(0, i - 3); j--) if (l[j] === "姓名") { for (let k = j; k < i; k++) rows.add(k); break; }
+    for (let j = i; j < Math.min(l.length, i + 6) && KIN_ROW.test(l[j]); j++) rows.add(j);
+  });
+  return rows;
+}
 /** The user's own choices. Filled only from what the user once answered themselves (意向 cards), never guessed. */
 const PERSONAL_CHOICE = /期望|意向|薪资|到岗|入职时间|是否服从|调剂|是否接受|志愿|内推|推荐码|推荐人|了解渠道|从何处|面试站点|面试城市|offer/i;
 
@@ -347,13 +379,14 @@ export async function mapFields(db: Db, llm: Llm | undefined, fields: FormField[
   const facts = listFacts(db).items;
   const out: Mapped[] = fields.map((f) => ({ ...f, factKey: "", proposed: "", source: "", status: "画像里没有", how: "" }));
   const open: Mapped[] = [];
-  for (const m of out) {
+  const others = othersRows(fields.map((f) => f.label));
+  for (const [i, m] of out.entries()) {
     const label = normLabel(m.label || m.placeholder || m.name);
     if (m.type === "file") { m.status = "上传文件"; continue; }
     if (m.disabled) { m.status = "不代填"; continue; } // locked by the site (account-level or parsed): not ours to change
     if ((m.entry ?? -1) >= 0 && blockKind(m.section)) { m.status = "多段"; continue; } // an entry of 教育背景 / 实习经历 …: filled record by record (apply-blocks)
     if (/手机|电话/.test(label) && m.type === "dropdown") { m.status = "不代填"; continue; } // the +86 box beside the number
-    if (SENSITIVE.test(label) || peopleSection(m.section)) { m.status = "不代填"; continue; }
+    if (SENSITIVE.test(label) || peopleSection(m.section) || others.has(i)) { m.status = "不代填"; continue; }
     if (ABROAD.test(label) && /毕业|院校|学历|经历|学校/.test(label)) { m.factKey = "derived.海外"; m.how = "规则"; continue; }
     // the person's own document answers this label: it wins (they keep it for exactly this)
     const fromDoc = refAnswer(ref, label);

@@ -86,6 +86,17 @@ export function officialTarget(db: Db, positionId: string): { url: string; exact
 }
 
 const now = () => new Date().toISOString();
+
+/**
+ * The file input the résumé goes into: one named for it; else the only one not named for something else and not for
+ * pictures only (北森's 「上传简历」 at the top of the form is a hidden input with no caption, beside 照片 and 附件 —
+ * the run found none and clicked a title instead, 2026-11-17); else the only one there is.
+ */
+export function resumeInput<T extends { label: string; section: string; accept?: string }>(files: T[]): T | undefined {
+  const other = (f: T) => /照片|头像|证件|身份证|附件|其他|作品|成绩|证书|证明/.test(f.label + f.section) || /^[\s,]*((image\/[\w*+.-]+|\.(jpe?g|png|gif|bmp|webp))[\s,]*)+$/i.test(f.accept ?? "");
+  const spare = files.filter((f) => !other(f));
+  return files.find((f) => /简历|resume|cv/i.test(f.label + f.section) && !/附件|其他|作品/.test(f.label)) ?? (spare.length === 1 ? spare[0] : files.length === 1 ? files[0] : undefined);
+}
 const keyOf = (f: { section: string; label: string; local: number }) => `${f.section}|${f.label}|${f.local}`;
 
 /**
@@ -234,7 +245,7 @@ async function tick(s: Services): Promise<void> {
   // The resume goes in first, while the form is still empty: sites like Moka parse it into the fields ("上传简历后会自动解析、
   // 填充申请表信息"), and whatever they fill is left alone — we only fill what is still empty afterwards.
   const files = form.fields.filter((f) => f.type === "file");
-  const file = files.find((f) => /简历|resume|cv/i.test(f.label + f.section) && !/附件|其他|作品/.test(f.label)) ?? (files.length === 1 ? files[0] : undefined);
+  const file = resumeInput(files);
   const attention: Attention[] = [...traces];
   if (foundAs) attention.push({ section: "岗位", label: foundAs, kind: "和画像不同", detail: "Zhiro 按岗位名在官网列表里找到的这一个，提交前请核对是不是你要投的岗位" });
   if (!uploaded) {
