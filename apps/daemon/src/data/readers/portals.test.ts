@@ -130,6 +130,12 @@ describe("大易 and 51job, offline parts", () => {
     expect(l).toMatchObject({ company: "中电科普天", locations: ["南京市"], validThrough: "2099-10-31", majorReq: "控制科学与工程", description: "岗位职责\n负责控制\n\n任职要求\n硕士及以上" });
     expect(rowToListing({ ...row, projectName: "2026年校园招聘" }, null, "SU1", { id: "c", source: "dayee" }, "2026-09-30")).toBeNull();
     expect(rowToListing({ ...row, endDate: "2026-09-01" }, null, "SU1", { id: "c", source: "dayee" }, "2026-09-30")).toBeNull();
+    // the post's link is on the front end the subscription is on: a /pb/ link of a /mc/ tenant opens nothing
+    const su = "SU6056b00a0dcad424d03e153c", at = (url?: string) => rowToListing(row, null, su, { id: "c", source: "dayee", url } as any, "2026-09-30")!.url;
+    expect(l.url).toBe("https://wecruit.hotjob.cn/SU1/pb/posDetail.html?postId=p1&postType=campus");
+    expect(at(`https://wecruit.hotjob.cn/${su}/pb/school.html`)).toBe(`https://wecruit.hotjob.cn/${su}/pb/posDetail.html?postId=p1&postType=campus`);
+    expect(at(`https://wecruit.hotjob.cn/${su}/mc/position/campus?projectCode=128002`)).toBe(`https://wecruit.hotjob.cn/${su}/mc/position/detail?postId=p1&recruitType=campus`);
+    expect(at(`https://wecruit.hotjob.cn/${su}/mc/position/campus?recruitType=intern`)).toBe(`https://wecruit.hotjob.cn/${su}/mc/position/detail?postId=p1&recruitType=intern`);
   });
   it("大易: the word a link carries for the recruit type becomes the number the API takes", async () => {
     const { dayeeSuite } = await import("./dayee.js");
