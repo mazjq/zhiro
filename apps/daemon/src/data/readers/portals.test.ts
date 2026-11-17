@@ -134,8 +134,8 @@ describe("大易 and 51job, offline parts", () => {
     const su = "SU6056b00a0dcad424d03e153c", at = (url?: string) => rowToListing(row, null, su, { id: "c", source: "dayee", url } as any, "2026-09-30")!.url;
     expect(l.url).toBe("https://wecruit.hotjob.cn/SU1/pb/posDetail.html?postId=p1&postType=campus");
     expect(at(`https://wecruit.hotjob.cn/${su}/pb/school.html`)).toBe(`https://wecruit.hotjob.cn/${su}/pb/posDetail.html?postId=p1&postType=campus`);
-    expect(at(`https://wecruit.hotjob.cn/${su}/mc/position/campus?projectCode=128002`)).toBe(`https://wecruit.hotjob.cn/${su}/mc/position/detail?postId=p1&recruitType=campus`);
-    expect(at(`https://wecruit.hotjob.cn/${su}/mc/position/campus?recruitType=intern`)).toBe(`https://wecruit.hotjob.cn/${su}/mc/position/detail?postId=p1&recruitType=intern`);
+    expect(at(`https://wecruit.hotjob.cn/${su}/mc/position/campus?projectCode=128002`)).toBe(`https://wecruit.hotjob.cn/${su}/mc/detail?postId=p1&recruitType=campus`);
+    expect(at(`https://wecruit.hotjob.cn/${su}/mc/position/campus?recruitType=intern`)).toBe(`https://wecruit.hotjob.cn/${su}/mc/detail?postId=p1&recruitType=intern`);
   });
   it("大易: the word a link carries for the recruit type becomes the number the API takes", async () => {
     const { dayeeSuite } = await import("./dayee.js");

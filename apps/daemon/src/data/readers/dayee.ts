@@ -39,11 +39,13 @@ export function rowToListing(p: any, d: any, su: string, cfg: SourceConfig, toda
   const jd = [d?.workContent &&`岗位职责\n${String(d.workContent).trim()}`, d?.serviceCondition && `任职要求\n${String(d.serviceCondition).trim()}`].filter(Boolean).join("\n\n");
   const places = ((d?.workPlaceList ?? []) as any[]).map((w) => w.name).concat(p.workPlaceStr ? String(p.workPlaceStr).split(/[,，;；]/) : []);
   // a tenant runs one of two front ends, and on some only that one answers: a /pb/ link of a tenant on /mc/ ends at
-  // notFound for everybody (seen 2026-11-16). The post's link follows the front end of the address subscribed.
+  // notFound for everybody (seen 2026-11-16). The post's link follows the front end of the address subscribed. On /mc/
+  // it is the one that front end's own script builds: /mc/detail?postId=…&recruitType=<word> (/mc/position/<x> is a list).
   const mc = !ownDomain && /\/mc\//.test(cfg.url ?? "");
+  const word = ({ "2": "society", "12": "intern", "13": "overseas" } as Record<string, string>)[dayeeSuite(cfg.url ?? "")?.recruitType ?? ""] ?? "campus";
   return {
     externalId: String(p.postId),
-    url: mc ? `https://wecruit.hotjob.cn/${su}/mc/position/detail?postId=${p.postId}&recruitType=${dayeeSuite(cfg.url!)?.recruitType === "12" ? "intern" : "campus"}`
+    url: mc ? `https://wecruit.hotjob.cn/${su}/mc/detail?postId=${p.postId}&recruitType=${word}`
       : `https://wecruit.hotjob.cn/${su}/pb/posDetail.html?postId=${p.postId}&postType=campus`,
     title: String(p.postName).trim(),
     // on the shared host a group lists its member companies in `company` (中国电科's 研究所); a tenant on its own domain is
