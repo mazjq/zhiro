@@ -1,8 +1,12 @@
 <div align="center">
 
+<img src="apps/desktop/src-tauri/icons/128x128@2x.png" alt="职路" width="96">
+
 # Zhiro · 职路
 
-在你自己电脑上运行的求职助手：找岗位、了解公司、管理投递。可以配合 Claude Code、Codex 等 AI 助手使用。
+**在你自己电脑上运行的求职助手**
+
+找岗位、了解公司、管理投递。可以配合 Claude Code、Codex 等 AI 助手使用。
 
 [English](README.md) | 简体中文
 
@@ -10,17 +14,33 @@
 [![npm](https://img.shields.io/npm/v/@mazjq/zhiro)](https://www.npmjs.com/package/@mazjq/zhiro)
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 
+[能做什么](#为什么用职路) · [功能一览](#功能一览) · [安装](#安装) · [接到 AI 助手](#接到你的-ai-助手) · [你的数据](#你的数据) · [文档](#文档)
+
 </div>
 
 职路每天从各公司的招聘网站收集岗位，按你的学历、专业和经历挑出合适的，并提醒你哪些快截止了。它能查上市公司的财报和公告，帮你判断一家公司值不值得去。投递以后的进度、面试邮件和网申表格，也可以交给它。
 
 目前主要面向国内校招，社招也能用。
 
-![职路：按你的资料排好的岗位](docs/assets/jobs.png)
-
-<sub>截图里的公司、岗位和数字都是虚构的。</sub>
+<p align="center">
+  <img src="docs/assets/jobs.png" alt="职路：按你的资料排好的岗位" width="860"><br>
+  <sub>截图里的公司、岗位和数字都是虚构的。</sub>
+</p>
 
 ## 为什么用职路
+
+<table>
+  <tr>
+    <td width="33%" valign="top"><b><a href="#1-知道自己该补什么">1. 知道自己该补什么</a></b><br><br>汇总岗位要求，列出你的资料里还没写到的技能。</td>
+    <td width="33%" valign="top"><b><a href="#2-了解公司的经营情况">2. 了解公司的经营情况</a></b><br><br>上市公司的财报、员工薪酬和公告，还能让 AI 助手写行业调研报告。</td>
+    <td width="33%" valign="top"><b><a href="#3-不错过岗位和截止日期">3. 不错过岗位和截止日期</a></b><br><br>每天去读你订阅的招聘网站，早上发简报，周一发清单。</td>
+  </tr>
+  <tr>
+    <td valign="top"><b><a href="#4-投递之后">4. 投递之后</a></b><br><br>记下每份申请的进度，读招聘邮件，帮你填网申表格。</td>
+    <td valign="top"><b><a href="#5-重要的事发到手机">5. 重要的事发到手机</a></b><br><br>简报、笔试和面试时间、快截止的岗位，通过飞书发给你。</td>
+    <td valign="top"><b><a href="#6-数据安全">6. 数据安全</a></b><br><br>数据都存在你自己的电脑上，AI 助手做重要的操作前要你点确认。</td>
+  </tr>
+</table>
 
 ### 1. 知道自己该补什么
 
@@ -28,7 +48,7 @@
 
 其实会的，点「我会」，它会记进你的资料；没学过的点「没做过」。岗位推荐会按你的回答重新算一遍。
 
-![机会缺口：每项技能出现在几个岗位的要求里](docs/assets/gaps.png)
+<p align="center"><img src="docs/assets/gaps.png" alt="机会缺口：每项技能出现在几个岗位的要求里" width="860"></p>
 
 ### 2. 了解公司的经营情况
 
@@ -40,9 +60,9 @@
 
 你也可以让 AI 助手调研一个行业。它会结合这些数据、券商研报和网上的资料写一份报告，每条结论注明出处，引用的数字会自动和原始数据核对一遍。报告里提到的公司如果正在招聘，可以直接点进去看岗位。
 
-![调研报告：要点、出处、提到的公司](docs/assets/research.png)
+<p align="center"><img src="docs/assets/research.png" alt="调研报告：要点、出处、提到的公司" width="860"></p>
 
-<img src="docs/assets/company-intel.png" alt="一家公司的经营情况：营收、研发、人均薪酬" width="520">
+<p align="center"><img src="docs/assets/company-intel.png" alt="一家公司的经营情况：营收、研发、人均薪酬" width="520"></p>
 
 ### 3. 不错过岗位和截止日期
 
@@ -89,11 +109,15 @@
 
 接飞书大约十分钟，只用做一次：[照着这份说明做](docs/feishu.md)。
 
-| 每天早上的简报 | 笔试、截止、面试邀请 |
-|---|---|
-| <img src="docs/assets/feishu-brief.png" alt="手机飞书里收到的每日简报" width="300"> | <img src="docs/assets/feishu-reminders.png" alt="手机飞书里收到的笔试提醒、截止提醒和面试邀请" width="300"> |
+<table align="center">
+  <tr><th>每天早上的简报</th><th>笔试、截止、面试邀请</th></tr>
+  <tr>
+    <td valign="top"><img src="docs/assets/feishu-brief.png" alt="手机飞书里收到的每日简报" width="300"></td>
+    <td valign="top"><img src="docs/assets/feishu-reminders.png" alt="手机飞书里收到的笔试提醒、截止提醒和面试邀请" width="300"></td>
+  </tr>
+</table>
 
-<sub>左边是一份真实的简报；右边三条提醒里的公司、岗位和时间是虚构的。</sub>
+<p align="center"><sub>左边是一份真实的简报；右边三条提醒里的公司、岗位和时间是虚构的。</sub></p>
 
 ### 6. 数据安全
 
@@ -105,6 +129,8 @@ AI 助手只能直接做可以撤销的操作，其他操作要你点确认才�
 
 ✅ 已经能用　🚧 正在做　📌 打算做（先后可能调整）
 
+<details><summary><b>展开全部功能</b></summary>
+
 | | 功能 | |
 |---|---|---|
 | **找岗位** | 每天自动去读你订阅的招聘网站：Moka、北森、飞书招聘、前程无忧、智联校园、国聘、大易、高校人才网等 | ✅ |
@@ -113,7 +139,7 @@ AI 助手只能直接做可以撤销的操作，其他操作要你点确认才�
 | | 找实习：自动收集实习信息，合适的优先推荐 | ✅ |
 | | 重点公司：还没开始招人也能先标，一发新岗位就告诉你 | ✅ |
 | | 读你自己整理的表格（飞书多维表格、CSV） | ✅ |
-| | 每周清单先让 AI 把岗位描述读一遍再挑，挑得更准 | 🚧 |
+| | 每周清单先让 AI 把岗位描述读一遍再挑，挑得更准 | ✅ |
 | | 岗位没写描述的，自动去原网页补全 | 📌 |
 | | 更多来源：中小公司官网、高校就业网、公众号 | 📌 |
 | | 装好就自带一份公共岗位数据，不用自己一家家订阅 | 📌 |
@@ -133,6 +159,8 @@ AI 助手只能直接做可以撤销的操作，其他操作要你点确认才�
 | | 后台用 AI 之前先看你的额度，快用完了就等一等 | ✅ |
 | **数据** | 全部存在你自己的电脑上；升级前自动备份，出问题一条命令恢复 | ✅ |
 | | 桌面右下角的小图标：一键启动、停止，随时看运行情况 | 📌 |
+
+</details>
 
 ## 安装
 
@@ -212,11 +240,11 @@ codex mcp add zhiro --env ZHIRO_RESULT_MODE=text -- zhiro mcp
 
 设置页里那行文件夹地址，是给你自己的 AI 助手准备好的：在那里打开 Claude Code 或 Codex，不用再做任何设置。[详细](docs/harness/embedded.md)
 
-![设置页：选 AI 助手和模型](docs/assets/settings.png)
+<p align="center"><img src="docs/assets/settings.png" alt="设置页：选 AI 助手和模型" width="860"></p>
 
 选「内置助手」时，在同一张卡片里选模型服务（DeepSeek、OpenAI、Anthropic 等）并登录或填 API key。
 
-![设置页：内置助手和它用的模型](docs/assets/builtin.png)
+<p align="center"><img src="docs/assets/builtin.png" alt="设置页：内置助手和它用的模型" width="860"></p>
 
 ## 你的数据
 
