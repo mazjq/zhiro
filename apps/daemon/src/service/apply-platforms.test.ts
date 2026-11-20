@@ -124,7 +124,9 @@ async function open(html: string) {
 }
 const at = (page: any, f: { local: number }) => page.locator(`[data-jobos-i="${f.local}"]`);
 
-describe.skipIf(!CHROME)("platform replicas", () => {
+// a busy CI machine sometimes leaves a click unanswered for the 3.5 s a control is given (macOS, twice on 2026-11-20):
+// there the test is tried again; on a developer's machine a failure stays a failure
+describe.skipIf(!CHROME)("platform replicas", { retry: process.env.CI ? 2 : 0 }, () => {
   afterAll(() => closeBrowser());
 
   it("飞书招聘: captions, required, sections and entries; atsx select, area tree, year-month panel", async () => {
