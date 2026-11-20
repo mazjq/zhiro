@@ -1,8 +1,12 @@
 <div align="center">
 
+<img src="apps/desktop/src-tauri/icons/128x128@2x.png" alt="Zhiro" width="96">
+
 # Zhiro · 职路
 
-A job-search assistant that runs on your own computer: find jobs, look into companies, keep track of applications.
+**A job-search assistant that runs on your own computer**
+
+Find jobs, look into companies, keep track of applications.
 Works with AI assistants such as Claude Code and Codex.
 
 English | [简体中文](README.zh-CN.md)
@@ -10,6 +14,8 @@ English | [简体中文](README.zh-CN.md)
 [![CI](https://github.com/mazjq/zhiro/actions/workflows/ci.yml/badge.svg)](https://github.com/mazjq/zhiro/actions/workflows/ci.yml)
 [![npm](https://img.shields.io/npm/v/@mazjq/zhiro)](https://www.npmjs.com/package/@mazjq/zhiro)
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
+
+[Why Zhiro](#why-zhiro) · [What it does](#what-it-does) · [Install](#install) · [Connect your AI assistant](#connect-your-ai-assistant) · [Your data](#your-data) · [Documentation](#documentation)
 
 </div>
 
@@ -20,11 +26,28 @@ progress, read interview emails and fill in application forms.
 
 It is built mainly for campus recruiting in China (校招), and works for other job searches too.
 
-![Zhiro: jobs ranked against your profile](docs/assets/jobs.png)
-
-<sub>Every company, job and number in the screenshots is made up.</sub>
+<p align="center">
+  <img src="docs/assets/jobs.png" alt="Zhiro: jobs ranked against your profile" width="860"><br>
+  <sub>Every company, job and number in the screenshots is made up.</sub>
+</p>
 
 ## Why Zhiro
+
+<table>
+  <tr>
+    <td width="33%" valign="top"><b><a href="#1-know-what-to-learn-next">1. Know what to learn next</a></b><br><br>Gathers what jobs ask for and lists the skills your profile doesn't mention yet.</td>
+    <td width="33%" valign="top"><b><a href="#2-see-how-a-company-is-doing">2. See how a company is doing</a></b><br><br>Listed companies' financials, pay and announcements, and industry reports written by your AI assistant.</td>
+    <td width="33%" valign="top"><b><a href="#3-dont-miss-a-job-or-a-deadline">3. Don't miss a job or a deadline</a></b><br><br>Reads the recruiting sites you subscribe to every day; a brief every morning, a list every Monday.</td>
+  </tr>
+  <tr>
+    <td valign="top"><b><a href="#4-fills-in-application-forms">4. Fills in application forms</a></b><br><br>Uploads your resume, fills the form from your profile, then stops for you to check and submit.</td>
+    <td valign="top"><b><a href="#5-after-you-apply">5. After you apply</a></b><br><br>Keeps track of each application and recognises test and interview invitations in your mail.</td>
+    <td valign="top"><b><a href="#6-the-important-things-reach-your-phone">6. The important things reach your phone</a></b><br><br>The brief, test and interview times, and jobs about to close, sent to you through Feishu.</td>
+  </tr>
+  <tr>
+    <td colspan="3" valign="top"><b><a href="#7-your-data-stays-safe">7. Your data stays safe</a></b><br><br>Everything is kept on your own computer, and an AI assistant waits for your confirmation before anything important.</td>
+  </tr>
+</table>
 
 ### 1. Know what to learn next
 
@@ -34,7 +57,7 @@ and counts how many jobs and companies ask for each one. In the screenshot below
 If you already have a skill, click *I can do this* and it is added to your profile. If you don't, click *haven't done
 this*. Job recommendations are recalculated from your answers.
 
-![Opportunity gaps: how many jobs ask for each skill](docs/assets/gaps.png)
+<p align="center"><img src="docs/assets/gaps.png" alt="Opportunity gaps: how many jobs ask for each skill" width="860"></p>
 
 ### 2. See how a company is doing
 
@@ -50,9 +73,9 @@ You can also ask your AI assistant to research a whole industry. It writes a rep
 and what it finds online. Every point names its source, and the numbers it quotes are checked against the original
 data. If a company in the report is hiring, you can click through to its jobs.
 
-![A research report: key points, sources, the companies it names](docs/assets/research.png)
+<p align="center"><img src="docs/assets/research.png" alt="A research report: key points, sources, the companies it names" width="860"></p>
 
-<img src="docs/assets/company-intel.png" alt="A company's financials: revenue, R&D, pay per employee" width="520">
+<p align="center"><img src="docs/assets/company-intel.png" alt="A company's financials: revenue, R&D, pay per employee" width="520"></p>
 
 ### 3. Don't miss a job or a deadline
 
@@ -81,7 +104,28 @@ resume and filling in forms all take their information from there.
 |---|---|
 | ![Today](docs/assets/today.png) | ![Profile](docs/assets/profile.png) |
 
-### 4. After you apply
+### 4. Fills in application forms
+
+Every company's application form asks for your education, experience and awards all over again. Hand it to Zhiro and
+this is what it does:
+
+- Opens a separate Chrome window on the job's application page. Where a site needs a login, you sign in once and it is
+  remembered.
+- Uploads the resume you chose for this job. Some sites read the resume and fill part of the form themselves; Zhiro
+  waits for that to finish, then fills what is still empty.
+- Fills in your basic details, education, internships, projects and awards from your profile, entry by entry. It also
+  picks from dropdowns, date pickers, and school and city lists.
+- Leaves sensitive fields such as your ID number, and anything about family members, to you.
+- Stops when it is done and tells you how many fields it filled, which ones it could not fill, and which ones are
+  yours to write. You check the form and press *Submit* yourself. Zhiro never submits for you.
+
+What you add to a form yourself, such as your political affiliation, is saved to your profile, so the next form does
+not ask you again.
+
+Moka, Beisen and Feishu Jobs, the hiring systems you meet most often, have dedicated support. Other sites are filled
+in a general way, and how much gets filled depends on the site.
+
+### 5. After you apply
 
 Zhiro records where each application stands (preparing, applied, written test, interview, result) and reminds you as
 dates come up.
@@ -89,14 +133,11 @@ dates come up.
 Once you connect your mailbox, Zhiro reads recruiting emails, recognises test and interview invitations, finds the
 application each one belongs to, and asks whether to update it.
 
-It can fill in application forms for you. It opens a separate Chrome window, fills the form from your profile and the
-right resume, and then stops so you can check it and press *Submit* yourself.
-
 | Applications: the progress and requirements of each one | Inbox: test and interview invitations found in your mail |
 |---|---|
 | ![Applications](docs/assets/pipeline.png) | ![Inbox](docs/assets/inbox.png) |
 
-### 5. The important things reach your phone
+### 6. The important things reach your phone
 
 Connect Feishu (Lark) and these come straight to your phone:
 
@@ -110,13 +151,17 @@ again as a Feishu urgent message, and then as a text message.
 
 Connecting Feishu takes about ten minutes, once: [follow these steps](docs/feishu.md) (in Chinese).
 
-| The morning brief | A test, a deadline, an interview invitation |
-|---|---|
-| <img src="docs/assets/feishu-brief.png" alt="The daily brief in Feishu on a phone" width="300"> | <img src="docs/assets/feishu-reminders.png" alt="A test reminder, a deadline reminder and an interview invitation in Feishu on a phone" width="300"> |
+<table align="center">
+  <tr><th>The morning brief</th><th>A test, a deadline, an interview invitation</th></tr>
+  <tr>
+    <td valign="top"><img src="docs/assets/feishu-brief.png" alt="The daily brief in Feishu on a phone" width="300"></td>
+    <td valign="top"><img src="docs/assets/feishu-reminders.png" alt="A test reminder, a deadline reminder and an interview invitation in Feishu on a phone" width="300"></td>
+  </tr>
+</table>
 
-<sub>The brief on the left is a real one; the companies, jobs and times in the three reminders on the right are made up.</sub>
+<p align="center"><sub>The brief on the left is a real one; the companies, jobs and times in the three reminders on the right are made up.</sub></p>
 
-### 6. Your data stays safe
+### 7. Your data stays safe
 
 An AI assistant can only directly do things that can be undone. Anything else waits until you click to confirm. It
 never gets your logins for any site.
@@ -128,6 +173,8 @@ wrong, one command restores it.
 
 ✅ works today　🚧 being built　📌 planned (the order may change)
 
+<details><summary><b>Show every feature</b></summary>
+
 | | Feature | |
 |---|---|---|
 | **Finding jobs** | Reads the recruiting sites you subscribe to every day: Moka, Beisen, Feishu Jobs, 51job, Zhaopin, iGuopin, Dayee, 高校人才网 and more | ✅ |
@@ -136,7 +183,7 @@ wrong, one command restores it.
 | | Internships: collected automatically, the ones that suit you recommended first | ✅ |
 | | Companies you want: mark one before it starts hiring and hear as soon as it posts | ✅ |
 | | Reads spreadsheets you keep yourself (Feishu Base, CSV) | ✅ |
-| | The Monday list is chosen after an AI has read each job description, so it picks better | 🚧 |
+| | The Monday list is chosen after an AI has read each job description, so it picks better | ✅ |
 | | Jobs posted without a description get it filled in from the original page | 📌 |
 | | More sources: small companies' own sites, university career sites, WeChat official accounts | 📌 |
 | | A shared set of job data out of the box, so you need not subscribe site by site | 📌 |
@@ -156,6 +203,8 @@ wrong, one command restores it.
 | | Before using AI in the background it checks your allowance, and waits when it is running low | ✅ |
 | **Your data** | Everything stays on your computer; backed up before each upgrade, restored with one command | ✅ |
 | | A tray icon: start and stop with one click, see how it is running | 📌 |
+
+</details>
 
 ## Install
 
@@ -248,12 +297,12 @@ inside Zhiro and doesn't change their own settings.
 The folder shown on the settings page is set up for your own AI assistant: open Claude Code or Codex there and there is
 nothing else to configure. [More](docs/harness/embedded.md)
 
-![Settings: choose the AI assistant and its model](docs/assets/settings.png)
+<p align="center"><img src="docs/assets/settings.png" alt="Settings: choose the AI assistant and its model" width="860"></p>
 
 With the built-in assistant, choose a model provider (DeepSeek, OpenAI, Anthropic and others) in the same card and sign
 in or enter an API key.
 
-![Settings: the built-in assistant and its model](docs/assets/builtin.png)
+<p align="center"><img src="docs/assets/builtin.png" alt="Settings: the built-in assistant and its model" width="860"></p>
 
 ## Your data
 
