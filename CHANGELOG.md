@@ -1,5 +1,23 @@
 # Changelog
 
+## [0.4.0](https://github.com/mazjq/zhiro/compare/v0.3.0...v0.4.0) (2026-11-20)
+
+
+### Features
+
+* **shortlist:** read the posts first, then choose by what they say (D-36) ([#95](https://github.com/mazjq/zhiro/issues/95)) ([1a27cae](https://github.com/mazjq/zhiro/commit/1a27cae40e289af7a46f6333c11075406bbb2660))
+
+
+### Bug Fixes
+
+* **apply:** a post's link is its own page, not its batch's one link ([#99](https://github.com/mazjq/zhiro/issues/99)) ([31c50c3](https://github.com/mazjq/zhiro/commit/31c50c329243d556e476aa3f1cb97d3b62163cc9))
+* **apply:** seven things a real application ran into ([#94](https://github.com/mazjq/zhiro/issues/94)) ([b64f54f](https://github.com/mazjq/zhiro/commit/b64f54fc7ab956e6d87fd9f9bf7bca2f2307b873))
+* **apply:** what a second live form found ([#98](https://github.com/mazjq/zhiro/issues/98)) ([02725d9](https://github.com/mazjq/zhiro/commit/02725d9e50c67ad7c8c7e39860d5e953e473d0cd))
+* **apply:** 北森's 2022 form — groups and entries, the résumé input, picks read back, school suggestions ([#103](https://github.com/mazjq/zhiro/issues/103)) ([576a63d](https://github.com/mazjq/zhiro/commit/576a63d5dcc34d9c661b376cc5502378b375d1d0))
+* **dayee:** a post's link follows the front end of the address subscribed ([#102](https://github.com/mazjq/zhiro/issues/102)) ([98ba722](https://github.com/mazjq/zhiro/commit/98ba7224fde5f74caa650c07964acc5db09d8d8d))
+* **shortlist:** one card a company in the first-city row ([#101](https://github.com/mazjq/zhiro/issues/101)) ([2eb159a](https://github.com/mazjq/zhiro/commit/2eb159aabe87c8b1006d419d6a8eeef24d56ba1f))
+* **shortlist:** the first city is always read; its posts open for longer get a row of their own ([#100](https://github.com/mazjq/zhiro/issues/100)) ([347fa5a](https://github.com/mazjq/zhiro/commit/347fa5a7eea32b21bbd4413d4d91759d497b1c48))
+
 ## [0.3.0](https://github.com/mazjq/zhiro/compare/v0.2.1...v0.3.0) (2026-11-16)
 
 
