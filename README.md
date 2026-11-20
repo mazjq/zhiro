@@ -40,9 +40,12 @@ It is built mainly for campus recruiting in China (校招), and works for other 
     <td width="33%" valign="top"><b><a href="#3-dont-miss-a-job-or-a-deadline">3. Don't miss a job or a deadline</a></b><br><br>Reads the recruiting sites you subscribe to every day; a brief every morning, a list every Monday.</td>
   </tr>
   <tr>
-    <td valign="top"><b><a href="#4-after-you-apply">4. After you apply</a></b><br><br>Keeps track of each application, reads recruiting email, fills in application forms.</td>
-    <td valign="top"><b><a href="#5-the-important-things-reach-your-phone">5. The important things reach your phone</a></b><br><br>The brief, test and interview times, and jobs about to close, sent to you through Feishu.</td>
-    <td valign="top"><b><a href="#6-your-data-stays-safe">6. Your data stays safe</a></b><br><br>Everything is kept on your own computer, and an AI assistant waits for your confirmation before anything important.</td>
+    <td valign="top"><b><a href="#4-fills-in-application-forms">4. Fills in application forms</a></b><br><br>Uploads your resume, fills the form from your profile, then stops for you to check and submit.</td>
+    <td valign="top"><b><a href="#5-after-you-apply">5. After you apply</a></b><br><br>Keeps track of each application and recognises test and interview invitations in your mail.</td>
+    <td valign="top"><b><a href="#6-the-important-things-reach-your-phone">6. The important things reach your phone</a></b><br><br>The brief, test and interview times, and jobs about to close, sent to you through Feishu.</td>
+  </tr>
+  <tr>
+    <td colspan="3" valign="top"><b><a href="#7-your-data-stays-safe">7. Your data stays safe</a></b><br><br>Everything is kept on your own computer, and an AI assistant waits for your confirmation before anything important.</td>
   </tr>
 </table>
 
@@ -101,7 +104,28 @@ resume and filling in forms all take their information from there.
 |---|---|
 | ![Today](docs/assets/today.png) | ![Profile](docs/assets/profile.png) |
 
-### 4. After you apply
+### 4. Fills in application forms
+
+Every company's application form asks for your education, experience and awards all over again. Hand it to Zhiro and
+this is what it does:
+
+- Opens a separate Chrome window on the job's application page. Where a site needs a login, you sign in once and it is
+  remembered.
+- Uploads the resume you chose for this job. Some sites read the resume and fill part of the form themselves; Zhiro
+  waits for that to finish, then fills what is still empty.
+- Fills in your basic details, education, internships, projects and awards from your profile, entry by entry. It also
+  picks from dropdowns, date pickers, and school and city lists.
+- Leaves sensitive fields such as your ID number, and anything about family members, to you.
+- Stops when it is done and tells you how many fields it filled, which ones it could not fill, and which ones are
+  yours to write. You check the form and press *Submit* yourself. Zhiro never submits for you.
+
+What you add to a form yourself, such as your political affiliation, is saved to your profile, so the next form does
+not ask you again.
+
+Moka, Beisen and Feishu Jobs, the hiring systems you meet most often, have dedicated support. Other sites are filled
+in a general way, and how much gets filled depends on the site.
+
+### 5. After you apply
 
 Zhiro records where each application stands (preparing, applied, written test, interview, result) and reminds you as
 dates come up.
@@ -109,14 +133,11 @@ dates come up.
 Once you connect your mailbox, Zhiro reads recruiting emails, recognises test and interview invitations, finds the
 application each one belongs to, and asks whether to update it.
 
-It can fill in application forms for you. It opens a separate Chrome window, fills the form from your profile and the
-right resume, and then stops so you can check it and press *Submit* yourself.
-
 | Applications: the progress and requirements of each one | Inbox: test and interview invitations found in your mail |
 |---|---|
 | ![Applications](docs/assets/pipeline.png) | ![Inbox](docs/assets/inbox.png) |
 
-### 5. The important things reach your phone
+### 6. The important things reach your phone
 
 Connect Feishu (Lark) and these come straight to your phone:
 
@@ -140,7 +161,7 @@ Connecting Feishu takes about ten minutes, once: [follow these steps](docs/feish
 
 <p align="center"><sub>The brief on the left is a real one; the companies, jobs and times in the three reminders on the right are made up.</sub></p>
 
-### 6. Your data stays safe
+### 7. Your data stays safe
 
 An AI assistant can only directly do things that can be undone. Anything else waits until you click to confirm. It
 never gets your logins for any site.
