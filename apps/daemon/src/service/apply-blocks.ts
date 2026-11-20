@@ -164,6 +164,9 @@ export async function addEntry(page: Page, section: string, before: number, coun
     const text = (e: Element | null) => (e?.textContent ?? "").replace(/\s+/g, "");
     // D14: the closest title wins — 「实习经历」 must not pick the button of a block called 「经历」; a bare 「经历」 title never matches a longer section
     const want = section.replace(/\s+/g, "");
+    // 北森 (2022 form): the group's own button, #<group id>_addButton, reads 「添加」 + the group's title
+    const own = Array.from(document.querySelectorAll("[id$='_addButton']")).find((b) => text(b).replace(/^.*(添加|新增)/, "") === want && (b as HTMLElement).offsetHeight > 0);
+    if (own) { own.setAttribute("data-jobos-add", "1"); return true; }
     const titled = Array.from(document.querySelectorAll("[class*='blockTitle'], [class*='block-title'], .createFormSection-title")).map((t) => ({ t, name: text(t).replace(/(添加|新增|\+).*$/, "") }))
       .filter(({ name }) => name === want || (name.length >= 2 && (name.includes(want) || (want.includes(name) && name.length >= want.length - 1))))
       .sort((a, b) => Math.abs(a.name.length - want.length) - Math.abs(b.name.length - want.length));

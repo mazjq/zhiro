@@ -56,7 +56,7 @@ async function pick(page: Page, scope: Locator, sel: string, want: string[], fuz
     // a greyed-out item (Moka's calendar shows the next decade's first year, faded, at the end of a page: clicking it does
     // not select it — 2026-10-14) is marked on its wrapper, not on the item itself
     const off = (e: Element) => { for (let n: Element | null = e; n && n !== root; n = n.parentElement) if (/disabled|fade/.test(n.className?.toString() ?? "")) return true; return false; };
-    const all = Array.from(root.querySelectorAll(sel as string)).filter((e) => vis(e) && !off(e) && !/没有找到|添加.*全称/.test(e.textContent ?? "") && !e.closest("#jobos-banner"));
+    const all = Array.from(root.querySelectorAll(sel as string)).filter((e) => vis(e) && !off(e) && !/没有找到|没有搜索到|添加.*全称/.test(e.textContent ?? "") && !e.closest("#jobos-banner"));
     // the deepest matching element is the one that reacts to a click
     const opts = all.filter((e) => !all.some((o) => o !== e && e.contains(o)));
     const w = (want as string[]).map((v) => v.normalize("NFKC").replace(/\s+/g, ""));
@@ -308,17 +308,41 @@ const LAYER = ".common-unmodeled-layer";
 
 async function beisen(page: Page, el: Locator, value: string, monthBox: boolean): Promise<string> {
   const ctl = el.locator("xpath=ancestor-or-self::*[contains(@class,'phoenix-select') or contains(@class,'phoenix-auto-complete-container')][1]");
-  const shown = async () => ((await ctl.locator(".phoenix-select__tipEle, [class*='singleLabel']").first().textContent({ timeout: 300 }).catch(() => "")) ?? (await el.inputValue().catch(() => ""))).trim();
+  // what the control shows is read from its own box (class exactly phoenix-select). The nearest ancestor whose class
+  // merely contains that is the li around the input, where the shown value is not: every pick came back 「选了但页面没有
+  // 显示」 with the value on screen (2026-11-17). An empty text falls through to the input's value.
+  const own = el.locator("xpath=ancestor-or-self::*[contains(concat(' ',normalize-space(@class),' '),' phoenix-select ')][1]");
+  const box = (await own.count()) ? own : ctl;
+  const shown = async () => ((await box.locator(".phoenix-select__tipEle, [class*='singleLabel']").first().textContent({ timeout: 300 }).catch(() => "")) ?? "").trim() || (await el.inputValue().catch(() => "")).trim();
   await ctl.click({ timeout: 3000 });
   const layer = page.locator(`${LAYER}:visible`).last();
-  if (!(await waitFor(async () => (await layer.count()) > 0, 3000))) {
-    // an auto-complete (学校) has no layer until you type
-    if (await el.isEditable().catch(() => false)) {
-      await el.pressSequentially(value, { delay: 60 });
-      const r = await pick(page, page.locator("body"), "[class*='auto-complete'][class*='item']", [value]);
-      return r === "" ? "" : r ?? "网站的候选里没有这一项";
+  // an auto-complete (学校) has no layer until you type, and its suggestions come from the server a moment later
+  const auto = await el.evaluate((e) => !!e.closest(".phoenix-auto-complete-container")).catch(() => false);
+  if (auto || !(await waitFor(async () => (await layer.count()) > 0, 3000))) {
+    if (!(await el.isEditable().catch(() => false))) return "选项没有弹出来";
+    const AC = `[class*='auto-complete'][class*='item'], ${LAYER} .phoenix-selectList__listItem`;
+    await page.evaluate(() => { (window as any).__jobosOld = new WeakSet(document.querySelectorAll("*")); }); // what was there before typing
+    const until = Date.now() + 12_000;
+    for (const term of searchTerms(value)) {
+      if (Date.now() > until) break;
+      await el.fill("").catch(() => {});
+      await el.pressSequentially(term, { delay: 60 });
+      if (!(await waitFor(async () => (await visibleIn(page, AC)) || (await overlayHas(page, term)), 3000))) continue;
+      await page.waitForTimeout(300); // the list keeps changing for a moment after the first rows arrive
+      let r = await pick(page, page.locator("body"), AC, [value, term]);
+      if (r === null) r = await overlayPick(page, [value, term]);
+      if (r === "") return "";
+      if (r) { await page.keyboard.press("Escape").catch(() => {}); return r; }
     }
-    return "选项没有弹出来";
+    // nothing to click. Some tenants take a typed name and say so under the box (「没有搜索到该学校，将使用你输入的学校」):
+    // then the name as the profile spells it is the answer
+    await el.fill("").catch(() => {});
+    await el.pressSequentially(value, { delay: 30 }).catch(() => {});
+    const item = el.locator("xpath=ancestor::*[contains(concat(' ',normalize-space(@class),' '),' form-item ')][1]");
+    if (await waitFor(() => item.locator("[class*='manual-input-tips']").first().isVisible(), 2000)) return "";
+    await el.blur().catch(() => {});
+    await page.waitForTimeout(300);
+    return (await el.inputValue().catch(() => "")).trim() === value.trim() ? "名称已经填进去了，但没能在网站的候选里点选，请看一眼这一栏" : "网站的候选里没有这一项";
   }
   // what opened decides how to choose
   if (await layer.locator(".area-selector-container").count()) return beisenArea(page, layer, value);

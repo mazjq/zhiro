@@ -6,7 +6,7 @@ import { pathToFileURL } from "node:url";
 import { openDb } from "../db.js";
 import { upsertFact, listFacts } from "./profile.js";
 import { profileGaps } from "./gaps.js";
-import { openBrowser, closeBrowser, readForm, mapFields, type FormField } from "./apply.js";
+import { openBrowser, closeBrowser, readForm, mapFields, othersRows, type FormField } from "./apply.js";
 
 const CHROME = ["C:/Program Files/Google/Chrome/Application/chrome.exe", "/usr/bin/google-chrome", "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome"].some(existsSync);
 
@@ -39,6 +39,16 @@ describe("apply probe: mapping", () => {
     expect(by(7)).toMatchObject({ proposed: "li@example.com", status: "已有内容" }); // never silently overwrite what is already there
     expect(by(8).status).toBe("画像里没有");
     expect(by(9)).toMatchObject({ proposed: "控制科学与工程", status: "可填" }); // the widget driver decides how to set it
+  });
+
+  it("a row about somebody else is told by its 「关系」 box where no heading was read: their name and 职务 are not the person's", async () => {
+    const { db } = profileDb();
+    upsertFact(db, { kind: "basic", data: { field: "职务", value: "学生" } }, "本人确认"); // an answer once given under this label
+    const labels = ["姓名", "手机号码", "学校名称", "姓名", "关系", "职务", "信息来源"];
+    expect([...othersRows(labels)]).toEqual([3, 4, 5]);
+    const m = await mapFields(db, undefined, labels.map((label, index) => field({ index, label })));
+    expect(m.map((x) => x.status)).toEqual(["可填", "可填", "可填", "不代填", "不代填", "不代填", "画像里没有"]);
+    expect(m[3].proposed + m[5].proposed).toBe("");
   });
 
   it("only labels and options reach the model; its keys are filled from the profile locally", async () => {
