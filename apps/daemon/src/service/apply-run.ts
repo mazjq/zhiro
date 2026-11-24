@@ -8,7 +8,7 @@ import { openBrowser, browserOpen, activePage, readForm, mapFields, normLabel, r
 import { pickResume, resumeByLabel } from "./resumes.js";
 import { listFacts, upsertFact } from "./profile.js";
 import { choose } from "./apply-widgets.js";
-import { planBlocks, slotsOf, valueIn, addEntry, blockKind, partOf, planRecords, sameName, projectPart, isOngoingBox, studyEnd, visitEntries } from "./apply-blocks.js";
+import { planBlocks, slotsOf, valueIn, addEntry, blockKind, partOf, planRecords, sameName, projectPart, isOngoingBox, studyEnd, visitEntries, leftOut } from "./apply-blocks.js";
 import { readReference } from "./apply-reference.js";
 const MAX_ENTRIES = 30;
 /** How long the form is watched after an upload (ms): between readings, before a form nothing came to counts as quiet, in all. A test shortens them. */
@@ -123,6 +123,8 @@ export function siteFilled(before: { section: string; label: string; type: strin
   return n;
 }
 const EMPTY = /^(请选择|请输入|请填写|选择|年|月|-+|select|choose|please)?$/i;
+/** A heading that names a list of records Zhiro has no filler for (工作经历, 培训经历, 证书 …): what is typed there is one of them, not an answer about the person. */
+const RECORDS = /经历|经验|证书|培训|社团|实践|成果|作品/;
 const TEXTUAL = new Set(["text", "textarea", "email", "tel", "number", "url"]);
 // 「提交成功后将无法修改」 is a hint or a confirm prompt, not the success itself (N14/N16)
 // 「感谢您申请示例汽车」 is a welcome line at the top of many forms (N27/N28); the thanks that means success says 「感谢您的投递」
@@ -406,6 +408,7 @@ async function fillBlocks(s: Services, page: Page, attention: Attention[]): Prom
   for (const p of planBlocks(s.domain.db, (await readForm()).fields, ref)) if (!p.slot) need.set(p.section, (need.get(p.section) ?? 0) + 1);
   // an entry the site made from the resume for a stay that gives no degree: not filled, not deleted for the person — said
   for (const v of visitEntries(s.domain.db, (await readForm()).fields)) attention.push({ section: v.section, label: v.name, kind: "留给你", detail: "这一条是联合培养 / 访学，不授学位：按你的要求不填进教育背景，请手动删掉这一条" });
+  for (const o of leftOut(s.domain.db, (await readForm()).fields)) attention.push({ section: o.section, label: o.section, kind: "留给你", detail: o.detail });
   await repairProjects(s, page, attention, ref);
   for (let round = 0; round < MAX_ENTRIES * 3 && run && !run.paused; round++) {
     const form = await readForm();
@@ -533,7 +536,7 @@ function finish(s: Services, ok: boolean, why: string): void {
     if (!f.label || f.type === "file" || f.type === "password" || SENSITIVE.test(f.label) || peopleSection(f.section) || EMPTY.test(v) || ours.has(keyOf(f))) continue;
     if (f.status !== "画像里没有" && f.status !== "由你填写") continue;
     if (f.factKey && !/^(basic|pref)\./.test(f.factKey)) continue; // an entry of a multi-row kind or a part of an education record
-    if (blockKind(f.section)) continue; // 教育 / 实习 / 项目 entries are records, not 基本信息
+    if (blockKind(f.section) || RECORDS.test(f.section)) continue; // 教育 / 实习 / 项目 / 技能 … entries are records, not 基本信息 — also a list of one row
     if (!f.factKey && (f.type === "checkbox" || f.type === "radio" || v.length > 200)) continue;
     if (/^[+\-\d\s]*$/.test(normLabel(f.label)) || /发送|获取|重新/.test(f.label)) continue; // 「+86」, a button's text: not a question
     const kind = f.factKey.startsWith("pref.") ? "preference" : "basic";

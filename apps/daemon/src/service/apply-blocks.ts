@@ -12,10 +12,13 @@ import type { Reference } from "./apply-reference.js";
  */
 export interface Slot { section: string; entry: number; fields: FormField[] }
 export interface Plan { kind: Kind; section: string; record: Record<string, string>; name: string; slot: Slot | null }
-type Kind = "education" | "experience" | "project" | "award";
+type Kind = "education" | "experience" | "project" | "award" | "publication" | "patent" | "language" | "skill";
 
 // N10: 「学习经历」「学历信息」「求学经历」 are the same block as 「教育经历」
-const BLOCKS: [RegExp, Kind][] = [[/教育|学习经历|学历信息|学历背景|求学/, "education"], [/实习/, "experience"], [/项目/, "project"], [/获奖|奖项|荣誉/, "award"]];
+// The lists a real form left wholly to the person (2026-11-17): 论文, 专利, 语言, 技能. 「语言技能」 is the languages and
+// 「编程语言」 is a skill; 「技能证书」 is certificates, which the profile does not keep as a list.
+const BLOCKS: [RegExp, Kind][] = [[/教育|学习经历|学历信息|学历背景|求学/, "education"], [/实习/, "experience"], [/项目/, "project"], [/获奖|奖项|荣誉/, "award"],
+  [/论文|发表|学术成果|科研成果|专著/, "publication"], [/专利/, "patent"], [/(?<!编程|程序|开发)语言|外语|语种/, "language"], [/技能(?!.*证)|编程语言/, "skill"]];
 export const blockKind = (section: string): Kind | null => BLOCKS.find(([re]) => re.test(section))?.[1] ?? null;
 
 /** Which part of a record a field inside an entry asks for. */
@@ -26,6 +29,11 @@ export function partOf(kind: Kind, label: string): string {
   if (kind === "experience") return /公司|单位|企业|机构/.test(l) ? "org" : /职位|岗位|职务/.test(l) ? "role" : /职责|内容|描述/.test(l) ? "summary" : "";
   // 项目描述 is the project itself (what, at which level, why); 职责 / 角色 is what the person did in it (user, 2026-10-14)
   if (kind === "project") return /名称/.test(l) ? "title" : /职责|角色|职务|担任|负责|个人工作|本人工作/.test(l) ? "duty" : /描述|简介|介绍|内容|背景/.test(l) ? "description" : "";
+  // a caption that only contains the list's own word (「论文类型」, 「专利类型」, 「技能类别」) is not its name
+  if (kind === "publication") return /作者|署名|排名|位次/.test(l) ? "authorOrder" : /期刊|刊物|刊名|会议|出版|发表于/.test(l) ? "venue" : /名称|题目|标题|^(论文|著作|成果)$/.test(l) ? "title" : "";
+  if (kind === "patent") return /发明人|作者|署名|排名|位次/.test(l) ? "authorOrder" : /专利号|申请号|授权号|登记号|编号/.test(l) ? "number" : /名称|题目|^专利$/.test(l) ? "title" : "";
+  if (kind === "language") return /证书|等级|考试/.test(l) ? "cert" : /掌握|熟练|水平|程度/.test(l) ? "level" : /分数|成绩|得分/.test(l) ? "score" : /语言|语种|外语/.test(l) ? "name" : "";
+  if (kind === "skill") return /掌握|熟练|水平|程度|等级/.test(l) ? "level" : /描述|说明|备注/.test(l) ? "" : /名称|^(技能|专业技能|编程语言)$/.test(l) ? "name" : "";
   return /颁发|授予|主办|发证/.test(l) ? "issuer" : /名称|奖项/.test(l) ? "title" : /级别/.test(l) ? "level" : "";
 }
 
@@ -35,7 +43,7 @@ export function projectPart(f: FormField, siblings: FormField[]): string {
   return p === "duty" && f.type !== "textarea" && siblings.some((x) => x.type === "textarea" && partOf("project", x.label) === "duty") ? "role" : p;
 }
 
-const nameOf = (kind: Kind, d: Record<string, string>) => (kind === "education" ? d.school : kind === "experience" ? d.org : d.title) ?? "";
+const nameOf = (kind: Kind, d: Record<string, string>) => (kind === "education" ? d.school : kind === "experience" ? d.org : kind === "skill" || kind === "language" ? d.name : d.title) ?? "";
 export const sameName = (a: string, b: string) => same(a, b);
 const same = (a: string, b: string) => { const n = (s: string) => s.normalize("NFKC").replace(/\s+/g, "").toLowerCase(); return !!a && !!b && (n(a).includes(n(b)) || n(b).includes(n(a))); };
 /** One award spelled two ways on the profile (「…（本科组）· 全国二等奖」 / 「… · 全国二等奖」): compared without brackets, dots, the institution. */
@@ -55,7 +63,7 @@ export function slotsOf(fields: FormField[]): Slot[] {
 
 const empty = (v: string) => /^(请选择|请输入|年|月|-+)?$/.test(v.trim());
 /** An entry the site or the user already filled: the text that says what it is (the school, the company…). */
-const filledName = (kind: Kind, s: Slot) => s.fields.find((f) => ["school", "org", "title"].includes(partOf(kind, f.label)) && !empty(f.value))?.value ?? "";
+const filledName = (kind: Kind, s: Slot) => s.fields.find((f) => ["school", "org", "title", "name"].includes(partOf(kind, f.label)) && !empty(f.value))?.value ?? "";
 /** Nothing typed in any free-text box; a select showing its default (D3) does not make an entry occupied. */
 const blank = (s: Slot) => s.fields.every((f) => ["select", "dropdown", "checkbox", "radio", "file"].includes(f.type) || empty(f.value));
 
@@ -89,7 +97,7 @@ export function planBlocks(db: Db, fields: FormField[], ref?: Reference | null):
   for (const section of [...new Set(slots.map((s) => s.section))]) {
     const kind = blockKind(section)!;
     // experience cards: only those that are internships go to 实习经历 (a campus job is not one)
-    const records = recordsOf(facts, kind, ref);
+    const records = recordsOf(facts, kind, ref, section);
     const mine = slots.filter((s) => s.section === section).sort((a, b) => a.entry - b.entry);
     // N6: an entry the site already part-filled (专业 but no 学校) is taken, not a blank to put our record into
     const open = mine.filter((s) => !filledName(kind, s) && blank(s));
@@ -105,18 +113,54 @@ export function planBlocks(db: Db, fields: FormField[], ref?: Reference | null):
   return plans;
 }
 
+/** A skill goes onto a form with the level the person gave it: none given, or still learning, and it is not theirs to claim there. */
+const statedLevel = (d: Record<string, string>) => !!d.level?.trim() && !/在学|学习中|入门中|了解中/.test(d.level);
+/** 第一作者 / 通讯作者 / 共同第一: the papers a form's list is filled with when the profile says who wrote what. */
+const leadAuthor = (d: Record<string, string>) => /第一|一作|通讯|first|corresponding/i.test(d.authorOrder ?? "");
+const softwareRight = (d: Record<string, string>) => /软件著作权|软著/.test(d.title ?? "");
+/** ponytail: one language, read from the 英语水平 card; a card kind of its own when a profile needs a second one */
+function languages(facts: any[]): Record<string, string>[] {
+  const basic = (re: RegExp) => String(facts.find((f) => f.kind === "basic" && re.test(normLabel(f.data.field ?? "")))?.data.value ?? "");
+  const cert = basic(/^英语水平$/);
+  return cert ? [{ name: "英语", cert, score: basic(/(英语|外语|四级|六级|cet).{0,6}(成绩|分数|得分)/i) }] : [];
+}
+
 /** The records of one kind, newest first: the person's document when it has the list, else the profile without near-duplicates. */
-function recordsOf(facts: any[], kind: Kind, ref?: Reference | null): Record<string, string>[] {
+function recordsOf(facts: any[], kind: Kind, ref?: Reference | null, section = ""): Record<string, string>[] {
+  if (kind === "language") return languages(facts);
   let records = facts.filter((f) => f.kind === kind && (kind !== "experience" || /实习/.test(`${f.data.role ?? ""}${f.data.summary ?? ""}${f.data.type ?? ""}`)) && (kind !== "education" || !notDegree(f.data)))
     .map((f) => f.data as Record<string, string>);
+  if (kind === "skill") records = records.filter(statedLevel);
+  if (kind === "patent" && !/著作权|软著/.test(section)) records = records.filter((r) => !softwareRight(r));
+  if (kind === "publication" && records.some(leadAuthor)) records = records.filter(leadAuthor);
   // the person's own document is the list when it has one (their curated awards, their projects)
   if (kind === "award" && ref?.awards.length) records = ref.awards as unknown as Record<string, string>[];
   if (kind === "project" && ref?.projects.length) records = ref.projects.map((p) => ({ ...(records.find((r) => same(r.title, p.title)) ?? {}), ...p }) as Record<string, string>);
   // near-duplicates on the profile go once (education: the same school at the same 学历)
   const key = (r: Record<string, string>) => core(nameOf(kind, r)) + (kind === "education" ? `|${level(r.degree)}` : "");
-  return records.filter((r, i) => !records.slice(0, i).some((o) => key(o) === key(r))).sort((a, b) => startOf(b) - startOf(a));
+  // a paper has a date or a year, not a period
+  const at = (r: Record<string, string>) => { const m = kind === "publication" ? String(r.date ?? r.year ?? "").match(/(\d{4})\D*(\d{1,2})?/) : null; return m ? Number(m[1]) * 12 + Number(m[2] || 1) : startOf(r); };
+  return records.filter((r, i) => !records.slice(0, i).some((o) => key(o) === key(r))).sort((a, b) => at(b) - at(a));
 }
 export const planRecords = (db: Db, kind: Kind, ref?: Reference | null) => recordsOf(listFacts(db).items, kind, ref);
+
+/** What a list on this form was not filled with, and why — said once a list, so nothing is left out silently. */
+export function leftOut(db: Db, fields: FormField[]): { section: string; detail: string }[] {
+  const facts = listFacts(db).items, out: { section: string; detail: string }[] = [];
+  const names = (rs: Record<string, string>[], key: string) => `${rs.slice(0, 5).map((r) => r[key]).join("、")}${rs.length > 5 ? " 等" : ""}`;
+  for (const section of new Set(slotsOf(fields).map((s) => s.section))) {
+    const kind = blockKind(section), all = facts.filter((f) => f.kind === kind).map((f) => f.data as Record<string, string>);
+    if (kind === "skill") {
+      const rest = all.filter((r) => !statedLevel(r));
+      if (rest.length) out.push({ section, detail: `资料里有 ${rest.length} 项技能没写掌握程度（或写的是在学），没有填进来：${names(rest, "name")}。要填的话，先在求职资料里给它们写上掌握程度` });
+    }
+    if (kind === "publication" && all.some(leadAuthor)) {
+      const rest = all.filter((r) => !leadAuthor(r));
+      if (rest.length) out.push({ section, detail: `只填了第一作者 / 通讯作者的论文，另外 ${rest.length} 篇没有填，需要的话请手动添加` });
+    }
+  }
+  return out;
+}
 
 /** The value one field of an entry should get from a record; for a 年/月 range, the n-th box of it. */
 /** A 「至今」 box of an entry, however the site names it (the option, or the box itself). */
@@ -146,6 +190,8 @@ export function valueIn(kind: Kind, record: Record<string, string>, f: FormField
   }
   // who gave an award: `issuer` in the person's document, `org` on a profile card
   if (kind === "award" && part === "issuer") return record.issuer ?? record.org ?? "";
+  // a paper's 发表时间: the day where the profile has it, else the year — one box, or 年 / 月 boxes
+  if (kind === "publication" && part === "period") { const d = String(record.date ?? record.year ?? ""); return /^(年|月)$/.test(f.placeholder) ? (d.match(/\d+/g) ?? [])[nth] ?? "" : d; }
   if (part !== "period") return part ? record[part] ?? "" : "";
   const p = periodParts(record.period ?? (record.year ? `${record.year}-${record.year}` : ""));
   if (!p) return "";
