@@ -188,6 +188,48 @@ describe.skipIf(!CHROME)("提交之后：只记一次，列表里的行不记", 
   }, 60_000);
 });
 
+// 技能: a list Zhiro fills an entry a skill; 培训经历: a list it has no filler for, here with its one row
+const SKILL = `<div class="apply-fields-1 multi-1"><div class="apply-field-a"><div class="title-b">技能名称</div><input></div>
+  <div class="apply-field-a"><div class="title-b">掌握程度</div><select><option>请选择</option><option>一般</option><option>熟练</option><option>精通</option></select></div></div>`;
+const LISTS = `<!doctype html><meta charset="utf-8"><title>申请职位</title>
+<div class="blockTitle-x1">个人信息</div>
+${["姓名", "邮箱", "手机号码", "政治面貌"].map((l) => `<div class="apply-field-a"><div class="title-b">${l}</div><input></div>`).join("")}
+<div class="apply-block-1" id="skill"><div class="blockTitle-1">专业技能 <span class="add"><span>添加</span></span></div>${SKILL}</div>
+<div class="apply-block-1" id="train"><div class="blockTitle-1">培训经历</div><div class="apply-fields-1 multi-1"><div class="apply-field-a"><div class="title-b">培训名称</div><input></div></div></div>
+<button onclick="document.body.innerHTML='<h1>投递成功</h1>'">提交</button>
+<script>document.querySelector("#skill .add").onclick = () => document.querySelector("#skill").insertAdjacentHTML("beforeend", ${JSON.stringify(SKILL)});</script>`;
+
+describe.skipIf(!CHROME)("技能逐条填；列表里的一行不记成基本信息", () => {
+  afterAll(async () => { stopRun(); await closeBrowser(); });
+  it("one entry a skill with a stated level, the others said; a row typed into a list is not learned, an answer is", async () => {
+    const vault = mkdtempSync(join(tmpdir(), "jobos-skill-"));
+    const db = openDb(join(vault, "t.db"));
+    const domain = new Domain(db);
+    const s: Services = createServices({ db: db, domain, config: testConfig(vault, { reminders: { daysBefore: [] }, sources: [] }) });
+    upsertFact(db, { kind: "basic", data: { field: "姓名", value: "李示例" } }, "本人确认");
+    upsertFact(db, { kind: "skill", data: { name: "示例语言甲", level: "精通" } }, "本人确认");
+    upsertFact(db, { kind: "skill", data: { name: "示例工具乙", level: "熟练" } }, "本人确认");
+    upsertFact(db, { kind: "skill", data: { name: "示例软件丁" } }, "本人确认");
+    ingest(domain, vault, "moka", "demo", [{ externalId: "1", url: "https://example.com/j", title: "工程师", company: "示例", locations: [], publisher: "示例", grade: "官方", isOriginal: true, confidence: 1 } as any]);
+    const app = domain.createApplication((db.prepare("select id from position").get() as any).id);
+    const html = join(vault, "form.html"); writeFileSync(html, LISTS, "utf8");
+    await startRun(s, app.id, { tickMs: 100, headless: true, url: pathToFileURL(html).href });
+    await until(() => currentRun()?.state === "待你提交", 30_000);
+    const page = await activePage();
+    const rows = await page.evaluate(() => Array.from(document.querySelectorAll("#skill .apply-fields-1")).map((e) => Array.from(e.querySelectorAll("input, select")).map((i) => (i as HTMLInputElement).value).join("|")));
+    expect(rows.sort()).toEqual(["示例工具乙|熟练", "示例语言甲|精通"]); // in the profile's order; two cards made in one millisecond have none
+    expect(currentRun()!.attention).toContainEqual(expect.objectContaining({ section: expect.stringContaining("专业技能"), kind: "留给你", detail: expect.stringContaining("示例软件丁") }));
+
+    await page.locator("#train input").fill("示例培训");
+    await page.locator("input").nth(3).fill("群众");
+    await new Promise((r) => setTimeout(r, 500));
+    await page.locator("button").click();
+    await until(() => currentRun()?.state === "已投递");
+    expect(currentRun()!.learned).toEqual(["政治面貌"]);
+    expect(listFacts(db).items.filter((f) => f.kind === "basic").map((f) => f.data.field).sort()).toEqual(["姓名", "政治面貌"]);
+  }, 90_000);
+});
+
 describe("提交之后 (N7): success beside a form that is still there", () => {
   const f = (label: string, disabled = false) => ({ label, disabled });
   const known = new Set(["姓名", "邮箱", "手机号码", "最高学历"]);

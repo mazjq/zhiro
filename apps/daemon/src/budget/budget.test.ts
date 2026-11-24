@@ -52,7 +52,8 @@ describe("readings", () => {
   });
   it("speed: from readings in one reset period; a reset in between says nothing", () => {
     const d = db();
-    const at = (h: number) => new Date(NOW + h * H).toISOString();
+    // from the real clock: recordReadings keeps a month of readings, and a fixed date falls out of it (it did, a month after it was written)
+    const at = (h: number) => new Date(Date.now() + h * H).toISOString();
     recordReadings(d, [{ channel: "claude", win: "seven_day", used: 0.2, resetsAt: "R1", at: at(-4) }, { channel: "claude", win: "seven_day", used: 0.24, resetsAt: "R1", at: at(-2) },
       { channel: "claude", win: "seven_day", used: 0.01, resetsAt: "R2", at: at(-1) }]);
     expect(fillPerHour(d, "claude", "seven_day")).toBeCloseTo(0.02);

@@ -13,7 +13,7 @@ export interface Platform { id: string; name: string; hosts: RegExp; level: Leve
 
 export const PLATFORMS: Platform[] = [
   { id: "moka", name: "Moka", hosts: /mokahr\.com/i, level: "实测通过", note: "单项字段实测：下拉、年月、学校专业搜索、出生日期、籍贯三级联动；多段经历仅仿真通过；上传简历后等网站解析再补空" },
-  { id: "beisen", name: "北森", hosts: /zhiye\.com|beisen/i, level: "通用填写", note: "弹层下拉、年月面板、日历、省市选择有专用驱动（验收后再升级）；多段经历只填第一段；进申请表需要你在职位页点一次「申请」" },
+  { id: "beisen", name: "北森", hosts: /zhiye\.com|beisen/i, level: "通用填写", note: "弹层下拉、年月面板、日历、省市选择有专用驱动；2022 版表单按分组逐条填经历（仿真通过，真实表单验收后再升级）；进申请表需要你在职位页点一次「申请」" },
   { id: "feishu", name: "飞书招聘", hosts: /jobs\.feishu\.cn|jobs\.bytedance\.com/i, level: "仿真通过", note: "atsx 下拉、地区树、年月面板、多段经历；网站会解析上传的简历" },
   { id: "dayee", name: "大易（hotjob / WinTalent）", hosts: /hotjob\.cn|wintalent\.cn|dayee\.com/i, level: "通用填写", note: "新版 Ant Design 3（下拉、输入日期、级联）；不少租户仍是旧版 jQuery 页面" },
   { id: "wjx", name: "问卷星", hosts: /wjx\.(cn|top|com)/i, level: "通用填写", note: "真实公开表单读表全对；填空、单选、多选；日期 / 地区 / 学校弹层需你手动选" },
