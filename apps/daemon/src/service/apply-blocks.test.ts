@@ -32,8 +32,10 @@ describe("技能", () => {
   it("the skills with a stated level, one an entry; a note is never pasted; the rest are said, not dropped silently", () => {
     const fields = list("专业技能", labels);
     const plan = planBlocks(d, fields);
-    expect(plan.map((p) => [p.kind, p.name, p.slot?.entry ?? null])).toEqual([["skill", "示例语言甲", 0], ["skill", "示例工具乙", null]]);
-    expect(labels.map((l) => valueIn("skill", plan[0].record, by(fields, l), 0, fields))).toEqual(["示例语言甲", "精通", "", ""]);
+    // in the profile's own order (cards made in one millisecond, as here, have none): the first takes the empty entry
+    expect(plan.map((p) => p.name).sort()).toEqual(["示例工具乙", "示例语言甲"]);
+    expect(plan.map((p) => [p.kind, p.slot?.entry ?? null])).toEqual([["skill", 0], ["skill", null]]);
+    expect(labels.map((l) => valueIn("skill", plan.find((p) => p.name === "示例语言甲")!.record, by(fields, l), 0, fields))).toEqual(["示例语言甲", "精通", "", ""]);
     expect(leftOut(d, fields)).toEqual([{ section: "专业技能", detail: expect.stringMatching(/2 项技能.*示例方法丙、示例软件丁/) }]);
   });
 

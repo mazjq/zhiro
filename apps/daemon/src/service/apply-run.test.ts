@@ -217,7 +217,7 @@ describe.skipIf(!CHROME)("技能逐条填；列表里的一行不记成基本信
     await until(() => currentRun()?.state === "待你提交", 30_000);
     const page = await activePage();
     const rows = await page.evaluate(() => Array.from(document.querySelectorAll("#skill .apply-fields-1")).map((e) => Array.from(e.querySelectorAll("input, select")).map((i) => (i as HTMLInputElement).value).join("|")));
-    expect(rows).toEqual(["示例语言甲|精通", "示例工具乙|熟练"]);
+    expect(rows.sort()).toEqual(["示例工具乙|熟练", "示例语言甲|精通"]); // in the profile's order; two cards made in one millisecond have none
     expect(currentRun()!.attention).toContainEqual(expect.objectContaining({ section: expect.stringContaining("专业技能"), kind: "留给你", detail: expect.stringContaining("示例软件丁") }));
 
     await page.locator("#train input").fill("示例培训");
