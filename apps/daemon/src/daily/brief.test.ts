@@ -124,8 +124,20 @@ describe("the daily brief", () => {
     // had posts, has none now: between seasons, not broken
     db.prepare("insert into scan_run(id, source, config_id, started_at, finished_at, complete, found, error) values (?,?,?,?,?,1,8,'')").run(ulid(), "beisen", "season", at(12), at(12));
     for (const d of [9, 1]) run.run(ulid(), "beisen", "season", at(d), at(d), "ZERO_POSTS: 官网读到了，但一个岗位都没有");
+    // a captured notice is not a subscription: its re-check leaves a row only when it fails
+    for (const d of [10, 3]) run.run(ulid(), "capture", "notice", at(d), at(d), "recheck: SITE_DOWN: ENOTFOUND x");
+    // taken out of the configuration: it last read fine eight days ago and is not tried any more
+    db.prepare("insert into scan_run(id, source, config_id, started_at, finished_at, complete, found, error) values (?,?,?,?,?,1,8,'')").run(ulid(), "feishu-jobs", "removed", at(12), at(12));
+    db.prepare("insert into scan_run(id, source, config_id, started_at, finished_at, complete, found, error) values (?,?,?,?,?,1,8,'')").run(ulid(), "feishu-jobs", "removed", at(7.5), at(7.5));
     const line = makeBrief(db, now).hanging.find((x) => x.key === "hang:sources");
     expect(line?.text).toBe("3 个订阅一周多没读成（官网读到了，但一个岗位都没有 2；官网改版，读取方式要更新 1）：这些公司的岗位可能不全，在「配置 → 订阅」里看");
+    // one more stuck the next day is not news; twice as many is
+    const state = () => makeBrief(db, now).hanging.find((x) => x.key === "hang:sources")!.state;
+    const add = (id: string) => { for (const d of [10, 1]) run.run(ulid(), "zhilian", id, at(d), at(d), "SITE_GONE: x"); };
+    add("dead3"); const four = state();
+    add("dead4"); expect(state()).toBe(four); // 4 → 5
+    for (const id of ["dead5", "dead6", "dead7"]) add(id);
+    expect(state()).not.toBe(four); // 8
   });
 
   it("a model that answers nothing for two days is the first thing to do; one answer and the line is gone", async () => {
